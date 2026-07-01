@@ -346,6 +346,17 @@ function updateCampaignStatus(id, status) {
     return result.changes;
 }
 
+function updateCampaign({ id, name, type, instructions, videoAsset, status = 'Active', steps = [] }) {
+    const stepsStr = JSON.stringify(steps);
+    const stmt = db.prepare(
+        `UPDATE campaigns
+         SET name = ?, type = ?, instructions = ?, videoAsset = ?, status = ?, steps = ?
+         WHERE id = ?`
+    );
+    const result = stmt.run(name, type, instructions, videoAsset, status, stepsStr, id);
+    return result.changes;
+}
+
 function deleteCampaign(id) {
     const stmt = db.prepare('DELETE FROM campaigns WHERE id = ?');
     const result = stmt.run(id);
@@ -367,6 +378,7 @@ module.exports = {
     getCampaigns,
     getCampaignById,
     insertCampaign,
+    updateCampaign,
     updateCampaignStatus,
     deleteCampaign
 };

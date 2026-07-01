@@ -106,7 +106,11 @@ app.get('/api/crm-state', (req, res) => {
             bypassEmailVerification: false
         });
         
-        const allCampaigns = db.getCampaigns();
+        const targetLeadsCount = db.getLeadsCount({ stage: 'Scraped' });
+        const allCampaigns = db.getCampaigns().map(campaign => ({
+            ...campaign,
+            targetLeadsCount
+        }));
         const campaignsList = allCampaigns.filter(c => c.status === 'Active');
         const verificationQueue = allCampaigns.filter(c => c.status === 'Awaiting Launch');
         
@@ -1646,25 +1650,27 @@ app.post('/api/campaigns/:id/approve', async (req, res) => {
         const campaign = db.getCampaignById(campaignId);
         if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
         
-        // Update campaign steps if edited in queue
-        if (steps) {
-            campaign.steps = steps;
-            db.insertCampaign({
-                name: campaign.name,
-                type: campaign.type,
-                instructions: campaign.instructions,
-                videoAsset: campaign.videoAsset,
-                status: 'Active',
-                steps: steps
-            });
-            db.deleteCampaign(campaignId); // remove the pending one
-        } else {
-            db.updateCampaignStatus(campaignId, 'Active');
-        }
+        if (Array.isArray(steps)) campaign.steps = steps;
         
         // Get target leads (stage is 'Scraped')
         const targetLeads = db.getLeads({ stage: 'Scraped', limit: 1000 });
+        if (targetLeads.length === 0) {
+            return res.status(400).json({ error: 'No scraped leads are currently available to launch this campaign.' });
+        }
+
+        db.updateCampaign({
+            id: campaignId,
+            name: campaign.name,
+            type: campaign.type,
+            instructions: campaign.instructions,
+            videoAsset: campaign.videoAsset,
+            status: 'Active',
+            steps: campaign.steps
+        });
+
         const step1 = campaign.steps[0];
+        let sentCount = 0;
+        let failedCount = 0;
         
         for (const lead of targetLeads) {
             // Customize body
@@ -1693,12 +1699,14 @@ app.post('/api/campaigns/:id/approve', async (req, res) => {
                 });
                 
                 db.updateLead(lead);
+                sentCount++;
             } catch (err) {
+                failedCount++;
                 console.error(`[Campaign Approve] Failed to send to ${lead.email}:`, err.message);
             }
         }
         
-        res.json({ success: true });
+        res.json({ success: true, targetLeadsCount: targetLeads.length, sentCount, failedCount });
     } catch (err) {
         console.error('[Campaign Approve Error]', err.message);
         res.status(500).json({ error: err.message });
@@ -1782,7 +1790,8 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
             videoAsset,
             status,
             steps,
-            dateCreated: new Date().toLocaleDateString()
+            dateCreated: new Date().toLocaleDateString(),
+            targetLeadsCount: db.getLeadsCount({ stage: 'Scraped' })
         };
         
         // If bypass is active, launch immediately
@@ -1865,7 +1874,8 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
                 videoAsset,
                 status: 'Awaiting Launch',
                 steps: fallbackSteps,
-                dateCreated: new Date().toLocaleDateString()
+                dateCreated: new Date().toLocaleDateString(),
+                targetLeadsCount: db.getLeadsCount({ stage: 'Scraped' })
             }
         });
     }

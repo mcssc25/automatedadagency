@@ -3231,7 +3231,8 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                     customInstructions: instructions,
                     videoAsset,
                     bizName: this.state.bizName,
-                    bizDesc: this.state.bizDesc
+                    bizDesc: this.state.bizDesc,
+                    bizWebsite: this.state.bizWebsite
                 })
             });
 
@@ -3383,6 +3384,9 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         }
 
         container.innerHTML = this.state.verificationQueue.map(c => {
+            const targetLeadsCount = Number.isFinite(Number(c.targetLeadsCount)) ? Number(c.targetLeadsCount) : 0;
+            const ctaLink = c.videoAsset || this.state.bizWebsite || '';
+            const ctaLabel = ctaLink || 'No CTA link saved';
             const stepsHtml = c.steps.map((s, index) => `
                 <div style="background:rgba(255,255,255,0.015); border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:12px; margin-bottom:10px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:0.75rem; color:var(--accent); font-weight:600; align-items:center;">
@@ -3395,7 +3399,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                     <div style="margin-bottom:6px;">
                         <input type="text" class="queue-subject-${c.id}" data-step="${index}" value="${s.subject.replace(/"/g, '&quot;')}" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:4px; padding:6px 10px; color:var(--text-primary); font-size:0.8rem; width:100%; box-sizing:border-box;" placeholder="Subject Line">
                     </div>
-                    <textarea class="queue-body-${c.id}" data-step="${index}" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:4px; padding:8px 10px; color:var(--text-primary); font-size:0.8rem; width:100%; min-height:260px; box-sizing:border-box; font-family:inherit; resize:vertical; line-height:1.4;">${s.body}</textarea>
+                    <textarea class="queue-body-${c.id}" data-step="${index}" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:4px; padding:8px 10px; color:var(--text-primary); font-size:0.8rem; width:100%; min-height:260px; box-sizing:border-box; font-family:inherit; resize:vertical; line-height:1.4;">${ctaLink ? s.body.replace(/\[CTA Link\]/g, ctaLink) : s.body}</textarea>
                 </div>
             `).join("");
 
@@ -3404,7 +3408,8 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:10px;">
                         <div>
                             <h4 style="margin:0; font-size:1.1rem; color:var(--text-primary);"><i class="fa-solid fa-bullhorn text-orange"></i> Campaign Review: ${c.name}</h4>
-                            <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-secondary);">Targeting <strong>${c.targetLeadsCount}</strong> scraped leads in pipeline</p>
+                            <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-secondary);">Targeting <strong>${targetLeadsCount}</strong> scraped leads in pipeline</p>
+                            <p style="margin:4px 0 0 0; font-size:0.75rem; color:${ctaLink ? 'var(--text-secondary)' : 'var(--orange)'};">CTA Link: <strong>${ctaLabel}</strong></p>
                         </div>
                         <span class="badge warning-badge" style="padding:4px 8px;">Awaiting Launch</span>
                     </div>
@@ -3415,7 +3420,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                     
                     <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid rgba(255,255,255,0.05); padding-top:14px;">
                         <button class="btn btn-outline btn-del" style="color:var(--orange); border-color:var(--orange);" onclick="App.rejectCampaign(${c.id})"><i class="fa-solid fa-trash"></i> Cancel Campaign</button>
-                        <button class="btn btn-primary" onclick="App.approveCampaign(${c.id})"><i class="fa-solid fa-paper-plane"></i> Approve & Launch Drip to ${c.targetLeadsCount} Leads</button>
+                        <button class="btn btn-primary" onclick="App.approveCampaign(${c.id})" ${targetLeadsCount === 0 ? 'disabled title="Scrape leads before launching this campaign."' : ''}><i class="fa-solid fa-paper-plane"></i> Approve & Send Step 1 to ${targetLeadsCount} Leads</button>
                     </div>
                 </div>
             `;
@@ -3443,6 +3448,16 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             if (campaignIndex === -1) return;
 
             const campaign = this.state.verificationQueue[campaignIndex];
+            const targetLeadsCount = Number.isFinite(Number(campaign.targetLeadsCount)) ? Number(campaign.targetLeadsCount) : 0;
+
+            if (targetLeadsCount <= 0) {
+                alert("There are no Scraped leads to email yet. Scrape/import leads first, then approve this campaign.");
+                return;
+            }
+
+            if (!confirm(`Approve "${campaign.name}" and send Step 1 now to ${targetLeadsCount} Scraped leads?\n\nFollow-up steps stay attached to this campaign for later drip scheduling.`)) {
+                return;
+            }
 
             const subjectInputs = document.querySelectorAll(`.queue-subject-${id}`);
             const bodyAreas = document.querySelectorAll(`.queue-body-${id}`);
@@ -3477,8 +3492,9 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             });
 
             if (!res.ok) throw new Error("Launch failed");
+            const result = await res.json();
 
-            alert(`Campaign "${campaign.name}" approved and launched!`);
+            alert(`Campaign "${campaign.name}" approved. Sent Step 1 to ${result.sentCount || 0} leads${result.failedCount ? ` (${result.failedCount} failed)` : ''}.`);
 
             await this.loadCrmStateFromServer();
             this.renderVerificationQueue();
