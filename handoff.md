@@ -61,8 +61,15 @@ Last updated: 2026-07-01
   - Internal textarea scrollbars are hidden until the field reaches a generous max height.
 - Local verification completed:
   - `node --check app.js`
+  - `node --check server.js`
   - `git diff --check`
-- Deployment status: pending for this entry.
+- Git commit pushed: `52dc1ec` Auto-grow onboarding research fields.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T180022Z-auto-grow-research-fields`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public `index.css` contains `min-height: 340px` for long setup fields and `min-height: 560px` for SWOT.
+  - Public `app.js` contains `autoGrowSetupTextarea` and `resizeOnboardingResearchFields`.
+  - Public `/api/app-config` still returns configured Gemini model routing.
 
 ## Previous Update
 
