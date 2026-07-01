@@ -348,9 +348,22 @@ async function queryGeminiWithSearch(promptText, options = {}) {
         };
     }
 
-    const response = await axios.post(url, payload, {
-        headers: { 'Content-Type': 'application/json' }
-    });
+    let response;
+    try {
+        response = await axios.post(url, payload, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+    } catch (error) {
+        if (options.json === true && error.response && error.response.status === 400) {
+            console.warn('[Gemini Search] JSON response mode rejected; retrying grounded request without responseMimeType.');
+            delete payload.generationConfig;
+            response = await axios.post(url, payload, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } else {
+            throw error;
+        }
+    }
 
     if (response.data && response.data.candidates && response.data.candidates[0].content) {
         return response.data.candidates[0].content.parts[0].text;

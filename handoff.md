@@ -55,7 +55,7 @@ Last updated: 2026-07-01
 ## Latest Update
 
 - Fixed onboarding scan failures caused by Gemini returning invalid JSON in long report fields.
-- Search-grounded Gemini JSON calls now request `responseMimeType: "application/json"`.
+- Search-grounded Gemini JSON calls request `responseMimeType: "application/json"` when supported, but retry without responseMimeType if Gemini rejects JSON mode with search grounding.
 - `parseModelJson()` retries after escaping literal control characters inside quoted JSON strings, and `parseModelJsonWithRepair()` can ask Gemini to repair malformed JSON while preserving content.
 - Local checks passed: `node --check server.js`, `node --check app.js`, `git diff --check`, and a Node parser smoke test for a literal newline inside `businessReport`.
 - Needs live deploy verification: `/api/scrape` should no longer fail with JSON parse errors for Step 1 onboarding scans.
