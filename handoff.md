@@ -54,6 +54,13 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Fixed recurring Chrome "Save password?" prompt by removing the real browser password field for the Gemini API key.
+- `settings-api-key` is now a read-only text/status field with `autocomplete="off"` and no `name`; the old eye toggle no longer switches it back to `type=password`.
+- Local checks passed: no remaining `type="password"` inputs found, `node --check app.js`, `node --check server.js`, and `git diff --check`.
+- Needs live deploy verification: public HTML should contain `settings-api-key` with `type="text"` and no `type="password"` anywhere.
+
+## Previous Update
+
 - Confirmed the previous sales-link settings layer is live in production:
   - Public HTML contains `settings-booking-link`, `settings-sales-page-url`, `settings-demo-video-url`, `settings-youtube-page-url`, and `Sales Links`.
   - Public `/api/crm-state` returns `bookingLink`, `salesPageUrl`, `demoVideoUrl`, and `youtubePageUrl` under `crmAutopilot`.

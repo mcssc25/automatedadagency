@@ -391,11 +391,10 @@ class AutopilotApp {
             alert("Settings saved successfully.");
         });
 
-        // Toggle password visibility
+        // The Gemini key is configured server-side. Keep this as a status field so
+        // browser password managers do not mistake app settings for a login form.
         this.dom.toggleKeyVisibility.addEventListener("click", () => {
-            const type = this.dom.settingsApiKey.type === "password" ? "text" : "password";
-            this.dom.settingsApiKey.type = type;
-            this.dom.toggleKeyVisibility.innerHTML = type === "password" ? '<i class="fa-solid fa-eye"></i>' : '<i class="fa-solid fa-eye-slash"></i>';
+            this.appendConsoleLine('system', 'Gemini API key is loaded from the server .env file and is not editable in the browser.');
         });
 
         // Web scraping button
