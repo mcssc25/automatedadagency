@@ -68,8 +68,13 @@ Last updated: 2026-07-01
   - Local Docker rebuild with `docker compose up -d --build ad-agency-autopilot`.
   - Local `/api/app-config` returned `geminiConfigured: true`.
   - Local HTML contains `Today's AI Recommendation`, `btn-recommend-content`, `index.css?v=20260701-post-recommendation`, and `app.js?v=20260701-post-recommendation`.
+- Git commit pushed: `055e0e3` Add daily post recommendation.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T212837Z-post-recommendation`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public `/api/app-config` returned `geminiConfigured: true`.
+  - Public HTML contains `Today's AI Recommendation`, `btn-recommend-content`, `index.css?v=20260701-post-recommendation`, and `app.js?v=20260701-post-recommendation`.
 - Still next: generated drafts should use the real backend image-generation route to attach local visual assets instead of external image URLs.
-- Not yet deployed live in this pass.
 
 ## Previous Update
 
