@@ -54,6 +54,46 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Removed active demo/simulation behavior so the UI only reports real connected activity.
+- Code changes:
+  - Deleted `agent-simulation.js` and removed it from `index.html`.
+  - Dashboard copy now shows real empty states instead of fake agent-online status, fake KPI deltas, or simulated log lines.
+  - Support Hub now presents itself as a website chat inbox waiting for a real sales-page chat widget.
+  - Hidden/disabled legacy placeholder fallback controls and forced simulated unsubscribe behavior off.
+  - Browser-side CRM drip/reply simulation was replaced with a no-op; real campaign follow-ups remain the backend pipeline worker's job.
+  - Ad/social generation now fails visibly if Gemini is unavailable instead of producing canned fallback copy.
+  - Trend research returns real results, empty results, or an error; it no longer falls back to example trends.
+  - Publishing now fails if no Make.com/publisher webhook is configured and no longer creates fake engagement metrics after forwarding a post.
+  - Mailgun send now fails if Mailgun is not configured instead of logging a mock sent email.
+  - Asset version changed to `app.js?v=20260701-no-demo-activity`.
+- Local verification completed:
+  - `node --check app.js`
+  - `node --check server.js`
+  - `git diff --check` (only normal Windows CRLF warnings)
+  - Local Docker rebuild with `docker compose up -d --build ad-agency-autopilot`.
+  - Local `http://127.0.0.1:3100/api/app-config` returned `geminiConfigured: true`.
+  - Local HTML no longer references `agent-simulation.js`, does reference `app.js?v=20260701-no-demo-activity`, contains `Real Activity Log`, and no longer contains `4 Agents Online`.
+- Not yet deployed live in this pass.
+
+## Previous Product Review
+
+- Product direction review completed from current code inspection.
+- Target operating model: review-first marketing agents that deep-research the business, find competitors, identify viral topic-level social posts to adapt, discover leads, and prepare/send approved email campaigns; full autonomy comes after each part works reliably.
+- Current reality:
+  - Onboarding and CRM/email are the most real parts: business research feeds prompts; leads/campaigns/DNC/enrollments persist in SQLite; Mailgun send/inbound reply handling and a server-side CRM automation worker exist behind toggles.
+  - Content Studio works as a draft/rewrite surface, but manual drafts currently attach external Pollinations image URLs, while the real local image generation route is only used by the manual `AI Image` action.
+  - Auto-ingest viral Reel is wired to backend `yt-dlp`, but production currently errors when `yt-dlp` is unavailable and the search only requests `ytsearch1`, so it is not yet a robust viral research pipeline.
+  - Research & Trends depends on a local `last30days` CLI script and returns however many parseable results it gets; it does not yet guarantee a healthy batch of high-engagement reels/posts.
+  - Support Hub is simulated browser-side sessions plus Gemini/fallback replies; it is not connected to a real site chat widget or stored support inbox.
+  - Dashboard KPIs/console are partly browser-local/demo simulation; real CRM lead counts feed some stats, but impressions/clicks/spend/revenue and published social analytics are not real platform metrics yet.
+- Next likely build priorities:
+  - Install/package `yt-dlp` in Docker or replace it with a managed ingestion service, then expand auto-ingest to collect/rank multiple candidates.
+  - Change draft generation/autopilot to call `/api/generate-image-prompt` and `/api/generate-image` automatically, store local `/downloads` assets, and show graceful fallback states instead of broken images.
+  - Add a `Get AI recommendation for today's post` button that uses onboarding context plus viral research to choose the topic, draft copy, and generate media.
+  - Separate demo dashboard/support labels from real backend job/activity records before calling the product autonomous.
+
+## Latest Code Update
+
 - Cleaned up the CRM selected-lead detail header after the Maps source URL made the view look broken:
   - Contact/company/email/phone/address details now render as compact wrapping chips.
   - Long website/source URLs now render as `Website` and `Maps Source` action links.

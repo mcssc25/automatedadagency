@@ -103,9 +103,9 @@
                             <i class="fa-solid fa-eye"></i>
                         </div>
                         <div class="kpi-info">
-                            <span class="kpi-label">Ad Impressions</span>
+                            <span class="kpi-label">Tracked Impressions</span>
                             <h3 class="kpi-value" id="kpi-impressions">0</h3>
-                            <span class="kpi-change text-success"><i class="fa-solid fa-arrow-trend-up"></i> +12% vs last week</span>
+                            <span class="kpi-change text-muted"><i class="fa-solid fa-link-slash"></i> No ad source connected</span>
                         </div>
                     </div>
                     <div class="kpi-card">
@@ -115,7 +115,7 @@
                         <div class="kpi-info">
                             <span class="kpi-label">Clicks & CTR</span>
                             <h3 class="kpi-value" id="kpi-clicks">0 <span class="kpi-subtext">(0.0%)</span></h3>
-                            <span class="kpi-change text-success"><i class="fa-solid fa-arrow-trend-up"></i> +8.5% vs last week</span>
+                            <span class="kpi-change text-muted"><i class="fa-solid fa-link-slash"></i> No click source connected</span>
                         </div>
                     </div>
                     <div class="kpi-card">
@@ -125,7 +125,7 @@
                         <div class="kpi-info">
                             <span class="kpi-label">Leads Acquired</span>
                             <h3 class="kpi-value" id="kpi-leads">0</h3>
-                            <span class="kpi-change text-success"><i class="fa-solid fa-arrow-trend-up"></i> +24% vs last week</span>
+                            <span class="kpi-change text-muted"><i class="fa-solid fa-database"></i> From CRM records</span>
                         </div>
                     </div>
                     <div class="kpi-card">
@@ -135,7 +135,7 @@
                         <div class="kpi-info">
                             <span class="kpi-label">Estimated Revenue</span>
                             <h3 class="kpi-value" id="kpi-revenue">$0</h3>
-                            <span class="kpi-change text-success"><i class="fa-solid fa-arrow-trend-up"></i> +18% ROI</span>
+                            <span class="kpi-change text-muted"><i class="fa-solid fa-circle-info"></i> Based on lead settings</span>
                         </div>
                     </div>
                 </div>
@@ -157,17 +157,13 @@
 
                         <div class="dashboard-panel console-panel">
                             <div class="panel-header">
-                                <h3><i class="fa-solid fa-terminal text-accent"></i> Live Agent Activity Log</h3>
+                                <h3><i class="fa-solid fa-terminal text-accent"></i> Real Activity Log</h3>
                                 <div class="panel-actions">
                                     <button class="btn btn-sm btn-outline" id="clear-console-btn">Clear Log</button>
-                                    <span class="status-dot pulsing-green"></span>
                                 </div>
                             </div>
                             <div class="panel-content console-content" id="console-log-stream">
-                                <!-- Simulated logs will append here -->
-                                <div class="console-line system-line">[SYSTEM] Initializing Autopilot Marketing Orchestrator...</div>
-                                <div class="console-line system-line">[SYSTEM] Connected to Gemini AI engine. All agent protocols loaded.</div>
-                                <div class="console-line system-line">[SYSTEM] Awaiting onboarding initialization.</div>
+                                <div class="console-line system-line">[SYSTEM] Real activity will appear here after research, lead import, email, publishing, or support events.</div>
                             </div>
                         </div>
                     </div>
@@ -176,8 +172,8 @@
                     <div class="dashboard-right">
                         <div class="dashboard-panel agents-panel">
                             <div class="panel-header">
-                                <h3>Active AI Employees</h3>
-                                <span class="badge">4 Agents Online</span>
+                                <h3>Workflow Status</h3>
+                                <span class="badge">Review Mode</span>
                             </div>
                             <div class="panel-content">
                                 <div class="agent-list">
@@ -187,10 +183,10 @@
                                         </div>
                                         <div class="agent-details">
                                             <h4>Ad Strategy Agent</h4>
-                                            <p id="agent-ad-task">Optimizing bidding on Google Ads</p>
+                                            <p id="agent-ad-task">Ad platform not connected</p>
                                         </div>
                                         <div class="agent-status">
-                                            <span class="status-indicator working" id="status-ad-agent"></span>
+                                            <span class="status-indicator idling" id="status-ad-agent"></span>
                                         </div>
                                     </div>
                                     <div class="agent-item">
@@ -199,10 +195,10 @@
                                         </div>
                                         <div class="agent-details">
                                             <h4>Social Media Content Agent</h4>
-                                            <p id="agent-content-task">Drafting Twitter updates</p>
+                                            <p id="agent-content-task">Ready to draft approved posts</p>
                                         </div>
                                         <div class="agent-status">
-                                            <span class="status-indicator working" id="status-content-agent"></span>
+                                            <span class="status-indicator idling" id="status-content-agent"></span>
                                         </div>
                                     </div>
                                     <div class="agent-item">
@@ -211,7 +207,7 @@
                                         </div>
                                         <div class="agent-details">
                                             <h4>24/7 Support Agent</h4>
-                                            <p id="agent-support-task">Monitoring customer chat lines</p>
+                                            <p id="agent-support-task">Chat widget not installed</p>
                                         </div>
                                         <div class="agent-status">
                                             <span class="status-indicator idling" id="status-support-agent"></span>
@@ -223,10 +219,10 @@
                                         </div>
                                         <div class="agent-details">
                                             <h4>Outbound Sales Agent</h4>
-                                            <p id="agent-sales-task">Following up with engaged leads</p>
+                                            <p id="agent-sales-task">Waiting for CRM automation events</p>
                                         </div>
                                         <div class="agent-status">
-                                            <span class="status-indicator thinking" id="status-sales-agent"></span>
+                                            <span class="status-indicator idling" id="status-sales-agent"></span>
                                         </div>
                                     </div>
                                 </div>
@@ -236,7 +232,7 @@
                         <!-- Platform Overview Card -->
                         <div class="dashboard-panel promo-panel">
                             <h3>Autopilot Framework</h3>
-                            <p>Operating under the 80/20 automation principle. Taste & direction remain human; all operational execution is autonomously delegated to AI.</p>
+                            <p>Approval-first marketing automation. Real activity appears here only after a connected workflow runs.</p>
                             <div class="promo-footer">
                                 <span><i class="fa-solid fa-user-tie"></i> Solo Founder Console</span>
                             </div>
@@ -817,7 +813,7 @@
                                     <span style="font-size:0.8rem; font-weight:600; text-transform:uppercase; color:var(--text-secondary);">Autopilot Mode:</span>
                                     <select id="content-autopilot-publish-mode" style="background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:6px; padding:6px 12px; color:var(--text-primary); font-size:0.8rem;">
                                         <option value="draft">Auto-Draft (Review first)</option>
-                                        <option value="publish">Auto-Publish Live (100% Autopilot)</option>
+                                        <option value="publish">Auto-Draft Pending Publisher Integration</option>
                                     </select>
                                 </div>
                             </div>
@@ -1269,7 +1265,7 @@
                                             <option value="">-- No Active Campaign --</option>
                                             <!-- Dynamically populated -->
                                         </select>
-                                        <p class="step-helper" style="margin-top:4px;">Browser-side simulation transitions no-reply leads here after Campaign 1. Real scheduled Mailgun follow-ups still need a backend worker.</p>
+                                        <p class="step-helper" style="margin-top:4px;">Backend campaign automation can transition no-reply leads here after Campaign 1 when follow-up sending is enabled.</p>
                                     </div>
 
                                     <div class="form-group">
@@ -1310,13 +1306,7 @@
                                                 <span class="toggle-slider" style="border-radius:20px;"></span>
                                             </label>
                                         </label>
-                                        <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
-                                            <span style="font-size:0.85rem; color:var(--text-primary);">Simulate Unsubscribe Replies (5% rate)</span>
-                                            <label class="toggle-switch" style="width:36px; height:20px;">
-                                                <input type="checkbox" id="crm-simulate-unsubs" checked>
-                                                <span class="toggle-slider" style="border-radius:20px;"></span>
-                                            </label>
-                                        </label>
+                                        <input type="checkbox" id="crm-simulate-unsubs" style="display:none;">
                                         <button class="btn btn-primary" id="btn-run-crm-pipeline" style="width:100%; margin-top:6px;"><i class="fa-solid fa-play"></i> Run Pipeline Now</button>
                                     </div>
                                 </div>
@@ -1369,7 +1359,7 @@
                         <div class="dashboard-panel">
                             <div class="panel-header">
                                 <h3>Visitor Conversations</h3>
-                                <span class="badge" id="support-chat-count">0 Active</span>
+                                <span class="badge" id="support-chat-count">0 Open</span>
                             </div>
                             <div class="panel-content">
                                 <div class="support-sessions-list" id="support-sessions-container">
@@ -1383,13 +1373,13 @@
                     <div class="support-right">
                         <div class="dashboard-panel chat-panel" style="height: 100%;">
                             <div class="panel-header" id="selected-support-header">
-                                <h3>Live Chat Monitoring</h3>
-                                <p class="text-muted">Observe AI Support Agent responding to web visitors in real-time.</p>
+                                <h3>Website Chat Inbox</h3>
+                                <p class="text-muted">Real website conversations will appear here after the sales-page chat widget is installed.</p>
                             </div>
                             <div class="panel-content chat-messages" id="support-chat-messages">
                                 <div class="empty-state">
                                     <i class="fa-solid fa-comments"></i>
-                                    <p>Select an active session to monitor customer questions and AI-generated support answers.</p>
+                                    <p>No website chat sessions yet.</p>
                                 </div>
                             </div>
                         </div>
@@ -1411,10 +1401,10 @@
                             </div>
                             <p class="helper-text">This key is pre-loaded from config.js and used to call the Gemini API for copywriting and chatting.</p>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" style="display:none;">
                             <label class="checkbox-label">
-                                <input type="checkbox" id="settings-use-fallback" checked>
-                                <span>Use Simulation Fallback if API Rate-limited or Offline</span>
+                                <input type="checkbox" id="settings-use-fallback">
+                                <span>Allow placeholder fallbacks when an AI provider is unavailable</span>
                             </label>
                         </div>
                         <h3 style="margin-top:24px; border-top:1px solid var(--border-color); padding-top:20px;"><i class="fa-solid fa-envelope"></i> Sales Email Autopilot</h3>
@@ -1530,7 +1520,6 @@
 
     <!-- App JavaScript files -->
     <script src="config.js"></script>
-    <script src="agent-simulation.js"></script>
-    <script src="app.js?v=20260701-crm-lead-header"></script>
+    <script src="app.js?v=20260701-no-demo-activity"></script>
 </body>
 </html>

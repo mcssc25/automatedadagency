@@ -53,7 +53,7 @@ class AutopilotApp {
                 autoAdvanceCampaigns: false,
                 lastDailyScrapeDate: null,
                 autoPauseOnReply: true,
-                simulateUnsubscribes: true,
+                simulateUnsubscribes: false,
                 bypassEmailVerification: false,
                 dncList: []
             },
@@ -489,9 +489,9 @@ class AutopilotApp {
                 this.dom.previewDomain.innerText = this.state.bizWebsite;
             }
 
-            // Restart Simulation with new business settings (including enabled agents)
-            this.stopSimulation();
-            this.startSimulation();
+            // Restart local automation timers with updated business settings.
+            this.stopAutomationTimers();
+            this.startAutomationTimers();
             
             this.appendConsoleLine('system', `Autopilot Agency re-initialized for business: ${this.state.bizName}`);
             
@@ -654,7 +654,7 @@ class AutopilotApp {
             this.renderCampaignWorkflowSummary();
         });
         this.dom.crmSimulateUnsubs.addEventListener("change", () => {
-            this.state.crmAutopilot.simulateUnsubscribes = this.dom.crmSimulateUnsubs.checked;
+            this.state.crmAutopilot.simulateUnsubscribes = false;
             this.saveState();
         });
         this.dom.btnRunCrmPipeline.addEventListener("click", () => this.runCrmPipelineNow());
@@ -811,7 +811,7 @@ class AutopilotApp {
                 autoAdvanceCampaigns: false,
                 lastDailyScrapeDate: null,
                 autoPauseOnReply: true,
-                simulateUnsubscribes: true,
+                simulateUnsubscribes: false,
                 bypassEmailVerification: false,
                 dncList: []
             };
@@ -832,7 +832,7 @@ class AutopilotApp {
             autoAdvanceCampaigns: false,
             lastDailyScrapeDate: null,
             autoPauseOnReply: true,
-            simulateUnsubscribes: true,
+            simulateUnsubscribes: false,
             bypassEmailVerification: false,
             ...this.state.crmAutopilot
         };
@@ -879,7 +879,8 @@ class AutopilotApp {
         this.dom.crmAutoEnrollScraped.checked = this.state.crmAutopilot.autoEnrollScrapedLeads === true;
         this.dom.crmAutoAdvanceCampaigns.checked = this.state.crmAutopilot.autoAdvanceCampaigns === true;
         this.dom.crmAutoPause.checked = this.state.crmAutopilot.autoPauseOnReply !== false;
-        this.dom.crmSimulateUnsubs.checked = this.state.crmAutopilot.simulateUnsubscribes !== false;
+        this.dom.crmSimulateUnsubs.checked = false;
+        this.state.crmAutopilot.simulateUnsubscribes = false;
 
         // Render the competitor list UI from array
         this.renderCompetitorList();
@@ -1818,9 +1819,9 @@ class AutopilotApp {
         // Persist immediately
         this.saveState();
         
-        // Restart simulation with updated agent config
-        this.stopSimulation();
-        this.startSimulation();
+        // Restart local automation timers with updated agent config.
+        this.stopAutomationTimers();
+        this.startAutomationTimers();
         
         const agentNames = { ad: 'Ad Strategy', content: 'Content Creator', support: '24/7 Support', sales: 'Sales CRM' };
         this.appendConsoleLine('system', `Agent ${agentNames[agentKey]} ${isEnabled ? 'ACTIVATED' : 'DEACTIVATED'}.`);
@@ -1999,118 +2000,9 @@ class AutopilotApp {
         alert(`${email} is on the permanent DNC list. Server-side removal is disabled by default.`);
     }
 
-    // Background workflow ticks (every 10s)
+    // CRM follow-ups are processed by the backend pipeline worker.
     runCrmDripTick() {
-        // Skip if Sales agent is disabled or crmAutopilot disabled
-        if (!this.state.enabledAgents.sales || !this.state.crmAutopilot.enabled) return;
-
-        let stateChanged = false;
-        const campaigns = this.state.campaignsList || [];
-
-        this.state.leads.forEach(lead => {
-            // Check if enrolled in an active campaign and waiting on outreach (stage = "Emailed")
-            if (lead.currentCampaignId && lead.stage === "Emailed") {
-                const campaign = campaigns.find(c => c.id === lead.currentCampaignId);
-                if (!campaign) return;
-
-                const stepIndex = lead.currentCampaignStep - 1; // 0-indexed
-                if (stepIndex >= 0 && stepIndex < campaign.steps.length) {
-                    // Check if delay has passed
-                    const currentStep = campaign.steps[stepIndex];
-                    const nextStepIndex = stepIndex + 1;
-
-                    if (nextStepIndex < campaign.steps.length) {
-                        const nextStep = campaign.steps[nextStepIndex];
-                        const delayStr = nextStep.delay || "1 day";
-                        const delayVal = parseInt(delayStr) || 1;
-                        const delayMs = delayVal * 15000; // 1 day = 15 seconds in simulator
-
-                        if (!lead.lastStepTime) lead.lastStepTime = Date.now();
-                        
-                        if (Date.now() - lead.lastStepTime >= delayMs) {
-                            // Send next step!
-                            const personalizedBody = nextStep.body
-                                .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
-                                .replace(/\[Agent Name\]/g, "Sales Agent")
-                                .replace(/\[Your Name\]/g, this.state.bizName);
-                            const customizedBody = this.applySalesAssetPlaceholders(personalizedBody, campaign);
-
-                            lead.currentCampaignStep = nextStepIndex + 1;
-                            lead.lastStepTime = Date.now();
-                            lead.history.push({
-                                sender: "agent",
-                                time: "Just Now",
-                                text: `[OUTBOUND EMAIL - STEP ${nextStep.step}]\nSubject: ${nextStep.subject}\n\n${customizedBody}`
-                            });
-
-                            this.appendConsoleLine('agent-sales', `Sales Agent dispatched Campaign "${campaign.name}" Step ${nextStep.step} to ${lead.name}.`);
-                            stateChanged = true;
-
-                            // Simulate chance of reply or unsubscribe on this step
-                            setTimeout(() => {
-                                // 5% unsubscribe chance if enabled
-                                if (this.state.crmAutopilot.simulateUnsubscribes && Math.random() < 0.05) {
-                                    this.simulateLeadUnsubscribe(lead);
-                                } else {
-                                    this.simulateLeadReply(lead, customizedBody);
-                                }
-                            }, 5000);
-                        }
-                    } else {
-                        // All campaign steps sent. Lead completed campaign without replying.
-                        // Check if delay for final step has passed to transition
-                        const delayStr = currentStep.delay || "2 days";
-                        const delayVal = parseInt(delayStr) || 2;
-                        const delayMs = delayVal * 15000;
-
-                        if (Date.now() - lead.lastStepTime >= delayMs) {
-                            // Browser-side simulation can transition through the configured campaign chain.
-                            const nextCampaignId = this.getNextCampaignInConfiguredChain(campaign.id);
-                            if (nextCampaignId) {
-                                const nextCampaign = campaigns.find(c => String(c.id) === String(nextCampaignId));
-                                if (nextCampaign && nextCampaign.steps && nextCampaign.steps.length > 0) {
-                                    const step1 = nextCampaign.steps[0];
-                                    const personalizedBody = step1.body
-                                        .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
-                                        .replace(/\[Agent Name\]/g, "Sales Agent")
-                                        .replace(/\[Your Name\]/g, this.state.bizName);
-                                    const customizedBody = this.applySalesAssetPlaceholders(personalizedBody, nextCampaign);
-
-                                    lead.currentCampaignId = nextCampaign.id;
-                                    lead.currentCampaignStep = 1;
-                                    lead.lastStepTime = Date.now();
-                                    lead.history.push({
-                                        sender: "agent-action",
-                                        time: "Just Now",
-                                        text: `Lead completed campaign "${campaign.name}" with no reply. Automatically enrolling in follow-up campaign "${nextCampaign.name}".`
-                                    });
-                                    lead.history.push({
-                                        sender: "agent",
-                                        time: "Just Now",
-                                        text: `[OUTBOUND EMAIL - STEP 1]\nSubject: ${step1.subject}\n\n${customizedBody}`
-                                    });
-
-                                    this.appendConsoleLine('agent-sales', `Sales Agent auto-transitioned ${lead.name} to follow-up Campaign "${nextCampaign.name}" Step 1.`);
-                                    stateChanged = true;
-
-                                    setTimeout(() => {
-                                        this.simulateLeadReply(lead, customizedBody);
-                                    }, 5000);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        if (stateChanged) {
-            this.saveState();
-            this.renderLeadsList();
-            if (this.state.selectedLeadIndex !== null) {
-                this.selectLead(this.state.selectedLeadIndex);
-            }
-        }
+        return;
     }
 
     simulateLeadUnsubscribe(lead) {
@@ -2263,9 +2155,11 @@ Only respond with the post text. No other commentary or wrapping.`;
             if (this.state.serverConfig && this.state.serverConfig.geminiConfigured) {
                 postText = await this.queryGeminiAPI(prompt);
             } else {
-                throw new Error("Local simulation fallback");
+                throw new Error("Gemini is not configured on the server.");
             }
         } catch (apiErr) {
+            this.appendConsoleLine('system', `Autopilot post generation skipped for ${platform}: ${apiErr.message}`);
+            return;
             if (platform === "reels") {
                 postText = `### 🎵 Suggested Audio Vibe
 - **Audio Track Style:** Upbeat energetic transition beat (Search: 'Austin Millz Breath' on Reels)
@@ -2305,22 +2199,22 @@ Only respond with the post text. No other commentary or wrapping.`;
             }
         }
 
-        const publishMode = this.state.contentAutopilot.publishMode || 'draft';
+        const requestedPublishMode = this.state.contentAutopilot.publishMode || 'draft';
         const newPost = {
             id: Date.now() + Math.floor(Math.random() * 1000),
             platform,
-            time: publishMode === 'publish' ? "Published Just Now" : "Draft",
+            time: "Draft",
             body: postText,
             mediaUrl,
-            impressions: publishMode === 'publish' ? Math.floor(Math.random() * 150) + 10 : 0,
-            likes: publishMode === 'publish' ? Math.floor(Math.random() * 15) : 0,
-            comments: publishMode === 'publish' ? Math.floor(Math.random() * 3) : 0
+            impressions: 0,
+            likes: 0,
+            comments: 0
         };
 
-        if (publishMode === 'publish') {
-            this.state.publishedPosts.unshift(newPost);
-            this.renderPublishedAnalytics();
-            this.appendConsoleLine('agent-content', `Autopilot post published live to ${platform} successfully.`);
+        if (requestedPublishMode === 'publish') {
+            this.state.socialPosts.unshift(newPost);
+            this.renderSocialPostsGrid();
+            this.appendConsoleLine('agent-content', `Autopilot generated a ${platform} draft. Auto-publish requires a connected publisher workflow.`);
         } else {
             this.state.socialPosts.unshift(newPost);
             this.renderSocialPostsGrid();
@@ -2549,22 +2443,7 @@ Format your response in clean markdown or plain text with clear headings Option 
             if (this.state.serverConfig && this.state.serverConfig.geminiConfigured) {
                 resultText = await this.queryGeminiAPI(prompt);
             } else {
-                // Fallback simulation delay
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                resultText = `Option 1:
-Headline: End Compliance Headaches
-Primary Copy: Manual follow-up and admin work are stealing your best selling hours. ${this.state.bizName || 'Our service'} helps automate the repetitive work so your team can move faster.
-Call to Action: Learn More
-
-Option 2:
-Headline: Save 10 Hours Every Week
-Primary Copy: Real estate files shouldn't consume your nights. Our AI employee files disclosures and handles transaction checkpoints 24/7. Focus on listings, not compliance checklists.
-Call to Action: Book Demo
-
-Option 3:
-Headline: Instant Transaction Compliance
-Primary Copy: Stop letting manual checklists slow down your team. ${this.state.bizName || 'Our service'} keeps key follow-up and workflow steps moving automatically.
-Call to Action: Get Started`;
+                throw new Error("Gemini is not configured on the server.");
             }
 
             // Parse options for preview integration
@@ -2580,14 +2459,9 @@ Call to Action: Get Started`;
         } catch (error) {
             this.dom.adGeneratorResults.innerHTML = `
                 <div class="alert alert-danger" style="color:var(--orange); background:rgba(255, 145, 0, 0.05); padding:12px; border-radius:8px; border:1px solid var(--orange);">
-                    <i class="fa-solid fa-triangle-exclamation"></i> Error calling Gemini API: ${error.message}. Showing pre-baked fallback option instead.
+                    <i class="fa-solid fa-triangle-exclamation"></i> Error calling Gemini API: ${error.message}.
                 </div>
             `;
-            // Fallback content loading
-            setTimeout(() => {
-                this.dom.adGenTopic.value = topic;
-                this.handleAdGeneration(); // Re-trigger with simulator fallback
-            }, 2500);
         }
     }
 
@@ -2732,7 +2606,8 @@ Only respond with the post text. No other commentary or wrapping.`;
                 try {
                     postText = await this.queryGeminiAPI(prompt);
                 } catch (apiErr) {
-                    console.warn(`Gemini API error, falling back to mock text for ${platform}:`, apiErr.message);
+                    throw new Error(`AI draft generation failed for ${platform}: ${apiErr.message}`);
+                    console.warn(`Gemini API error for ${platform}:`, apiErr.message);
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     
                     if (platform === "reels") {
@@ -2754,7 +2629,7 @@ Only respond with the post text. No other commentary or wrapping.`;
 ### 🎙️ Narrator Voiceover Script
 "You did not build your business to get buried in repetitive admin. ${this.state.bizName || 'Our team'} helps take the busywork off your plate so you can focus on clients, revenue, and growth. Hit the link in bio to take the next step."`;
                     } else {
-                        postText = `[Mock ${platform.toUpperCase()}] ${topic}\n\nAutomate your real estate coordination. Close files faster without mistakes. #RealEstate #${platform.toUpperCase()}`;
+                        postText = "";
                     }
                 }
 
@@ -2803,10 +2678,13 @@ Only respond with the post text. No other commentary or wrapping.`;
 
     renderStats() {
         const calculatedLeadValue = this.state.dealValue * (this.state.conversionRate / 100);
+        const ctr = this.state.stats.impressions > 0
+            ? ((this.state.stats.clicks / this.state.stats.impressions) * 100).toFixed(1)
+            : "0.0";
         this.dom.headerLeads.innerText = this.state.stats.leads;
         this.dom.headerSpend.innerText = `$${this.state.stats.spend.toFixed(2)}`;
         this.dom.kpiImpressions.innerText = this.state.stats.impressions.toLocaleString();
-        this.dom.kpiClicks.innerText = `${this.state.stats.clicks.toLocaleString()} (${((this.state.stats.clicks / this.state.stats.impressions) * 100).toFixed(1)}%)`;
+        this.dom.kpiClicks.innerText = `${this.state.stats.clicks.toLocaleString()} (${ctr}%)`;
         this.dom.kpiLeads.innerText = this.state.stats.leads;
         this.dom.kpiRevenue.innerText = `$${Math.round(this.state.stats.leads * calculatedLeadValue).toLocaleString()}`;
     }
@@ -3564,10 +3442,10 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                 this.state.scheduledPosts.splice(postIndex, 1);
             }
 
-            // Move to publishedPosts analytics
-            post.time = "Published Just Now";
-            post.impressions = Math.floor(Math.random() * 50) + 10;
-            post.likes = Math.floor(Math.random() * 5) + 1;
+            // Move to sent log. Real engagement metrics require platform analytics.
+            post.time = "Sent to Publisher";
+            post.impressions = 0;
+            post.likes = 0;
             post.comments = 0;
 
             this.state.publishedPosts.unshift(post);
@@ -3577,8 +3455,8 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             this.renderScheduledQueue();
             this.renderPublishedAnalytics();
 
-            this.appendConsoleLine('agent-content', `Social post published live to ${post.platform} successfully.`);
-            alert(`Social post successfully published live to ${post.platform}!`);
+            this.appendConsoleLine('agent-content', `Social post forwarded to publisher for ${post.platform}.`);
+            alert(`Social post forwarded to publisher for ${post.platform}.`);
         } catch (error) {
             console.error("API publishing failed:", error);
             this.appendConsoleLine('system', `API publication failed for ${post.platform}: ${error.message}`);
@@ -4289,116 +4167,13 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         }
     }
 
-    // Simulate Realtor Leads responding to values
-    async simulateLeadReply(lead, emailText) {
-        const delay = 8000 + Math.floor(Math.random() * 7000);
-        
-        setTimeout(async () => {
-            if (!lead.history) lead.history = [];
-            
-            this.appendConsoleLine('system', `Lead ${lead.name} opened and read your outreach email...`);
-            
-            const prompt = `You are a residential real estate agent named "${lead.name}" working at "${lead.company}".
-You just received the following outreach email from "${this.state.bizName}":
-"${emailText}"
-
-Write a brief, realistic response. Either express interest in booking a demo/getting more leads (80% chance) or ask a clarifying question about pricing/features (20% chance). Keep it brief, conversational, and direct (2-3 sentences).
-Output only the response email body. No headers or subject lines.`;
-
-            let responseText = "";
-            try {
-                responseText = await this.queryGeminiAPI(prompt);
-            } catch (err) {
-                responseText = `Thanks for reaching out. The CRM sounds interesting, especially if it can actually save me 10 hours a week on disclosures. Can you share a link to that video or a calendar to book a quick demo?`;
-            }
-
-            lead.stage = "Hot Lead";
-            
-            // Auto-pause drip campaigns on reply
-            if (this.state.crmAutopilot.autoPauseOnReply) {
-                lead.currentCampaignId = null;
-                lead.currentCampaignStep = null;
-                lead.history.push({
-                    sender: "agent-action",
-                    time: "Just Now",
-                    text: "Lead replied. Campaign outreach auto-paused."
-                });
-            }
-
-            lead.history.push({
-                sender: "lead",
-                time: "Just Now",
-                text: responseText.trim()
-            });
-
-            this.appendConsoleLine('agent-sales', `Lead ${lead.name} Replied: "${responseText.substring(0, 50)}..."`);
-            
-            this.saveState();
-            this.renderLeadsList();
-            
-            if (this.state.selectedLeadIndex !== null && this.state.leads[this.state.selectedLeadIndex].id === lead.id) {
-                this.selectLead(this.state.selectedLeadIndex);
-            }
-
-            this.simulateAgentFollowUp(lead);
-
-        }, delay);
-    }
-
-    // Sales agent autonomous reply simulation
-    simulateAgentFollowUp(lead) {
-        setTimeout(async () => {
-            const lastMsg = lead.history[lead.history.length - 1];
-            if (lastMsg.sender !== 'lead') return;
-
-            const prompt = `You are the outbound AI Sales Agent for '${this.state.bizName}'.
-We are selling: ${this.state.bizDesc}
-Configured sales links:
-Booking/calendar link: ${this.state.crmAutopilot.bookingLink || 'not configured'}
-Default demo video link: ${this.state.crmAutopilot.demoVideoUrl || 'not configured'}
-YouTube page/channel: ${this.state.crmAutopilot.youtubePageUrl || 'not configured'}
-Sales page: ${this.state.crmAutopilot.salesPageUrl || 'not configured'}
-Customer details: Name: ${lead.name}, Company: ${lead.company}.
-Customer response: "${lastMsg.text}"
-
-Write a friendly, professional response confirming booking or sharing a link to schedule a demo. Use the configured booking link when available. If no booking link is configured, ask for a couple times that work instead of inventing a URL. Be extremely helpful and direct. Keep it under 4 sentences.`;
-
-            let replyText = "";
-            try {
-                replyText = await this.queryGeminiAPI(prompt);
-            } catch (err) {
-                const bookingFallback = this.state.crmAutopilot.bookingLink
-                    ? `You can book a convenient slot here: ${this.state.crmAutopilot.bookingLink}`
-                    : 'Reply with a couple times that work for you and we can coordinate from there';
-                replyText = `Hi ${lead.name.split(" ")[0]},\n\nI would love to set up a quick 10-minute call to show you how ${this.state.bizName || 'our team'} can help with the workflow problems you mentioned.\n\n${bookingFallback}. Let me know if you have any questions in the meantime.`;
-            }
-            replyText = this.applySalesAssetPlaceholders(replyText);
-
-            lead.stage = "Demo Scheduled";
-            lead.history.push({
-                sender: "agent",
-                time: "Just Now",
-                text: replyText.trim()
-            });
-
-            this.appendConsoleLine('agent-sales', `Sales Agent followed up with ${lead.name} and scheduled demo.`);
-            
-            this.saveState();
-            this.renderLeadsList();
-            
-            if (this.state.selectedLeadIndex !== null && this.state.leads[this.state.selectedLeadIndex].id === lead.id) {
-                this.selectLead(this.state.selectedLeadIndex);
-            }
-        }, 6000);
-    }
-
     renderSupportSessionsList() {
-        this.dom.supportChatCount.innerText = `${this.state.supportSessions.length} Active`;
+        this.dom.supportChatCount.innerText = `${this.state.supportSessions.length} Open`;
         this.dom.supportSessionsContainer.innerHTML = this.state.supportSessions.map((s, i) => `
             <div class="support-session-item ${this.state.selectedSupportIndex === i ? 'active' : ''}" data-index="${i}">
                 <div class="session-header">
                     <span class="session-user">${s.user}</span>
-                    <span class="session-time">Active</span>
+                    <span class="session-time">Open</span>
                 </div>
                 <div class="session-last-msg">${s.lastMsg}</div>
             </div>
@@ -4419,8 +4194,8 @@ Write a friendly, professional response confirming booking or sharing a link to 
         
         const session = this.state.supportSessions[index];
         this.dom.selectedSupportHeader.innerHTML = `
-            <h3>Live Chat Monitoring: ${session.user}</h3>
-            <p class="text-muted">Observe AI Support Agent responding to web visitor in real-time.</p>
+            <h3>Website Chat: ${session.user}</h3>
+            <p class="text-muted">Website chat conversation.</p>
         `;
 
         this.renderSupportChatBubbles(session);
@@ -4585,157 +4360,19 @@ Write a friendly, professional response confirming booking or sharing a link to 
         container.appendChild(svg);
     }
 
-    startSimulation() {
-        // Attach event handlers to simulation events
-        Simulation.onLog((log) => {
-            this.appendConsoleLine(log.type, log.msg);
-        });
+    startAutomationTimers() {
+        this.stopAutomationTimers();
 
-        // KPI increments
-        Simulation.onEvent('kpiTick', (tick) => {
-            this.state.stats.impressions += tick.impressions;
-            this.state.stats.clicks += tick.clicks;
-            this.state.stats.spend += parseFloat(tick.spend);
-            this.renderStats();
-
-            // Randomly update campaign table data
-            if (this.state.campaigns.length > 0 && Math.random() > 0.6) {
-                const idx = Math.floor(Math.random() * this.state.campaigns.length);
-                this.state.campaigns[idx].impressions += tick.impressions;
-                this.state.campaigns[idx].clicks += tick.clicks;
-                this.state.campaigns[idx].cost += parseFloat(tick.spend);
-                this.renderCampaignsTable();
-            }
-        });
-
-        // New Lead triggers Sales Automation follow-up logic
-        Simulation.onEvent('newLead', (lead) => {
-            // Check DNC blacklist
-            const emailLower = lead.email.toLowerCase();
-            const dncList = (this.state.crmAutopilot && this.state.crmAutopilot.dncList) || [];
-            if (dncList.map(e => e.toLowerCase()).includes(emailLower)) {
-                this.appendConsoleLine('system', `Protected: Blocked lead import for DNC blacklist email: ${lead.email}`);
-                return;
-            }
-            if (this.state.leads.some(existing => (existing.email || "").toLowerCase() === emailLower)) {
-                this.appendConsoleLine('system', `Skipped duplicate lead import: ${lead.email}`);
-                return;
-            }
-
-            // Assign unique ID to mock lead
-            lead.id = lead.id || Date.now() + Math.floor(Math.random() * 10000);
-            this.state.leads.push(lead);
-            this.state.stats.leads += 1;
-            this.saveState();
-            this.renderStats();
-            this.renderLeadsList();
-            
-            // Auto-enroll in default First Drip Campaign if configured
-            const firstCampaignId = this.state.crmAutopilot ? this.state.crmAutopilot.firstCampaignId : null;
-            const campaigns = this.state.campaignsList || [];
-            
-            if (firstCampaignId && campaigns.length > 0) {
-                const campaign = campaigns.find(c => c.id === firstCampaignId);
-                if (campaign && campaign.steps && campaign.steps.length > 0) {
-                    const step1 = campaign.steps[0];
-                    const personalizedBody = step1.body
-                        .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
-                        .replace(/\[Agent Name\]/g, "Sales Agent")
-                        .replace(/\[Your Name\]/g, this.state.bizName);
-                    const customizedBody = this.applySalesAssetPlaceholders(personalizedBody, campaign);
-
-                    lead.stage = "Emailed";
-                    lead.currentCampaignId = campaign.id;
-                    lead.currentCampaignStep = 1;
-                    lead.lastStepTime = Date.now();
-                    if (!lead.history) lead.history = [];
-                    lead.history.push({
-                        sender: "agent-action",
-                        time: "Just Now",
-                        text: `Auto-enrolled in first drip campaign "${campaign.name}".`
-                    });
-                    lead.history.push({
-                        sender: "agent",
-                        time: "Just Now",
-                        text: `[OUTBOUND EMAIL - STEP 1]\nSubject: ${step1.subject}\n\n${customizedBody}`
-                    });
-
-                    this.appendConsoleLine('agent-sales', `Sales Agent auto-enrolled ${lead.name} in campaign "${campaign.name}" and sent Step 1.`);
-                    this.saveState();
-
-                    setTimeout(() => {
-                        // 5% unsubscribe chance if enabled
-                        if (this.state.crmAutopilot.simulateUnsubscribes && Math.random() < 0.05) {
-                            this.simulateLeadUnsubscribe(lead);
-                        } else {
-                            this.simulateLeadReply(lead, customizedBody);
-                        }
-                    }, 5000);
-                } else {
-                    this.simulateSalesAgentDrip(lead);
-                }
-            } else {
-                this.simulateSalesAgentDrip(lead);
-            }
-
-            // If viewing CRM, auto-select new lead if nothing is open
-            if (this.state.selectedLeadIndex === null && window.location.hash === "#crm") {
-                this.selectLead(this.state.leads.length - 1);
-            }
-        });
-
-        // New visitor Support live chat initialized
-        Simulation.onEvent('newSupportSession', (session) => {
-            this.state.supportSessions.push(session);
-            this.renderSupportSessionsList();
-            
-            if (this.state.selectedSupportIndex === null && window.location.hash === "#support") {
-                this.selectSupportSession(this.state.supportSessions.length - 1);
-            }
-
-            // Respond to visitor's query using Gemini or Fallback simulator
-            this.respondToSupportSession(session);
-        });
-
-        // Trigger simulator active with enabled agent config
-        Simulation.start(this.state.bizName, this.state.bizDesc, this.state.bizAudience, this.state.enabledAgents, this.state.crmAutopilot.dailyLeadTarget);
-
-        // Start background Autopilot settings tickers
-        this.dripInterval = setInterval(() => this.runCrmDripTick(), 10000);
+        // CRM email automation is handled by the backend pipeline worker.
+        // The browser only runs content drafting timers while the app is open.
         this.contentInterval = setInterval(() => this.runContentSchedulerTick(), 10000);
     }
 
-    stopSimulation() {
-        Simulation.stop();
+    stopAutomationTimers() {
         if (this.dripInterval) clearInterval(this.dripInterval);
         if (this.contentInterval) clearInterval(this.contentInterval);
-    }
-
-    simulateSalesAgentDrip(lead) {
-        // Move lead status forward after delay
-        setTimeout(() => {
-            if (lead.stage === 'Contacted') {
-                lead.stage = 'Engaged';
-                this.saveState();
-                this.renderLeadsList();
-                if (this.state.selectedLeadIndex !== null && this.state.leads[this.state.selectedLeadIndex] === lead) {
-                    this.selectLead(this.state.selectedLeadIndex);
-                }
-                this.appendConsoleLine('agent-sales', `CRM Update: Lead ${lead.name} replied to outreach. Moved to Engaged.`);
-            }
-        }, 15000);
-
-        setTimeout(() => {
-            if (lead.stage === 'Engaged') {
-                lead.stage = 'Hot Lead';
-                this.saveState();
-                this.renderLeadsList();
-                if (this.state.selectedLeadIndex !== null && this.state.leads[this.state.selectedLeadIndex] === lead) {
-                    this.selectLead(this.state.selectedLeadIndex);
-                }
-                this.appendConsoleLine('agent-sales', `Sales Agent scheduled demo callback with ${lead.name}. Status: Hot Lead.`);
-            }
-        }, 30000);
+        this.dripInterval = null;
+        this.contentInterval = null;
     }
 
     async respondToSupportSession(session) {
@@ -4771,7 +4408,7 @@ Output only the visitor-facing reply.`;
                 if (this.state.serverConfig && this.state.serverConfig.geminiConfigured) {
                     answer = await this.queryGeminiAPI(prompt);
                 } else {
-                    // pre-baked support fallback
+                    // Conservative support fallback when AI is unavailable.
                     if (session.currentQuestion.includes("zipForm")) {
                         answer = "That integration may be available, but I do not want to overstate it without confirming your setup. I can have the team verify zipForm support for your brokerage and send you the right next step.";
                     } else if (session.currentQuestion.includes("pricing")) {

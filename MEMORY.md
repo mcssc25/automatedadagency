@@ -17,6 +17,14 @@ Last updated: 2026-07-01
 - Mailgun account/domain should remain separate from the Real Estate CRM Pro product Mailgun account to protect product deliverability.
 - App secrets live outside git in local/VPS env files. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, logs, or `node_modules`.
 
+## Product Direction
+
+- Goal is a review-first AI marketing operator inspired by Polsia-style business agents, focused on marketing only: deep business research, competitor discovery, viral social research/adaptation, lead discovery, and email campaigns.
+- User wants to see each automation part work and approve outputs before turning on full autonomy.
+- Content priorities: research the most viral topic-level posts, not only competitor pages; draft posts should include matching generated images/videos by default; add an AI recommendation path for today's post without requiring a manual topic.
+- Dashboard/support activity should clearly distinguish real records/jobs from demo simulation.
+- Demo data/activity should not be shown anymore: no fake leads, fake support chats, fake KPI movement, fake publishing success, fake email sends, or mock trend fallbacks.
+
 ## Current Safeguards
 
 - Lead emails are normalized before storage.

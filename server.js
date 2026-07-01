@@ -75,7 +75,7 @@ function defaultCrmState() {
             autoAdvanceCampaigns: false,
             lastDailyScrapeDate: null,
             autoPauseOnReply: true,
-            simulateUnsubscribes: true,
+            simulateUnsubscribes: false,
             bypassEmailVerification: false,
             dncList: []
         },
@@ -1718,12 +1718,12 @@ Return only a 3-4 word search query (no quotes, no punctuation) optimized for sh
             return res.json(trends);
         }
 
-        console.warn(`[Trends Scraper] No platform trends parsed. Falling back to mocks.`);
-        return res.json(getMockTrends(competitors));
+        console.warn(`[Trends Scraper] No platform trends parsed.`);
+        return res.json([]);
 
     } catch (error) {
         console.error(`[Trends Error]`, error.message);
-        res.json(getMockTrends(competitors));
+        res.status(502).json({ error: `Trend research failed: ${error.message}` });
     }
 });
 
@@ -2304,7 +2304,7 @@ function parseCLIOutputToTrends(stdout, competitorsList, platformHint) {
     return trends;
 }
 
-// Fallback Mock Trends generator
+// Legacy trend examples, not used by the live trend endpoint.
 function getMockTrends(competitorsList) {
     const competitors = (competitorsList || "market").split(",").map(c => c.trim());
     return [
@@ -2390,9 +2390,7 @@ async function sendMailgunEmail({ to, subject, text }) {
     }
     
     if (!apiKey || !domain) {
-        console.warn('[Mailgun] API key or Domain not configured. Mocking email send.');
-        console.log(`[MOCK EMAIL SENT] To: ${recipientEmail}\nSubject: ${subject}\nBody: ${text}`);
-        return { mock: true };
+        throw new Error('Mailgun API key or domain is not configured. Email was not sent.');
     }
     
     const url = `https://api.mailgun.net/v3/${domain}/messages`;
@@ -3384,10 +3382,9 @@ app.post('/api/publish-post', async (req, res) => {
     const results = {};
 
     if (!creds.makeWebhookUrl) {
-        for (const platform of platforms) {
-            results[platform] = { success: true, message: "Published successfully (Simulation Fallback - Webhook not set)." };
-        }
-        return res.json(results);
+        return res.status(400).json({
+            error: "Publishing webhook is not configured. Save a Make.com webhook or platform integration before publishing."
+        });
     }
 
     // Resolve local relative paths to fully-qualified public URLs using request headers
