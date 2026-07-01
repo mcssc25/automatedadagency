@@ -2211,18 +2211,7 @@ Only respond with the post text. No other commentary or wrapping.`;
 
         let mediaUrl = null;
         if (this.state.contentAutopilot.autoAttachMedia !== false) {
-            if (platform === 'reels' || platform === 'youtube') {
-                const stockVideos = [
-                    "https://assets.mixkit.co/videos/preview/mixkit-modern-apartment-interior-design-39904-large.mp4",
-                    "https://assets.mixkit.co/videos/preview/mixkit-real-estate-agent-holding-keys-in-front-of-house-42358-large.mp4",
-                    "https://assets.mixkit.co/videos/preview/mixkit-young-female-agent-showing-new-house-interior-42361-large.mp4"
-                ];
-                mediaUrl = stockVideos[Math.floor(Math.random() * stockVideos.length)];
-            } else {
-                const cleanPrompt = this.generatePromptFromBody(postText);
-                const seed = Math.floor(Math.random() * 999999);
-                mediaUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=800&height=600&nologo=true&seed=${seed}`;
-            }
+            mediaUrl = await this.createGeneratedPostMedia(postText, platform, topic);
         }
 
         const requestedPublishMode = this.state.contentAutopilot.publishMode || 'draft';
@@ -2661,18 +2650,7 @@ Only respond with the post text. No other commentary or wrapping.`;
 
                 let mediaUrl = null;
                 if (this.state.contentAutopilot.autoAttachMedia !== false) {
-                    if (platform === 'reels' || platform === 'youtube') {
-                        const stockVideos = [
-                            "https://assets.mixkit.co/videos/preview/mixkit-modern-apartment-interior-design-39904-large.mp4",
-                            "https://assets.mixkit.co/videos/preview/mixkit-real-estate-agent-holding-keys-in-front-of-house-42358-large.mp4",
-                            "https://assets.mixkit.co/videos/preview/mixkit-young-female-agent-showing-new-house-interior-42361-large.mp4"
-                        ];
-                        mediaUrl = stockVideos[Math.floor(Math.random() * stockVideos.length)];
-                    } else {
-                        const cleanPrompt = this.generatePromptFromBody(postText);
-                        const seed = Math.floor(Math.random() * 999999);
-                        mediaUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=800&height=600&nologo=true&seed=${seed}`;
-                    }
+                    mediaUrl = await this.createGeneratedPostMedia(postText, platform, topic);
                 }
 
                 const newPost = {
@@ -2699,6 +2677,65 @@ Only respond with the post text. No other commentary or wrapping.`;
         } finally {
             this.dom.btnGenerateContent.disabled = false;
             this.dom.btnGenerateContent.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Draft Social Post`;
+        }
+    }
+
+    async createGeneratedPostMedia(postText, platform, topic = "") {
+        if (!postText || !String(postText).trim()) return null;
+
+        try {
+            this.appendConsoleLine('agent-content', `Generating visual asset for ${platform} draft...`);
+
+            let visualPrompt = "";
+            try {
+                const promptResponse = await fetch('/api/generate-image-prompt', {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        text: `Platform: ${platform}
+Topic: ${topic}
+
+Post:
+${postText}`
+                    })
+                });
+
+                if (promptResponse.ok) {
+                    const promptData = await promptResponse.json();
+                    visualPrompt = String(promptData.visualPrompt || "").trim();
+                }
+            } catch (promptErr) {
+                console.warn("Image prompt generation failed:", promptErr.message);
+            }
+
+            if (!visualPrompt) {
+                visualPrompt = this.generatePromptFromBody(postText);
+            }
+
+            const response = await fetch('/api/generate-image', {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    promptText: `${visualPrompt}
+
+Social platform: ${platform}. Create a polished, realistic social media creative image. No text overlays, no logos, no UI screenshots unless the post explicitly requires a software dashboard.`
+                })
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || "Image generation failed.");
+            }
+            if (!data.mediaUrl || !String(data.mediaUrl).startsWith('/downloads/')) {
+                throw new Error("Image generation did not return a local media asset.");
+            }
+
+            this.appendConsoleLine('agent-content', `Attached generated ${data.model || 'AI'} image to ${platform} draft.`);
+            return data.mediaUrl;
+        } catch (error) {
+            console.warn(`Generated media unavailable for ${platform}:`, error.message);
+            this.appendConsoleLine('system', `Could not attach generated image for ${platform}: ${error.message}`);
+            return null;
         }
     }
 
@@ -4659,7 +4696,7 @@ Output only the visitor-facing reply.`;
             }
         }
     }
-    // Generate AI Image for Social Post using Pollinations.ai
+    // Generate AI image for a social post using the backend image pipeline.
     async generatePostImage(postId) {
         let post = this.state.socialPosts.find(p => String(p.id) === String(postId));
         if (!post) return;

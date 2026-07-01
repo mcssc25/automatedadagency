@@ -3215,18 +3215,8 @@ app.post('/api/generate-image', async (req, res) => {
         console.error(`[AI Image Agent] Fallback copy failed:`, copyErr.message);
     }
 
-    // Ultimate fallback: return a direct high-quality Unsplash URL directly to the browser
-    const directUrls = [
-        "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80",
-        "https://images.unsplash.com/photo-1560520653-9e0e4c89eb11?auto=format&fit=crop&w=800&q=80",
-        "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=800&q=80",
-        "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=800&q=80"
-    ];
-    const ultimateUrl = directUrls[Math.floor(Math.random() * directUrls.length)];
-    return res.json({
-        success: true,
-        mediaUrl: ultimateUrl,
-        model: 'stock-url-fallback'
+    return res.status(502).json({
+        error: "Image generation failed and no local fallback image was available."
     });
 });
 

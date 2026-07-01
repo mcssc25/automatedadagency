@@ -54,6 +54,25 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Draft generation now auto-attaches local generated images:
+  - `handleContentGeneration()` and content autopilot now call a shared `createGeneratedPostMedia()` helper after copy generation.
+  - The helper asks `/api/generate-image-prompt` for a visual concept, then calls `/api/generate-image`, requires a local `/downloads/...` asset, and attaches that URL to the draft.
+  - If image generation fails, the post is still drafted but no broken image URL is attached; the activity log records the image failure.
+  - Reels/YouTube draft concepts now receive generated image assets instead of external stock video URLs.
+  - `/api/generate-image` no longer returns external Unsplash URLs as a successful ultimate fallback; if Gemini and local fallbacks both fail, it returns HTTP 502.
+  - Autopilot settings copy now says generated drafts attach locally saved AI images.
+  - Asset version changed to `app.js?v=20260701-generated-draft-images`.
+- Local verification completed:
+  - `node --check app.js`
+  - `node --check server.js`
+  - `git diff --check` (only normal Windows CRLF warnings)
+  - Local Docker rebuild with `docker compose up -d --build ad-agency-autopilot`.
+  - Local `/api/generate-image` returned `{"success":true,"mediaUrl":"/downloads/gen_1782942337507_964320.jpg","model":"gemini-3.1-flash-lite-image"}` for a test prompt.
+  - Local HTML contains `app.js?v=20260701-generated-draft-images` and the updated generated-image autopilot copy.
+- Not yet deployed live in this pass.
+
+## Previous Update
+
 - Added Content Studio `Today's AI Recommendation`:
   - New button beside `Draft Social Post` in the Drafts tab.
   - Uses selected platforms, business description, target audience, strategic context, and any already-loaded trend cards to ask Gemini for one recommended topic for today.
@@ -74,7 +93,6 @@ Last updated: 2026-07-01
   - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
   - Public `/api/app-config` returned `geminiConfigured: true`.
   - Public HTML contains `Today's AI Recommendation`, `btn-recommend-content`, `index.css?v=20260701-post-recommendation`, and `app.js?v=20260701-post-recommendation`.
-- Still next: generated drafts should use the real backend image-generation route to attach local visual assets instead of external image URLs.
 
 ## Previous Update
 

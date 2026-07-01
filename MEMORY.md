@@ -23,6 +23,7 @@ Last updated: 2026-07-01
 - User wants to see each automation part work and approve outputs before turning on full autonomy.
 - Content priorities: research the most viral topic-level posts, not only competitor pages; draft posts should include matching generated images/videos by default; add an AI recommendation path for today's post without requiring a manual topic.
 - Content Studio includes a `Today's AI Recommendation` button that asks Gemini for a daily post topic from onboarding strategy, target audience, and any loaded trend cards, then drafts selected platforms.
+- Draft generation and content autopilot attach locally saved generated images via `/api/generate-image-prompt` + `/api/generate-image`; image API no longer reports external stock URLs as success.
 - Dashboard/support activity should clearly distinguish real records/jobs from demo simulation.
 - Demo data/activity should not be shown anymore: no fake leads, fake support chats, fake KPI movement, fake publishing success, fake email sends, or mock trend fallbacks.
 - Dashboard startup activity is context-aware: if onboarding has saved a business name or website, the log says the client profile is loaded instead of prompting to add a client.
