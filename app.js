@@ -15,6 +15,9 @@ class AutopilotApp {
             bizSwot: "",
             businessReport: "",
             companySocialLinks: {},
+            agencyGoal: "",
+            coreMessage: "",
+            extraDetails: "",
             adBudget: 0,
             dealValue: 1000,
             conversionRate: 10,
@@ -166,6 +169,9 @@ class AutopilotApp {
         this.dom.scanProgressBar = document.getElementById("scan-progress-bar");
         this.dom.scanProgressSteps = document.querySelectorAll("[data-scan-step]");
         this.dom.bizSwotInput = document.getElementById("biz-swot");
+        this.dom.agencyGoalInput = document.getElementById("agency-goal");
+        this.dom.coreMessageInput = document.getElementById("core-message");
+        this.dom.extraDetailsInput = document.getElementById("extra-details");
         this.dom.dealValueInput = document.getElementById("deal-value");
         this.dom.conversionRateInput = document.getElementById("conversion-rate");
         this.dom.competitorUrlsInput = document.getElementById("competitor-urls");
@@ -414,6 +420,14 @@ class AutopilotApp {
         this.dom.btnScanWebsite.addEventListener("click", () => this.handleWebsiteScan());
         document.getElementById("biz-desc").addEventListener("input", (event) => this.autoGrowSetupTextarea(event.target));
         this.dom.bizSwotInput.addEventListener("input", (event) => this.autoGrowSetupTextarea(event.target));
+        [this.dom.agencyGoalInput, this.dom.coreMessageInput, this.dom.extraDetailsInput].forEach(input => {
+            input.addEventListener("input", () => {
+                this.state.agencyGoal = this.dom.agencyGoalInput.value.trim();
+                this.state.coreMessage = this.dom.coreMessageInput.value.trim();
+                this.state.extraDetails = this.dom.extraDetailsInput.value.trim();
+                this.saveState();
+            });
+        });
 
         // Target audience finder button
         this.dom.btnFindAudience.addEventListener("click", () => this.handleAudienceFind());
@@ -446,6 +460,9 @@ class AutopilotApp {
             this.state.bizDesc = document.getElementById("biz-desc").value;
             this.state.bizAudience = document.getElementById("biz-audience").value;
             this.state.bizSwot = this.dom.bizSwotInput.value;
+            this.state.agencyGoal = this.dom.agencyGoalInput.value.trim();
+            this.state.coreMessage = this.dom.coreMessageInput.value.trim();
+            this.state.extraDetails = this.dom.extraDetailsInput.value.trim();
             this.state.adBudget = parseFloat(document.getElementById("ad-budget").value);
             this.state.dealValue = parseFloat(this.dom.dealValueInput.value);
             this.state.conversionRate = parseFloat(this.dom.conversionRateInput.value);
@@ -836,6 +853,9 @@ class AutopilotApp {
         document.getElementById("biz-desc").value = this.state.bizDesc;
         document.getElementById("biz-audience").value = this.state.bizAudience;
         this.dom.bizSwotInput.value = this.state.bizSwot || "";
+        this.dom.agencyGoalInput.value = this.state.agencyGoal || "";
+        this.dom.coreMessageInput.value = this.state.coreMessage || "";
+        this.dom.extraDetailsInput.value = this.state.extraDetails || "";
         this.resizeOnboardingResearchFields();
         document.getElementById("ad-budget").value = this.state.adBudget;
         this.dom.dealValueInput.value = this.state.dealValue || 1000;
@@ -1015,6 +1035,9 @@ class AutopilotApp {
         this.state.bizWebsite = "";
         this.state.bizDesc = "";
         this.state.bizAudience = "";
+        this.state.agencyGoal = "";
+        this.state.coreMessage = "";
+        this.state.extraDetails = "";
         this.state.adBudget = 0;
         this.state.competitorUrls = [];
         this.state.enabledAgents = { ad: false, content: false, support: false, sales: false };
@@ -1045,6 +1068,9 @@ class AutopilotApp {
             bizSwot: this.state.bizSwot,
             businessReport: this.state.businessReport,
             companySocialLinks: this.state.companySocialLinks,
+            agencyGoal: this.state.agencyGoal,
+            coreMessage: this.state.coreMessage,
+            extraDetails: this.state.extraDetails,
             adBudget: this.state.adBudget,
             dealValue: this.state.dealValue,
             conversionRate: this.state.conversionRate,
@@ -1323,6 +1349,9 @@ class AutopilotApp {
             this.state.bizWebsite = url;
             this.state.bizDesc = document.getElementById("biz-desc").value;
             this.state.bizAudience = document.getElementById("biz-audience").value;
+            this.state.agencyGoal = this.dom.agencyGoalInput.value.trim();
+            this.state.coreMessage = this.dom.coreMessageInput.value.trim();
+            this.state.extraDetails = this.dom.extraDetailsInput.value.trim();
             this.saveState();
             this.completeScanProgress();
             
@@ -1609,6 +1638,9 @@ class AutopilotApp {
             .join('\n');
 
         return [
+            this.state.agencyGoal ? `User's ad agency goal:\n${this.state.agencyGoal}` : '',
+            this.state.coreMessage ? `Core message to reinforce:\n${this.state.coreMessage}` : '',
+            this.state.extraDetails ? `Additional user-provided details and constraints:\n${this.state.extraDetails}` : '',
             this.state.bizSwot ? `SWOT profile:\n${this.state.bizSwot}` : '',
             this.state.businessReport ? `Business intelligence report:\n${this.state.businessReport}` : '',
             competitorSummaries ? `Competitor intelligence:\n${competitorSummaries}` : ''
@@ -3893,7 +3925,8 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                     videoAsset,
                     bizName: this.state.bizName,
                     bizDesc: this.state.bizDesc,
-                    bizWebsite: this.state.bizWebsite
+                    bizWebsite: this.state.bizWebsite,
+                    strategicContext: this.getStrategicContext()
                 })
             });
 

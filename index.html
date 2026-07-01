@@ -11,7 +11,7 @@
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- App Stylesheet -->
-    <link rel="stylesheet" href="index.css?v=20260701-auto-grow-fields">
+    <link rel="stylesheet" href="index.css?v=20260701-strategy-inputs">
 </head>
 <body class="dark-theme">
     <div class="app-container">
@@ -381,6 +381,25 @@
                                     </button>
                                 </label>
                                 <textarea id="biz-swot" rows="13" class="setup-long-textarea setup-swot-textarea" style="min-height:560px; height:560px; overflow-y:hidden;" placeholder="Run the website scan to generate a detailed SWOT profile. You can edit this before launching autopilot."></textarea>
+                            </div>
+
+                            <div class="optional-strategy-panel">
+                                <div class="optional-strategy-header">
+                                    <h4><i class="fa-solid fa-bullseye text-accent"></i> Optional Strategy Inputs</h4>
+                                    <span>Improves ads, posts, campaigns, and replies</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="agency-goal">What is your goal from this ad agency?</label>
+                                    <textarea id="agency-goal" rows="3" placeholder="e.g. Book 20 demos per month, build authority with solo agents, generate warm leads for a sales team."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label for="core-message">What core message should the AI repeat?</label>
+                                    <textarea id="core-message" rows="3" placeholder="e.g. Real Estate CRM Pro replaces your disconnected tech stack with one AI-powered operating system."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label for="extra-details">What else should the AI know that was not included above?</label>
+                                    <textarea id="extra-details" rows="4" placeholder="Proof points, founder story, offers, objections to avoid, tone preferences, special guarantees, markets, exclusions, or anything that should shape content."></textarea>
+                                </div>
                             </div>
                         </div>
 
@@ -1512,6 +1531,6 @@
     <!-- App JavaScript files -->
     <script src="config.js"></script>
     <script src="agent-simulation.js"></script>
-    <script src="app.js?v=20260701-auto-grow-fields"></script>
+    <script src="app.js?v=20260701-strategy-inputs"></script>
 </body>
 </html>

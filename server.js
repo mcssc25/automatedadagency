@@ -2747,7 +2747,7 @@ app.delete('/api/campaigns/:id', (req, res) => {
 
 // 7. Generate Campaign Drip Endpoint
 app.post('/api/generate-campaign', async (req, res) => {
-    const { campaignName, campaignType, customInstructions, videoAsset, bizName, bizDesc, bizWebsite } = req.body;
+    const { campaignName, campaignType, customInstructions, videoAsset, bizName, bizDesc, bizWebsite, strategicContext } = req.body;
     console.log(`[Campaign Agent] Generating 3-step drip campaign for: "${campaignName}"...`);
     const settings = readCrmSettings();
     const selectedVideoAsset = String(videoAsset || '').trim() || selectDefaultCampaignCta(settings, bizWebsite);
@@ -2761,6 +2761,9 @@ app.post('/api/generate-campaign', async (req, res) => {
     const prompt = `You are an AI Outbound Copywriter and email marketer.
 We are building a 3-step outbound sales email campaign named "${campaignName}" for our company: "${bizName || 'CRM Pro'}".
 Company Value Proposition & Description: ${bizDesc || 'CRM automation for realtors'}
+Additional strategic context from onboarding:
+${strategicContext || 'No optional strategy notes or deep research context provided.'}
+
 Configured sales assets:
 ${salesAssetContext}
 

@@ -54,6 +54,20 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Added optional human strategy inputs to onboarding:
+  - New optional fields inside the SWOT/strategy step: agency goal, core message, and extra details not captured by research.
+  - Fields auto-save to browser state and are included in normal onboarding form save.
+  - `getStrategicContext()` now prepends these user-provided notes before SWOT, business report, and competitor intelligence.
+  - Generated email campaigns now send `strategicContext` to `/api/generate-campaign`, and the backend includes it in the campaign copywriting prompt.
+  - Asset version query changed to `20260701-strategy-inputs` for `index.css` and `app.js`.
+- Local verification completed:
+  - `node --check app.js`
+  - `node --check server.js`
+  - `git diff --check`
+- Deployment status: pending for this entry.
+
+## Previous Update
+
 - Forced onboarding long-field sizing for browsers still seeing short textareas:
   - Added cache-busting query strings to `index.css` and `app.js`.
   - Added inline `min-height`/`height` on `biz-desc` and `biz-swot` as a hard fallback.

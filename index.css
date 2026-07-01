@@ -870,6 +870,44 @@ body {
     border-color: rgba(255, 71, 133, 0.35);
 }
 
+.optional-strategy-panel {
+    border: 1px dashed rgba(0, 229, 255, 0.24);
+    background: rgba(0, 229, 255, 0.035);
+    border-radius: 8px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.optional-strategy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.optional-strategy-header h4 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.optional-strategy-header span {
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.optional-strategy-panel textarea {
+    min-height: 92px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
 /* Competitor Manager */
 .competitor-manager {
     display: flex;
