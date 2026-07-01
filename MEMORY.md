@@ -38,6 +38,7 @@ Last updated: 2026-07-01
 - Pipeline stages now include `Scraped`, `Emailed`, `Two-Way Conversation`, `Needs Human Action`, and `Quarantined`.
 - Onboarding scan is intended to be deep business intelligence: multi-page company crawl plus Gemini Search grounding for company profile, offers, audience, competitor profiles/socials, SWOT, and a compact business report.
 - Onboarding state includes `bizSwot`, `businessReport`, `companySocialLinks`, ranked `competitorUrls`, and `competitorProfiles`; ad, social, and support prompts reuse this strategic context.
+- Onboarding JSON parsing repairs literal control characters inside AI JSON string values before parsing, because Gemini can return unescaped newlines in long report fields.
 - Setup box order is: 1 Business Identity, 2 Product & Audience, 3 Competitor Intelligence, 4 SWOT Profile, 5 Budget & Goals, 6 Autopilot Employees.
 
 ## Working Agreements

@@ -54,10 +54,19 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Fixed onboarding scan failures caused by Gemini returning literal control characters/newlines inside JSON string values.
+- `parseModelJson()` now retries JSON parsing after escaping control characters only inside quoted JSON strings.
+- Local checks passed: `node --check server.js`, `node --check app.js`, `git diff --check`, and a Node parser smoke test for a literal newline inside `businessReport`.
+- Needs live deploy verification: `/api/scrape` should no longer fail with "Bad control character in string literal" for Step 1 onboarding scans.
+
+## Previous Update
+
 - Fixed recurring Chrome "Save password?" prompt by removing the real browser password field for the Gemini API key.
 - `settings-api-key` is now a read-only text/status field with `autocomplete="off"` and no `name`; the old eye toggle no longer switches it back to `type=password`.
 - Local checks passed: no remaining `type="password"` inputs found, `node --check app.js`, `node --check server.js`, and `git diff --check`.
-- Needs live deploy verification: public HTML should contain `settings-api-key` with `type="text"` and no `type="password"` anywhere.
+- Git commit pushed: `e42771a` Stop password manager prompts for API status.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T160348Z-password-manager-fix`.
+- Live verification passed: public HTML has no `type="password"`, no `autocomplete="new-password"`, no `name="gemini-api-key"`, and does contain `settings-api-key` as a read-only text field. `/api/app-config` returned `{"geminiConfigured":true}`.
 
 ## Previous Update
 

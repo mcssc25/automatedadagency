@@ -361,8 +361,65 @@ function cleanModelJson(rawText) {
     return cleaned;
 }
 
+function escapeControlCharactersInJsonStrings(jsonText) {
+    let output = '';
+    let inString = false;
+    let escaping = false;
+
+    for (const char of String(jsonText || '')) {
+        if (escaping) {
+            output += char;
+            escaping = false;
+            continue;
+        }
+
+        if (char === '\\') {
+            output += char;
+            escaping = true;
+            continue;
+        }
+
+        if (char === '"') {
+            inString = !inString;
+            output += char;
+            continue;
+        }
+
+        if (inString) {
+            if (char === '\n') {
+                output += '\\n';
+                continue;
+            }
+            if (char === '\r') {
+                output += '\\r';
+                continue;
+            }
+            if (char === '\t') {
+                output += '\\t';
+                continue;
+            }
+            if (char.charCodeAt(0) < 32) {
+                output += `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
+                continue;
+            }
+        }
+
+        output += char;
+    }
+
+    return output;
+}
+
 function parseModelJson(rawText) {
-    return JSON.parse(cleanModelJson(rawText));
+    const cleaned = cleanModelJson(rawText);
+    try {
+        return JSON.parse(cleaned);
+    } catch (error) {
+        if (/control character|bad control character/i.test(error.message)) {
+            return JSON.parse(escapeControlCharactersInJsonStrings(cleaned));
+        }
+        throw error;
+    }
 }
 
 function normalizeWebsiteUrl(input) {
