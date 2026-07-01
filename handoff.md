@@ -54,12 +54,23 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Fixed campaign review ambiguity.
+- Git commit pushed: `993f59f` Clarify campaign launch targets and CTA preview.
+- CTA links entered in Campaign Builder are saved as `campaign.videoAsset`; the verification queue now previews that real link instead of leaving `[CTA Link]` visible when a CTA exists.
+- Pending campaigns now receive `targetLeadsCount` from the server based on current `Scraped` leads.
+- Approval now refuses to proceed with zero `Scraped` leads, shows a confirmation with the exact count, and labels the action as sending Step 1 now.
+- The server now updates the same campaign to `Active` on approval instead of creating a new campaign and deleting the old one, so enrolled leads keep a valid campaign id.
+- Production currently has one lead total, but zero `Scraped` leads; the existing lead is stage `Hot Lead`, so the pending campaign should not email it.
+- Important gap: Step 1 is the real Mailgun send. Step 2/3 are still only browser-side simulated drip behavior until a backend scheduler/worker is added.
+
+## Previous Update
+
 - Fixed Chrome password-save prompts caused by the non-login Gemini API key field being interpreted as a credential form.
 - The API key input now uses `autocomplete="new-password"` plus password-manager ignore hints, and its visibility toggle is explicitly a button.
 - Git commit pushed: `6e56568` Suppress password manager prompt for API key field.
 - Deployed to the VPS and verified the live HTML contains the password-manager ignore hints.
 
-## Previous Update
+## Scraper Update
 
 - Added and deployed the low-cost lead scraper integration.
 - Git commits pushed:
@@ -91,6 +102,7 @@ Last updated: 2026-07-01
 - VPS verification passed:
   - `docker compose ps` shows `ad-agency-autopilot`, `ad-agency-lead-scraper`, and the Cloudflare tunnel running.
   - Public `https://agents.realestatecrmpro.com/api/app-config` returned `{"geminiConfigured":true}`.
+  - Public `/api/crm-state` shows the pending campaign has numeric `targetLeadsCount` and a saved CTA asset.
   - Public HTML contains the API-key password-manager ignore hints.
   - App container has `LEAD_SCRAPER_URL=http://lead-scraper:8080`.
   - App container resolves Docker DNS name `lead-scraper`.

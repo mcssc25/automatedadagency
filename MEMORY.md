@@ -26,6 +26,8 @@ Last updated: 2026-07-01
 - Lead scraping now prefers the `gosom/google-maps-scraper` sidecar via `LEAD_SCRAPER_URL=http://lead-scraper:8080`, falls back to Gemini search only if the sidecar fails, never creates fake contacts, and imports only leads with both name and valid email.
 - Lead records now support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
 - The Gemini API key field is masked but marked with password-manager ignore hints so Chrome does not save campaign text as credentials.
+- Campaign approval targets only leads with stage `Scraped`, sends Step 1 immediately through Mailgun, and stores the campaign id/step on those leads.
+- Follow-up drip steps are still browser-side simulated behavior; production needs a backend scheduler/worker before Step 2/3 are real Mailgun sends.
 
 ## Working Agreements
 
