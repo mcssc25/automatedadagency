@@ -66,7 +66,13 @@ Last updated: 2026-07-01
   - `node --check server.js`
   - `node --check app.js`
   - `git diff --check`
-- Deployment status: not yet deployed in this handoff entry; next step is commit, push, copy runtime files to `/opt/ad-agency-autopilot`, rebuild only `ad-agency-autopilot`, and verify public `/api/app-config` plus static `app.js`.
+- Git commit pushed: `dbdad37` Route Gemini models and add AI video.
+- Live deployment completed on `/opt/ad-agency-autopilot`; post-deploy backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T165131Z-gemini-model-video-post`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public `/api/app-config` returns `geminiConfigured: true` and model names for default, research, image, and video.
+  - Public `app.js` contains `generatePostVideo` and `/api/generate-video`.
+  - Public `/api/generate-video` route is registered and returns HTTP 400 for an empty no-prompt request without spending on generation.
 
 ## Previous Update
 
