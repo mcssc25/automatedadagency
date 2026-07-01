@@ -63,8 +63,12 @@ Last updated: 2026-07-01
 - Local verification completed:
   - `node --check app.js`
   - `git diff --check` (only normal Windows CRLF warnings)
-- Git/repo status: update is intended to be committed on `main` and pushed to `origin/main`; final response should report the exact commit hash.
-- Deployment status: pending at the time of this handoff edit.
+- Git commit pushed: `6385f8e` Fix startup client status log.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T211955Z-startup-client-status`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public HTML references `app.js?v=20260701-startup-client-status`.
+  - Public `app.js?v=20260701-startup-client-status` contains `Onboarding profile loaded`.
 
 ## Previous Product Review
 
