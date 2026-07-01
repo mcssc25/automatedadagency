@@ -619,11 +619,12 @@ function normalizeWebsiteUrl(input) {
 }
 
 function normalizeDomain(input) {
+    const value = String(input || '').trim();
     try {
-        const withProtocol = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+        const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
         return new URL(withProtocol).hostname.replace(/^www\./i, '').toLowerCase();
     } catch (error) {
-        return String(input || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase();
+        return value.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase();
     }
 }
 
