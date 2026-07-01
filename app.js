@@ -35,8 +35,10 @@ class AutopilotApp {
                 dailyLeadTarget: 100,
                 firstCampaignId: null,
                 secondCampaignId: null,
+                thirdCampaignId: null,
                 autoPauseOnReply: true,
                 simulateUnsubscribes: true,
+                bypassEmailVerification: false,
                 dncList: []
             },
             marketingGoal: "lead-gen",
@@ -56,6 +58,7 @@ class AutopilotApp {
             leads: [],
             leadsPage: 1,
             leadsPagesCount: 1,
+            leadStageCounts: {},
             leadsStageFilter: 'All',
             leadsSearchQuery: '',
             supportSessions: [],
@@ -200,6 +203,7 @@ class AutopilotApp {
         this.dom.campaignInstructions = document.getElementById("campaign-instructions");
         this.dom.btnCreateCampaign = document.getElementById("btn-create-campaign");
         this.dom.crmCampaignsContainer = document.getElementById("crm-campaigns-container");
+        this.dom.crmCampaignWorkflowSummary = document.getElementById("crm-campaign-workflow-summary");
 
         // Outbound Settings
         this.dom.settingsDailyLimit = document.getElementById("settings-daily-limit");
@@ -212,6 +216,7 @@ class AutopilotApp {
         this.dom.crmLeadLimit = document.getElementById("crm-lead-limit");
         this.dom.crmFirstCampaign = document.getElementById("crm-first-campaign");
         this.dom.crmSecondCampaign = document.getElementById("crm-second-campaign");
+        this.dom.crmThirdCampaign = document.getElementById("crm-third-campaign");
         this.dom.crmAutoPause = document.getElementById("crm-auto-pause");
         this.dom.crmSimulateUnsubs = document.getElementById("crm-simulate-unsubs");
         this.dom.crmDncAddInput = document.getElementById("crm-dnc-add-input");
@@ -350,9 +355,11 @@ class AutopilotApp {
             this.state.useFallback = this.dom.settingsUseFallback.checked;
             this.state.outboundDailyLimit = parseInt(this.dom.settingsDailyLimit.value) || 50;
             this.state.bypassEmailVerification = this.dom.settingsBypassVerification.checked;
+            this.state.crmAutopilot.bypassEmailVerification = this.state.bypassEmailVerification;
             
             this.saveState();
             this.updateApiStatusUI();
+            this.renderCampaignWorkflowSummary();
             this.appendConsoleLine('system', `API & Outbound settings updated. Server Gemini key live: ${this.state.serverConfig.geminiConfigured ? 'YES' : 'NO'}. Daily Limit: ${this.state.outboundDailyLimit}. Autopilot send: ${this.state.bypassEmailVerification}`);
             alert("Settings saved successfully.");
         });
@@ -543,14 +550,22 @@ class AutopilotApp {
         this.dom.crmFirstCampaign.addEventListener("change", () => {
             this.state.crmAutopilot.firstCampaignId = this.dom.crmFirstCampaign.value ? parseInt(this.dom.crmFirstCampaign.value) : null;
             this.saveState();
+            this.renderCampaignWorkflowSummary();
         });
         this.dom.crmSecondCampaign.addEventListener("change", () => {
             this.state.crmAutopilot.secondCampaignId = this.dom.crmSecondCampaign.value ? parseInt(this.dom.crmSecondCampaign.value) : null;
             this.saveState();
+            this.renderCampaignWorkflowSummary();
+        });
+        this.dom.crmThirdCampaign.addEventListener("change", () => {
+            this.state.crmAutopilot.thirdCampaignId = this.dom.crmThirdCampaign.value ? parseInt(this.dom.crmThirdCampaign.value) : null;
+            this.saveState();
+            this.renderCampaignWorkflowSummary();
         });
         this.dom.crmAutoPause.addEventListener("change", () => {
             this.state.crmAutopilot.autoPauseOnReply = this.dom.crmAutoPause.checked;
             this.saveState();
+            this.renderCampaignWorkflowSummary();
         });
         this.dom.crmSimulateUnsubs.addEventListener("change", () => {
             this.state.crmAutopilot.simulateUnsubscribes = this.dom.crmSimulateUnsubs.checked;
@@ -685,14 +700,28 @@ class AutopilotApp {
                 dailyLeadTarget: 100,
                 firstCampaignId: null,
                 secondCampaignId: null,
+                thirdCampaignId: null,
                 autoPauseOnReply: true,
                 simulateUnsubscribes: true,
+                bypassEmailVerification: false,
                 dncList: []
             };
         }
+        this.state.crmAutopilot = {
+            enabled: false,
+            dailyLeadTarget: 100,
+            firstCampaignId: null,
+            secondCampaignId: null,
+            thirdCampaignId: null,
+            autoPauseOnReply: true,
+            simulateUnsubscribes: true,
+            bypassEmailVerification: false,
+            ...this.state.crmAutopilot
+        };
         if (!Array.isArray(this.state.crmAutopilot.dncList)) {
             this.state.crmAutopilot.dncList = [];
         }
+        this.state.leadStageCounts = this.state.leadStageCounts || {};
         
         // Clean out any old-format individual email drafts from verificationQueue
         this.state.verificationQueue = this.state.verificationQueue.filter(item => item && Array.isArray(item.steps));
@@ -729,6 +758,7 @@ class AutopilotApp {
         this.renderCompetitorList();
         this.syncCompetitorHiddenInput();
         this.populateCampaignSelectDropdowns();
+        this.renderCampaignWorkflowSummary();
         this.renderDncList();
         
         // Restore agent toggle states and card classes
@@ -745,7 +775,8 @@ class AutopilotApp {
         this.dom.settingsApiKey.value = this.state.serverConfig.geminiConfigured ? "Configured on server (.env)" : "";
         this.dom.settingsUseFallback.checked = this.state.useFallback;
         this.dom.settingsDailyLimit.value = this.state.outboundDailyLimit || 50;
-        this.dom.settingsBypassVerification.checked = this.state.bypassEmailVerification || false;
+        this.state.bypassEmailVerification = this.state.crmAutopilot.bypassEmailVerification || this.state.bypassEmailVerification || false;
+        this.dom.settingsBypassVerification.checked = this.state.bypassEmailVerification;
         
         this.dom.previewBizName.innerText = this.state.bizName;
         try {
@@ -841,11 +872,15 @@ class AutopilotApp {
                 ...this.state.crmAutopilot,
                 ...(serverState.crmAutopilot || {})
             };
+            this.state.leadStageCounts = serverState.leadStageCounts || {};
             
             await this.fetchLeadsFromServer();
+            this.populateCampaignSelectDropdowns();
+            this.renderCampaignWorkflowSummary();
         } catch (error) {
             console.warn("Could not load CRM storage; using browser state:", error.message);
             this.renderLeadsList();
+            this.renderCampaignWorkflowSummary();
         }
     }
 
@@ -1288,11 +1323,13 @@ class AutopilotApp {
     populateCampaignSelectDropdowns() {
         const firstCampaignSelect = this.dom.crmFirstCampaign;
         const secondCampaignSelect = this.dom.crmSecondCampaign;
-        if (!firstCampaignSelect || !secondCampaignSelect) return;
+        const thirdCampaignSelect = this.dom.crmThirdCampaign;
+        if (!firstCampaignSelect || !secondCampaignSelect || !thirdCampaignSelect) return;
 
         // Clear existing options except default
         firstCampaignSelect.innerHTML = '<option value="">-- No Active Campaign --</option>';
         secondCampaignSelect.innerHTML = '<option value="">-- No Active Campaign --</option>';
+        thirdCampaignSelect.innerHTML = '<option value="">-- No Active Campaign --</option>';
 
         // Get list of campaigns
         const campaigns = this.state.campaignsList || [];
@@ -1306,6 +1343,11 @@ class AutopilotApp {
             opt2.value = c.id;
             opt2.textContent = c.name;
             secondCampaignSelect.appendChild(opt2);
+
+            const opt3 = document.createElement("option");
+            opt3.value = c.id;
+            opt3.textContent = c.name;
+            thirdCampaignSelect.appendChild(opt3);
         });
 
         // Set selected values
@@ -1315,6 +1357,77 @@ class AutopilotApp {
         if (this.state.crmAutopilot.secondCampaignId) {
             secondCampaignSelect.value = this.state.crmAutopilot.secondCampaignId;
         }
+        if (this.state.crmAutopilot.thirdCampaignId) {
+            thirdCampaignSelect.value = this.state.crmAutopilot.thirdCampaignId;
+        }
+    }
+
+    getCampaignNameById(id) {
+        if (!id) return 'Not selected';
+        const campaign = (this.state.campaignsList || []).find(c => String(c.id) === String(id));
+        return campaign ? campaign.name : 'Not active';
+    }
+
+    renderCampaignWorkflowSummary() {
+        const container = this.dom.crmCampaignWorkflowSummary;
+        if (!container) return;
+
+        const counts = this.state.leadStageCounts || {};
+        const scraped = counts.Scraped || 0;
+        const emailed = counts.Emailed || 0;
+        const hot = counts['Hot Lead'] || 0;
+        const firstName = this.getCampaignNameById(this.state.crmAutopilot.firstCampaignId);
+        const secondName = this.getCampaignNameById(this.state.crmAutopilot.secondCampaignId);
+        const thirdName = this.getCampaignNameById(this.state.crmAutopilot.thirdCampaignId);
+        const verificationMode = this.state.bypassEmailVerification ? 'Bypass enabled: new generated campaigns can send immediately.' : 'Manual approval: leads are not emailed until you approve a campaign.';
+        const pauseMode = this.state.crmAutopilot.autoPauseOnReply !== false ? 'Replies pause the campaign and mark the lead Hot Lead.' : 'Replies mark Hot Lead, but auto-pause is off.';
+
+        container.innerHTML = `
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
+                <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Audience Now</div>
+                <div style="font-size:1.6rem; font-weight:800; color:var(--accent); margin-top:6px;">${scraped}</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary);">Scraped leads eligible for the next Step 1 send.</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
+                <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Current Pipeline</div>
+                <div style="font-size:0.85rem; color:var(--text-primary); margin-top:8px;">${emailed} Emailed · ${hot} Hot Lead</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">Only Scraped leads are selected for a new campaign launch.</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
+                <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Campaign Chain</div>
+                <div style="font-size:0.82rem; color:var(--text-primary); margin-top:8px;">1. ${firstName}</div>
+                <div style="font-size:0.82rem; color:var(--text-primary);">2. ${secondName}</div>
+                <div style="font-size:0.82rem; color:var(--text-primary);">3. ${thirdName}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
+                <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Launch Rule</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:8px;">${verificationMode}</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">${pauseMode}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
+                <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Tracking Rule</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:8px;">Replies are tracked through the inbound Mailgun webhook.</div>
+                <div style="font-size:0.82rem; color:var(--orange); margin-top:6px;">Open/click/signup routing is not connected yet.</div>
+            </div>
+        `;
+    }
+
+    getNextCampaignInConfiguredChain(currentCampaignId) {
+        const chain = [
+            this.state.crmAutopilot.firstCampaignId,
+            this.state.crmAutopilot.secondCampaignId,
+            this.state.crmAutopilot.thirdCampaignId
+        ].filter(Boolean);
+        const currentIndex = chain.findIndex(id => String(id) === String(currentCampaignId));
+        return currentIndex >= 0 ? chain[currentIndex + 1] || null : null;
+    }
+
+    renderCampaignRoleBadges(campaignId) {
+        const badges = [];
+        if (String(this.state.crmAutopilot.firstCampaignId) === String(campaignId)) badges.push('Campaign 1');
+        if (String(this.state.crmAutopilot.secondCampaignId) === String(campaignId)) badges.push('Campaign 2');
+        if (String(this.state.crmAutopilot.thirdCampaignId) === String(campaignId)) badges.push('Campaign 3');
+        return badges.map(label => `<span class="badge">${label}</span>`).join(' ');
     }
 
     renderDncList() {
@@ -1434,26 +1547,25 @@ class AutopilotApp {
                         const delayMs = delayVal * 15000;
 
                         if (Date.now() - lead.lastStepTime >= delayMs) {
-                            // Enforce Transition to Campaign 2
-                            const secondCampaignId = this.state.crmAutopilot.secondCampaignId;
-                            if (secondCampaignId && secondCampaignId !== campaign.id) {
-                                const secondCampaign = campaigns.find(c => c.id === secondCampaignId);
-                                if (secondCampaign && secondCampaign.steps && secondCampaign.steps.length > 0) {
-                                    // Enroll in Second Campaign
-                                    const step1 = secondCampaign.steps[0];
+                            // Browser-side simulation can transition through the configured campaign chain.
+                            const nextCampaignId = this.getNextCampaignInConfiguredChain(campaign.id);
+                            if (nextCampaignId) {
+                                const nextCampaign = campaigns.find(c => String(c.id) === String(nextCampaignId));
+                                if (nextCampaign && nextCampaign.steps && nextCampaign.steps.length > 0) {
+                                    const step1 = nextCampaign.steps[0];
                                     const customizedBody = step1.body
                                         .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
                                         .replace(/\[Agent Name\]/g, "Sales Agent")
                                         .replace(/\[Your Name\]/g, this.state.bizName)
-                                        .replace(/\[CTA Link\]/g, secondCampaign.videoAsset || this.state.bizWebsite);
+                                        .replace(/\[CTA Link\]/g, nextCampaign.videoAsset || this.state.bizWebsite);
 
-                                    lead.currentCampaignId = secondCampaign.id;
+                                    lead.currentCampaignId = nextCampaign.id;
                                     lead.currentCampaignStep = 1;
                                     lead.lastStepTime = Date.now();
                                     lead.history.push({
                                         sender: "agent-action",
                                         time: "Just Now",
-                                        text: `Lead completed campaign "${campaign.name}" with no reply. Automatically enrolling in follow-up campaign "${secondCampaign.name}".`
+                                        text: `Lead completed campaign "${campaign.name}" with no reply. Automatically enrolling in follow-up campaign "${nextCampaign.name}".`
                                     });
                                     lead.history.push({
                                         sender: "agent",
@@ -1461,7 +1573,7 @@ class AutopilotApp {
                                         text: `[OUTBOUND EMAIL - STEP 1]\nSubject: ${step1.subject}\n\n${customizedBody}`
                                     });
 
-                                    this.appendConsoleLine('agent-sales', `Sales Agent auto-transitioned ${lead.name} to follow-up Campaign "${secondCampaign.name}" Step 1.`);
+                                    this.appendConsoleLine('agent-sales', `Sales Agent auto-transitioned ${lead.name} to follow-up Campaign "${nextCampaign.name}" Step 1.`);
                                     stateChanged = true;
 
                                     setTimeout(() => {
@@ -3186,7 +3298,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             
             if (data.leads && data.leads.length > 0) {
                 this.state.leadsPage = 1;
-                await this.fetchLeadsFromServer();
+                await this.loadCrmStateFromServer();
                 
                 let logMsg = `Scraped and loaded ${data.leads.length} leads for "${niche}" into pipeline via ${data.source || 'lead scraper'}.`;
                 this.appendConsoleLine('agent-sales', logMsg);
@@ -3249,6 +3361,8 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                 
                 await this.loadCrmStateFromServer();
                 this.dom.crmCampaignForm.reset();
+                this.populateCampaignSelectDropdowns();
+                this.renderCampaignWorkflowSummary();
             }
         } catch (error) {
             console.error("Campaign creation failed:", error);
@@ -3263,6 +3377,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
     renderCampaignsList() {
         const container = this.dom.crmCampaignsContainer;
         if (!container) return;
+        this.renderCampaignWorkflowSummary();
 
         if (!this.state.campaignsList || this.state.campaignsList.length === 0) {
             container.innerHTML = `
@@ -3282,6 +3397,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                 <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:10px;">
                     <strong>Type:</strong> ${c.type.replace("-", " ")} · <strong>Created:</strong> ${c.dateCreated}
                 </div>
+                <div style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:10px;">${this.renderCampaignRoleBadges(c.id)}</div>
                 <p style="font-size:0.85rem; margin:8px 0; font-style:italic;">"${c.instructions.substring(0, 100)}..."</p>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
                     <button class="btn btn-outline btn-xs" onclick="App.showCampaignSteps(${c.id})"><i class="fa-solid fa-eye"></i> View Drip Copy</button>
@@ -3499,6 +3615,8 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             await this.loadCrmStateFromServer();
             this.renderVerificationQueue();
             this.renderCampaignsList();
+            this.populateCampaignSelectDropdowns();
+            this.renderCampaignWorkflowSummary();
         } catch (err) {
             console.error('[Launch Campaign Error]', err.message);
             alert("Failed to launch campaign: " + err.message);
@@ -3516,6 +3634,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
 
             await this.loadCrmStateFromServer();
             this.renderVerificationQueue();
+            this.renderCampaignWorkflowSummary();
             this.appendConsoleLine('system', `Cancelled pending campaign.`);
         } catch (err) {
             console.error('[Delete Campaign Error]', err.message);

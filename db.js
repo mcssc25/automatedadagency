@@ -205,6 +205,15 @@ function getLeadsCount({ stage, search } = {}) {
     return result ? result.count : 0;
 }
 
+function getLeadStageCounts() {
+    const stmt = db.prepare('SELECT stage, COUNT(*) as count FROM leads GROUP BY stage');
+    const rows = stmt.all();
+    return rows.reduce((counts, row) => {
+        counts[row.stage || 'Unknown'] = row.count;
+        return counts;
+    }, {});
+}
+
 function getLeadById(id) {
     const stmt = db.prepare('SELECT * FROM leads WHERE id = ?');
     const row = stmt.get(id);
@@ -367,6 +376,7 @@ module.exports = {
     initDb,
     getLeads,
     getLeadsCount,
+    getLeadStageCounts,
     getLeadById,
     getLeadByEmail,
     insertLead,

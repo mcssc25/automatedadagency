@@ -1086,6 +1086,14 @@
 
                 <!-- 3. EMAIL CAMPAIGNS VIEW -->
                 <div class="crm-panel-view" id="crm-campaigns" style="display:none;">
+                    <div class="dashboard-panel" style="margin-bottom:20px;">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-route text-accent"></i> Campaign Enrollment Workflow</h3>
+                        </div>
+                        <div class="panel-content" id="crm-campaign-workflow-summary" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
+                            <!-- Dynamic campaign workflow summary -->
+                        </div>
+                    </div>
                     <div class="crm-layout">
                         <!-- Left: Form -->
                         <div class="crm-left">
@@ -1156,7 +1164,7 @@
                                     <div class="form-group">
                                         <label for="crm-lead-limit">Daily Lead Intake Limit (Mailing List)</label>
                                         <input type="number" id="crm-lead-limit" min="10" max="1000" value="100" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
-                                        <p class="step-helper" style="margin-top:4px;">Limits how many new leads the agent automatically scrapes and enrolls in campaigns daily.</p>
+                                        <p class="step-helper" style="margin-top:4px;">Sets the intended daily intake cap. New real scraped leads stay in the Scraped audience until a campaign is approved.</p>
                                     </div>
 
                                     <div class="form-group">
@@ -1165,7 +1173,7 @@
                                             <option value="">-- No Active Campaign --</option>
                                             <!-- Dynamically populated -->
                                         </select>
-                                        <p class="step-helper" style="margin-top:4px;">New leads will automatically be enrolled in this campaign.</p>
+                                        <p class="step-helper" style="margin-top:4px;">Default Campaign 1 for the visible campaign chain. Approving a campaign sends Step 1 to current Scraped leads.</p>
                                     </div>
 
                                     <div class="form-group">
@@ -1174,7 +1182,16 @@
                                             <option value="">-- No Active Campaign --</option>
                                             <!-- Dynamically populated -->
                                         </select>
-                                        <p class="step-helper" style="margin-top:4px;">Leads who complete the first campaign without replying will transition to this follow-up drip.</p>
+                                        <p class="step-helper" style="margin-top:4px;">Browser-side simulation transitions no-reply leads here after Campaign 1. Real scheduled Mailgun follow-ups still need a backend worker.</p>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="crm-third-campaign">Follow-up Third Campaign</label>
+                                        <select id="crm-third-campaign" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                            <option value="">-- No Active Campaign --</option>
+                                            <!-- Dynamically populated -->
+                                        </select>
+                                        <p class="step-helper" style="margin-top:4px;">Optional next campaign after Campaign 2 for leads that still have not replied.</p>
                                     </div>
 
                                     <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">

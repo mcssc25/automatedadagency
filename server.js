@@ -54,8 +54,10 @@ function defaultCrmState() {
             dailyLeadTarget: 100,
             firstCampaignId: null,
             secondCampaignId: null,
+            thirdCampaignId: null,
             autoPauseOnReply: true,
             simulateUnsubscribes: true,
+            bypassEmailVerification: false,
             dncList: []
         },
         updatedAt: null
@@ -101,12 +103,14 @@ app.get('/api/crm-state', (req, res) => {
             dailyLeadTarget: 100,
             firstCampaignId: null,
             secondCampaignId: null,
+            thirdCampaignId: null,
             autoPauseOnReply: true,
             simulateUnsubscribes: false,
             bypassEmailVerification: false
         });
         
         const targetLeadsCount = db.getLeadsCount({ stage: 'Scraped' });
+        const leadStageCounts = db.getLeadStageCounts();
         const allCampaigns = db.getCampaigns().map(campaign => ({
             ...campaign,
             targetLeadsCount
@@ -123,6 +127,7 @@ app.get('/api/crm-state', (req, res) => {
             leads,
             campaignsList,
             verificationQueue,
+            leadStageCounts,
             crmAutopilot: {
                 ...settings,
                 dncList: dncRows.map(d => d.email)
@@ -143,6 +148,7 @@ app.put('/api/crm-state', (req, res) => {
                 dailyLeadTarget: parseInt(crmAutopilot.dailyLeadTarget) || 100,
                 firstCampaignId: crmAutopilot.firstCampaignId ? parseInt(crmAutopilot.firstCampaignId) : null,
                 secondCampaignId: crmAutopilot.secondCampaignId ? parseInt(crmAutopilot.secondCampaignId) : null,
+                thirdCampaignId: crmAutopilot.thirdCampaignId ? parseInt(crmAutopilot.thirdCampaignId) : null,
                 autoPauseOnReply: crmAutopilot.autoPauseOnReply ?? true,
                 simulateUnsubscribes: crmAutopilot.simulateUnsubscribes ?? false,
                 bypassEmailVerification: crmAutopilot.bypassEmailVerification ?? false
