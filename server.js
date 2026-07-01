@@ -21,6 +21,10 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const DATA_DIR = path.join(__dirname, 'data');
 const CRM_STATE_FILE = path.join(DATA_DIR, 'crm-state.json');
 const CRM_SETTINGS_FILE = path.join(DATA_DIR, 'crm-settings.json');
+const SCRAPER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+};
 let pipelineWorkerRunning = false;
 
 function ensureDataDir() {
@@ -57,6 +61,10 @@ function defaultCrmState() {
             firstCampaignId: null,
             secondCampaignId: null,
             thirdCampaignId: null,
+            bookingLink: '',
+            salesPageUrl: '',
+            demoVideoUrl: '',
+            youtubePageUrl: '',
             dailyScrapeEnabled: false,
             dailyScrapeQuery: '',
             autoEnrollScrapedLeads: false,
@@ -78,6 +86,10 @@ function defaultCrmSettings() {
         firstCampaignId: null,
         secondCampaignId: null,
         thirdCampaignId: null,
+        bookingLink: '',
+        salesPageUrl: '',
+        demoVideoUrl: '',
+        youtubePageUrl: '',
         dailyScrapeEnabled: false,
         dailyScrapeQuery: '',
         autoEnrollScrapedLeads: false,
@@ -188,6 +200,10 @@ app.put('/api/crm-state', (req, res) => {
                 firstCampaignId: crmAutopilot.firstCampaignId ? parseInt(crmAutopilot.firstCampaignId) : null,
                 secondCampaignId: crmAutopilot.secondCampaignId ? parseInt(crmAutopilot.secondCampaignId) : null,
                 thirdCampaignId: crmAutopilot.thirdCampaignId ? parseInt(crmAutopilot.thirdCampaignId) : null,
+                bookingLink: String(crmAutopilot.bookingLink || '').trim(),
+                salesPageUrl: String(crmAutopilot.salesPageUrl || '').trim(),
+                demoVideoUrl: String(crmAutopilot.demoVideoUrl || '').trim(),
+                youtubePageUrl: String(crmAutopilot.youtubePageUrl || '').trim(),
                 dailyScrapeEnabled: crmAutopilot.dailyScrapeEnabled ?? false,
                 dailyScrapeQuery: String(crmAutopilot.dailyScrapeQuery || '').trim(),
                 autoEnrollScrapedLeads: crmAutopilot.autoEnrollScrapedLeads ?? false,
@@ -333,6 +349,176 @@ async function queryGeminiWithSearch(promptText) {
     } else {
         throw new Error("Invalid response format received from Gemini API");
     }
+}
+
+function cleanModelJson(rawText) {
+    const cleaned = String(rawText || '').replace(/```json|```/g, "").trim();
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        return cleaned.slice(firstBrace, lastBrace + 1);
+    }
+    return cleaned;
+}
+
+function parseModelJson(rawText) {
+    return JSON.parse(cleanModelJson(rawText));
+}
+
+function normalizeWebsiteUrl(input) {
+    let normalized = String(input || '').trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+        normalized = `https://${normalized}`;
+    }
+    return normalized;
+}
+
+function normalizeDomain(input) {
+    try {
+        const withProtocol = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+        return new URL(withProtocol).hostname.replace(/^www\./i, '').toLowerCase();
+    } catch (error) {
+        return String(input || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase();
+    }
+}
+
+function compactText(text, maxLength = 6000) {
+    return String(text || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function socialPlatformFromUrl(href) {
+    const lower = String(href || '').toLowerCase();
+    if (lower.includes('linkedin.com')) return 'linkedin';
+    if (lower.includes('facebook.com')) return 'facebook';
+    if (lower.includes('instagram.com')) return 'instagram';
+    if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'youtube';
+    if (lower.includes('tiktok.com')) return 'tiktok';
+    if (lower.includes('twitter.com') || lower.includes('x.com')) return 'x';
+    return null;
+}
+
+function isUsefulInternalLink(urlObj) {
+    const pathName = urlObj.pathname.toLowerCase();
+    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mov|avi|css|js)$/i.test(pathName)) return false;
+    return [
+        'about',
+        'product',
+        'service',
+        'solution',
+        'feature',
+        'pricing',
+        'case',
+        'customer',
+        'industry',
+        'platform',
+        'integrations',
+        'demo',
+        'blog'
+    ].some(keyword => pathName.includes(keyword));
+}
+
+function extractReadableSnapshot(html, pageUrl, baseHost) {
+    const $ = cheerio.load(html);
+
+    const title = compactText($('title').first().text(), 140);
+    const socialLinks = {};
+    const internalLinks = [];
+
+    $('a[href]').each((i, el) => {
+        const rawHref = $(el).attr('href');
+        if (!rawHref || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:') || rawHref.startsWith('#')) return;
+        try {
+            const absolute = new URL(rawHref, pageUrl);
+            if (!['http:', 'https:'].includes(absolute.protocol)) return;
+            const platform = socialPlatformFromUrl(absolute.href);
+            if (platform && !socialLinks[platform]) {
+                socialLinks[platform] = absolute.href;
+            }
+            const host = absolute.hostname.replace(/^www\./i, '').toLowerCase();
+            if (host === baseHost && isUsefulInternalLink(absolute)) {
+                const cleanUrl = `${absolute.origin}${absolute.pathname}`.replace(/\/+$/, '');
+                if (!internalLinks.includes(cleanUrl)) internalLinks.push(cleanUrl);
+            }
+        } catch (error) {
+            // Ignore malformed links.
+        }
+    });
+
+    $('script, style, nav, footer, header, iframe, noscript, svg').remove();
+
+    let pageText = '';
+    $('h1, h2, h3, h4, p, li, td, th').each((i, el) => {
+        const txt = compactText($(el).text(), 500);
+        if (txt.length > 20) {
+            pageText += `${txt}\n`;
+        }
+    });
+
+    return {
+        url: pageUrl,
+        title,
+        text: pageText.trim().slice(0, 9000),
+        internalLinks,
+        socialLinks
+    };
+}
+
+async function fetchReadableSnapshot(pageUrl, baseHost) {
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const response = await axios.get(pageUrl, {
+                headers: SCRAPER_HEADERS,
+                timeout: 12000,
+                maxRedirects: 4
+            });
+            return extractReadableSnapshot(response.data, response.request?.res?.responseUrl || pageUrl, baseHost);
+        } catch (error) {
+            lastError = error;
+            if (attempt < 3 && ['EAI_AGAIN', 'ECONNRESET', 'ETIMEDOUT'].includes(error.code)) {
+                await new Promise(resolve => setTimeout(resolve, 700 * attempt));
+                continue;
+            }
+            throw error;
+        }
+    }
+    throw lastError;
+}
+
+async function crawlBusinessWebsite(startUrl) {
+    const normalizedUrl = normalizeWebsiteUrl(startUrl);
+    const baseHost = normalizeDomain(normalizedUrl);
+    const homepage = await fetchReadableSnapshot(normalizedUrl, baseHost);
+    const candidateLinks = homepage.internalLinks
+        .filter(link => normalizeDomain(link) === baseHost)
+        .slice(0, 7);
+
+    const pageResults = await Promise.allSettled(candidateLinks.map(link => fetchReadableSnapshot(link, baseHost)));
+    const snapshots = [homepage];
+    for (const result of pageResults) {
+        if (result.status === 'fulfilled' && result.value && result.value.text) {
+            snapshots.push(result.value);
+        }
+    }
+
+    const socialLinks = snapshots.reduce((acc, snapshot) => ({
+        ...acc,
+        ...snapshot.socialLinks
+    }), {});
+
+    const combinedText = snapshots
+        .map(snapshot => `Source: ${snapshot.url}\nTitle: ${snapshot.title || 'Untitled'}\n${snapshot.text}`)
+        .join('\n\n---\n\n')
+        .slice(0, 26000)
+        .trim();
+
+    return {
+        normalizedUrl,
+        baseHost,
+        pagesScanned: snapshots.map(snapshot => snapshot.url),
+        socialLinks,
+        combinedText
+    };
 }
 
 function isLikelyEmail(email) {
@@ -588,74 +774,107 @@ app.post('/api/scrape', async (req, res) => {
         return res.status(400).json({ error: "URL is required" });
     }
 
-    // Standardize URL protocol
-    if (!/^https?:\/\//i.test(url)) {
-        url = 'https://' + url;
-    }
-
     try {
-        console.log(`[Scraper] Fetching HTML from: ${url}`);
-        const htmlResponse = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-            },
-            timeout: 10000 // 10s timeout
-        });
+        let websiteResearch;
+        try {
+            websiteResearch = await crawlBusinessWebsite(url);
+        } catch (crawlError) {
+            const normalizedUrl = normalizeWebsiteUrl(url);
+            console.warn(`[Scraper] Direct crawl failed for ${normalizedUrl}. Falling back to Gemini Search grounding.`, crawlError.message);
+            websiteResearch = {
+                normalizedUrl,
+                baseHost: normalizeDomain(normalizedUrl),
+                pagesScanned: [],
+                socialLinks: {},
+                combinedText: `Direct website crawl failed with: ${crawlError.message}. Use Google Search grounding to research the company at ${normalizedUrl}, including official pages, product pages, competitor references, and public social profiles.`
+            };
+        }
 
-        const $ = cheerio.load(htmlResponse.data);
-        
-        // Remove script, style, and navigation noise
-        $('script, style, nav, footer, header, iframe, noscript').remove();
-
-        // Extract readable text from paragraphs, list items, and headings
-        let pageText = '';
-        $('h1, h2, h3, p, li').each((i, el) => {
-            const txt = $(el).text().trim();
-            if (txt.length > 10) {
-                pageText += txt + '\n';
-            }
-        });
-
-        // Truncate text content to stay within safety window
-        pageText = pageText.substring(0, 10000).trim();
-
-        if (pageText.length < 50) {
+        if (websiteResearch.combinedText.length < 50) {
             return res.status(400).json({ error: "Could not scrape enough readable text content from the website." });
         }
 
-        console.log(`[Scraper] Scraped ${pageText.length} characters. Querying Gemini to extract profile...`);
+        console.log(`[Scraper] Scanned ${websiteResearch.pagesScanned.length} pages from ${websiteResearch.baseHost}. Querying Gemini for deep business intelligence...`);
 
-        // Ask Gemini to synthesize name, description, core offers, audience, and competitors
-        const prompt = `You are an AI research assistant. We scraped the text content of a company website. 
-Analyze the text and extract five fields:
-1. Business Name (The official name of the company or brand).
-2. Business Description (A high-quality 2-3 sentence overview of what the company does and its value proposition).
-3. Core Offers (A brief bulleted list of 2-4 primary products, services, or solutions they sell).
-4. Target Audience (A comma-separated list of 3-4 target audience segments or ideal customer profiles).
-5. Competitors (A comma-separated list of 2-3 competitor domain names in the same market sector).
+        const prompt = `You are a senior business analyst and ad agency strategist.
+Use the scraped company website text plus Google Search grounding to build an onboarding intelligence report. Research the company, its products, value proposition, likely buying audience, direct competitors, competitor positioning, and public social profiles.
 
-Here is the scraped website text:
+Rules:
+- Prefer verifiable public facts from the company site and search results.
+- Do not invent exact pricing, integrations, guarantees, or social URLs. Use empty strings when unknown.
+- Competitors must be real businesses in the same buying category, not vague alternatives.
+- Keep paragraphs concise but specific enough for AI ad copy, social content, and client email replies.
+- Return ONLY valid JSON with no markdown.
+
+Company website: ${websiteResearch.normalizedUrl}
+Company social links found on site: ${JSON.stringify(websiteResearch.socialLinks)}
+Pages scanned: ${websiteResearch.pagesScanned.join(', ')}
+
+Scraped company website text or crawl fallback note:
 -----------------
-${pageText}
+${websiteResearch.combinedText}
 -----------------
 
-Format your response exactly as a JSON object matching this structure (do not include markdown block ticks like \`\`\`json, just output the raw JSON string):
+Return this exact JSON shape:
 {
   "businessName": "The Business Name here",
-  "description": "The Business Description here",
-  "offers": "Bullet 1\\nBullet 2\\nBullet 3",
-  "audience": "Segment 1, Segment 2, Segment 3",
-  "competitors": "competitor1.com, competitor2.com"
+  "description": "A 3-5 sentence company profile covering what the company sells, the problem it solves, why it is valuable, and what makes it credible.",
+  "offers": "- Offer 1\\n- Offer 2\\n- Offer 3",
+  "audience": "Segment 1, Segment 2, Segment 3, Segment 4",
+  "valueProposition": "A concise positioning statement for ads and outreach.",
+  "competitors": "competitor1.com, competitor2.com, competitor3.com",
+  "companySocialLinks": {
+    "website": "https://example.com",
+    "linkedin": "",
+    "facebook": "",
+    "instagram": "",
+    "youtube": "",
+    "tiktok": "",
+    "x": ""
+  },
+  "competitorProfiles": [
+    {
+      "name": "Competitor name",
+      "domain": "competitor.com",
+      "summary": "What they offer and who they appear to serve.",
+      "strengths": "Specific competitive strengths.",
+      "weaknesses": "Specific openings or limitations compared with the scanned company.",
+      "differentiationAgainstCompany": "How the scanned company can credibly position against them.",
+      "socialLinks": {
+        "linkedin": "",
+        "facebook": "",
+        "instagram": "",
+        "youtube": "",
+        "tiktok": "",
+        "x": ""
+      }
+    }
+  ],
+  "swotProfile": "Strengths: paragraph.\\n\\nWeaknesses: paragraph.\\n\\nOpportunities: paragraph.\\n\\nThreats: paragraph.",
+  "businessReport": "A detailed but compact report with company profile, market landscape, competitive advantages, improvement opportunities, content angles, ad hooks, and support/email guidance."
 }`;
 
-        const rawJsonResult = await queryGemini(prompt);
-        
-        // Clean markdown backticks if any were returned by Gemini
-        const cleanedJson = rawJsonResult.replace(/```json|```/g, "").trim();
-        
-        const result = JSON.parse(cleanedJson);
-        res.json(result);
+        const rawJsonResult = await queryGeminiWithSearch(prompt);
+        const result = parseModelJson(rawJsonResult);
+        const competitorProfiles = Array.isArray(result.competitorProfiles) ? result.competitorProfiles : [];
+        const competitorDomains = competitorProfiles
+            .map(profile => normalizeDomain(profile.domain || profile.website || profile.name))
+            .filter(Boolean);
+        const competitors = result.competitors || competitorDomains.join(', ');
+
+        res.json({
+            ...result,
+            competitors,
+            competitorProfiles: competitorProfiles.map(profile => ({
+                ...profile,
+                domain: normalizeDomain(profile.domain || profile.website || profile.name)
+            })),
+            researchMeta: {
+                pagesScanned: websiteResearch.pagesScanned,
+                companyDomain: websiteResearch.baseHost,
+                generatedAt: new Date().toISOString()
+            }
+        });
 
     } catch (error) {
         console.error(`[Scraper Error]`, error.message);
@@ -697,20 +916,48 @@ app.post('/api/competitors', async (req, res) => {
         return res.status(400).json({ error: "Business description is required" });
     }
 
-    const prompt = `You are a strategic marketing executive. 
-Analyze the business profile below and identify 2-3 major competitor domain names in the same industry.
-Provide only a comma-separated list of competitor website domains.
+    const prompt = `You are a strategic marketing executive.
+Use Google Search grounding to identify 3-5 real direct competitors for the business profile below. Include useful public social profile URLs when you can verify them.
 
 Business Profile:
 Description: ${description}
 Core Offers: ${offers || 'Not defined'}
 
-Format your response as a single line listing only the domains (e.g. "competitor1.com, competitor2.com"). Do not include other text.`;
+Return ONLY valid JSON in this shape:
+{
+  "competitors": "competitor1.com, competitor2.com, competitor3.com",
+  "competitorProfiles": [
+    {
+      "name": "Competitor name",
+      "domain": "competitor.com",
+      "summary": "What they offer and who they serve.",
+      "strengths": "Specific competitive strengths.",
+      "weaknesses": "Openings or limitations compared with this business.",
+      "differentiationAgainstCompany": "How this business can position against them.",
+      "socialLinks": {
+        "linkedin": "",
+        "facebook": "",
+        "instagram": "",
+        "youtube": "",
+        "tiktok": "",
+        "x": ""
+      }
+    }
+  ]
+}`;
 
     try {
         console.log(`[Competitors Agent] Querying Gemini for Competitor domains...`);
-        const competitorsResult = await queryGemini(prompt);
-        res.json({ competitors: competitorsResult.trim() });
+        const rawResult = await queryGeminiWithSearch(prompt);
+        const data = parseModelJson(rawResult);
+        const competitorProfiles = Array.isArray(data.competitorProfiles) ? data.competitorProfiles : [];
+        res.json({
+            competitors: data.competitors || competitorProfiles.map(profile => normalizeDomain(profile.domain)).filter(Boolean).join(', '),
+            competitorProfiles: competitorProfiles.map(profile => ({
+                ...profile,
+                domain: normalizeDomain(profile.domain || profile.website || profile.name)
+            }))
+        });
     } catch (error) {
         console.error(`[Competitors Error]`, error.message);
         res.status(500).json({ error: `Competitor lookup failed: ${error.message}` });
@@ -1521,12 +1768,29 @@ function parseCampaignDelayMs(delayText, fallbackMs = 24 * 60 * 60 * 1000) {
     return value * 24 * 60 * 60 * 1000;
 }
 
-function personalizeCampaignBody(template, lead, campaign, bizName, bizWebsite) {
-    return String(template || '')
+function selectDefaultCampaignCta(settings = readCrmSettings(), bizWebsite = '') {
+    return settings.demoVideoUrl || settings.youtubePageUrl || settings.salesPageUrl || bizWebsite || '';
+}
+
+function applySalesAssetPlaceholders(text, settings = readCrmSettings(), bizWebsite = '', campaign = {}) {
+    const campaignCta = campaign.videoAsset || selectDefaultCampaignCta(settings, bizWebsite);
+    const bookingFallback = settings.bookingLink || settings.salesPageUrl || bizWebsite || 'reply with a couple times that work for you';
+    return String(text || '')
+        .replace(/\[CTA Link\]/g, campaignCta)
+        .replace(/\[Booking Link\]/g, bookingFallback)
+        .replace(/\[Calendar Link\]/g, bookingFallback)
+        .replace(/\[Demo Link\]/g, settings.demoVideoUrl || settings.youtubePageUrl || campaignCta)
+        .replace(/\[YouTube Link\]/g, settings.youtubePageUrl || settings.demoVideoUrl || campaignCta)
+        .replace(/\[Sales Page\]/g, settings.salesPageUrl || campaignCta)
+        .replace(/\[Website\]/g, bizWebsite || settings.salesPageUrl || campaignCta);
+}
+
+function personalizeCampaignBody(template, lead, campaign, bizName, bizWebsite, settings = readCrmSettings()) {
+    const personalized = String(template || '')
         .replace(/\[Lead Name\]/g, (lead.name || '').split(' ')[0] || lead.name || 'there')
         .replace(/\[Agent Name\]/g, (lead.name || '').split(' ')[0] || lead.name || 'there')
-        .replace(/\[Your Name\]/g, bizName || 'our team')
-        .replace(/\[CTA Link\]/g, campaign.videoAsset || bizWebsite || '');
+        .replace(/\[Your Name\]/g, bizName || 'our team');
+    return applySalesAssetPlaceholders(personalized, settings, bizWebsite, campaign);
 }
 
 function getNextStepDueAt(campaign, currentStep) {
@@ -1535,7 +1799,7 @@ function getNextStepDueAt(campaign, currentStep) {
     return new Date(Date.now() + parseCampaignDelayMs(nextStep.delay)).toISOString();
 }
 
-async function sendCampaignStepToLead({ lead, campaign, enrollment, bizName = 'our team', bizWebsite = '' }) {
+async function sendCampaignStepToLead({ lead, campaign, enrollment, bizName = 'our team', bizWebsite = '', settings = readCrmSettings() }) {
     const nextStepNumber = (enrollment.currentStep || 0) + 1;
     const step = campaign.steps[nextStepNumber - 1];
     if (!step) {
@@ -1547,7 +1811,7 @@ async function sendCampaignStepToLead({ lead, campaign, enrollment, bizName = 'o
         return { sent: false, completed: true };
     }
 
-    const customizedBody = personalizeCampaignBody(step.body, lead, campaign, bizName, bizWebsite);
+    const customizedBody = personalizeCampaignBody(step.body, lead, campaign, bizName, bizWebsite, settings);
     await sendMailgunEmail({
         to: lead.email,
         subject: step.subject,
@@ -1611,7 +1875,7 @@ async function enrollAndSendScrapedLeads({ campaignId, limit = 1000, bizName, bi
     for (const lead of targetLeads) {
         try {
             const enrollment = enrollLeadInCampaign(lead, campaignId, campaignOrder, new Date().toISOString());
-            await sendCampaignStepToLead({ lead, campaign, enrollment, bizName, bizWebsite });
+            await sendCampaignStepToLead({ lead, campaign, enrollment, bizName, bizWebsite, settings });
             sentCount++;
         } catch (err) {
             failedCount++;
@@ -1664,7 +1928,7 @@ async function processDueCampaignEnrollments({ limit = 50, bizName = 'our team',
         }
 
         try {
-            const result = await sendCampaignStepToLead({ lead, campaign, enrollment, bizName, bizWebsite });
+            const result = await sendCampaignStepToLead({ lead, campaign, enrollment, bizName, bizWebsite, settings });
             if (result.sent) sent++;
         } catch (err) {
             skipped++;
@@ -1803,14 +2067,24 @@ app.post('/api/webhooks/inbound-email', async (req, res) => {
             return res.json({ success: true, message: 'Unsubscribed' });
         }
         
+        const salesAssetContext = [
+            settings.bookingLink ? `Booking/calendar link: ${settings.bookingLink}` : 'Booking/calendar link: not configured',
+            settings.demoVideoUrl ? `Default demo video link: ${settings.demoVideoUrl}` : 'Default demo video link: not configured',
+            settings.youtubePageUrl ? `YouTube page/channel: ${settings.youtubePageUrl}` : 'YouTube page/channel: not configured',
+            settings.salesPageUrl ? `Sales page: ${settings.salesPageUrl}` : 'Sales page: not configured'
+        ].join('\n');
+
         // Generate AI sales follow-up
         const prompt = `You are the outbound AI Sales Agent for '${req.body.bizName || 'our company'}'.
 We sell: ${req.body.bizDesc || 'CRM software and transaction automation for realtors'}
+Configured sales links:
+${salesAssetContext}
 Customer Details: Name: ${lead.name}, Company: ${lead.company}.
 Conversation history:
 ${lead.history.map(h => `${h.sender === 'agent' ? 'Sales Agent' : 'Customer'}: ${h.text}`).join('\n')}
 
 Review the customer's last message. Write a friendly, professional response confirming booking or sharing a link to schedule a demo. 
+Use the configured booking/calendar link when the customer asks for a demo, call, calendar, or meeting. Use the demo video or YouTube link when they ask to see how it works. Use the sales page for broader "send more info" requests. If a needed link is not configured, ask them to reply with a couple times that work instead of inventing a URL.
 You must output a JSON response containing:
 {
   "replyText": "...",
@@ -1831,12 +2105,16 @@ Otherwise, set "requiresHandoff" to false. Ensure the response is valid JSON onl
             replyJson = JSON.parse(cleaned);
         } catch (err) {
             console.error('[Inbound Webhook] Gemini query failed, using fallback:', err.message);
+            const bookingFallback = settings.bookingLink
+                ? `You can select a time that works best for you here: ${settings.bookingLink}`
+                : 'Reply with a couple times that work for you and we can coordinate from there';
             replyJson = {
-                replyText: `Hi ${lead.name.split(" ")[0]},\n\nThanks for your response. I would love to set up a quick 10-minute call to show you how we can help automate your workflow. You can select a time that works best for you here: [Booking Link]. Let me know if you have any questions!\n\nBest,`,
+                replyText: `Hi ${lead.name.split(" ")[0]},\n\nThanks for your response. I would love to set up a quick 10-minute call to show you how we can help automate your workflow. ${bookingFallback}. Let me know if you have any questions!\n\nBest,`,
                 requiresHandoff: false,
                 reason: "Fallback response used"
             };
         }
+        replyJson.replyText = applySalesAssetPlaceholders(replyJson.replyText, settings, req.body.bizWebsite || '');
         
         if (replyJson.requiresHandoff) {
             lead.stage = "Needs Human Action";
@@ -1988,19 +2266,31 @@ app.delete('/api/campaigns/:id', (req, res) => {
 app.post('/api/generate-campaign', async (req, res) => {
     const { campaignName, campaignType, customInstructions, videoAsset, bizName, bizDesc, bizWebsite } = req.body;
     console.log(`[Campaign Agent] Generating 3-step drip campaign for: "${campaignName}"...`);
+    const settings = readCrmSettings();
+    const selectedVideoAsset = String(videoAsset || '').trim() || selectDefaultCampaignCta(settings, bizWebsite);
+    const salesAssetContext = [
+        settings.bookingLink ? `Booking/calendar link: ${settings.bookingLink}` : 'Booking/calendar link: not configured',
+        settings.demoVideoUrl ? `Default demo video link: ${settings.demoVideoUrl}` : 'Default demo video link: not configured',
+        settings.youtubePageUrl ? `YouTube page/channel: ${settings.youtubePageUrl}` : 'YouTube page/channel: not configured',
+        settings.salesPageUrl ? `Sales page: ${settings.salesPageUrl}` : 'Sales page: not configured'
+    ].join('\n');
     
     const prompt = `You are an AI Outbound Copywriter and email marketer.
 We are building a 3-step outbound sales email campaign named "${campaignName}" for our company: "${bizName || 'CRM Pro'}".
 Company Value Proposition & Description: ${bizDesc || 'CRM automation for realtors'}
+Configured sales assets:
+${salesAssetContext}
 
 Campaign Type: ${campaignType || 'cold-outreach'}
 Target Pain Points & Value: ${customInstructions || 'Realtors waste too much time on paperwork. CRM Pro automates it.'}
-${videoAsset ? `Featured Video / Resource Link: ${videoAsset}` : ""}
+${selectedVideoAsset ? `Primary campaign CTA / demo resource link: ${selectedVideoAsset}` : ""}
 
 Generate a highly engaging, high-converting 3-step outbound email drip sequence.
 For each step (Step 1: Cold outreach/Intro, Step 2: Value and offer, Step 3: Call-to-action follow-up), provide:
 1. Subject line (engaging, high open rate, curious or benefit-driven).
-2. Email Body copy (persuasive, addressing pain points, and containing a placeholder link like [CTA Link]).
+2. Email Body copy (persuasive, addressing pain points, and containing placeholders like [CTA Link], [Demo Link], [Sales Page], or [Booking Link] where appropriate).
+
+Use [CTA Link] for the primary campaign demo/resource. Use [Booking Link] only when asking the lead to schedule a call or demo. Do not invent URLs.
 
 Return a JSON array of steps:
 [
@@ -2030,14 +2320,13 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
         const cleaned = rawResponse.replace(/```json|```/g, "").trim();
         const steps = JSON.parse(cleaned);
         
-        const settings = readJsonFile(path.join(DATA_DIR, 'crm-settings.json'), { bypassEmailVerification: false });
         const status = settings.bypassEmailVerification ? 'Active' : 'Awaiting Launch';
         
         const campaignId = db.insertCampaign({
             name: campaignName,
             type: campaignType,
             instructions: customInstructions,
-            videoAsset,
+            videoAsset: selectedVideoAsset,
             status,
             steps
         });
@@ -2047,7 +2336,7 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
             name: campaignName,
             type: campaignType,
             instructions: customInstructions,
-            videoAsset,
+            videoAsset: selectedVideoAsset,
             status,
             steps,
             dateCreated: new Date().toLocaleDateString(),
@@ -2088,7 +2377,7 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
             name: campaignName,
             type: campaignType,
             instructions: customInstructions,
-            videoAsset,
+            videoAsset: selectedVideoAsset,
             status: 'Awaiting Launch',
             steps: fallbackSteps
         });
@@ -2100,7 +2389,7 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
                 name: campaignName,
                 type: campaignType,
                 instructions: customInstructions,
-                videoAsset,
+                videoAsset: selectedVideoAsset,
                 status: 'Awaiting Launch',
                 steps: fallbackSteps,
                 dateCreated: new Date().toLocaleDateString(),

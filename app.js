@@ -12,10 +12,14 @@ class AutopilotApp {
             bizWebsite: "",
             bizDesc: "",
             bizAudience: "",
+            bizSwot: "",
+            businessReport: "",
+            companySocialLinks: {},
             adBudget: 0,
             dealValue: 1000,
             conversionRate: 10,
             competitorUrls: [],
+            competitorProfiles: {},
             enabledAgents: { ad: false, content: false, support: false, sales: false },
             contentAutopilot: {
                 enabled: false,
@@ -36,6 +40,10 @@ class AutopilotApp {
                 firstCampaignId: null,
                 secondCampaignId: null,
                 thirdCampaignId: null,
+                bookingLink: '',
+                salesPageUrl: '',
+                demoVideoUrl: '',
+                youtubePageUrl: '',
                 dailyScrapeEnabled: false,
                 dailyScrapeQuery: '',
                 autoEnrollScrapedLeads: false,
@@ -150,6 +158,7 @@ class AutopilotApp {
         this.dom.competitorAddInput = document.getElementById("competitor-add-input");
         this.dom.competitorList = document.getElementById("competitor-list");
         this.dom.scanStatus = document.getElementById("scan-status");
+        this.dom.bizSwotInput = document.getElementById("biz-swot");
         this.dom.dealValueInput = document.getElementById("deal-value");
         this.dom.conversionRateInput = document.getElementById("conversion-rate");
         this.dom.competitorUrlsInput = document.getElementById("competitor-urls");
@@ -213,6 +222,10 @@ class AutopilotApp {
         // Outbound Settings
         this.dom.settingsDailyLimit = document.getElementById("settings-daily-limit");
         this.dom.settingsBypassVerification = document.getElementById("settings-bypass-verification");
+        this.dom.settingsBookingLink = document.getElementById("settings-booking-link");
+        this.dom.settingsSalesPageUrl = document.getElementById("settings-sales-page-url");
+        this.dom.settingsDemoVideoUrl = document.getElementById("settings-demo-video-url");
+        this.dom.settingsYoutubePageUrl = document.getElementById("settings-youtube-page-url");
 
         // Autopilot Settings & DNC
         this.dom.contentAutopilotMasterEnabled = document.getElementById("content-autopilot-master-enabled");
@@ -366,11 +379,15 @@ class AutopilotApp {
             this.state.outboundDailyLimit = parseInt(this.dom.settingsDailyLimit.value) || 50;
             this.state.bypassEmailVerification = this.dom.settingsBypassVerification.checked;
             this.state.crmAutopilot.bypassEmailVerification = this.state.bypassEmailVerification;
+            this.state.crmAutopilot.bookingLink = this.dom.settingsBookingLink.value.trim();
+            this.state.crmAutopilot.salesPageUrl = this.dom.settingsSalesPageUrl.value.trim();
+            this.state.crmAutopilot.demoVideoUrl = this.dom.settingsDemoVideoUrl.value.trim();
+            this.state.crmAutopilot.youtubePageUrl = this.dom.settingsYoutubePageUrl.value.trim();
             
             this.saveState();
             this.updateApiStatusUI();
             this.renderCampaignWorkflowSummary();
-            this.appendConsoleLine('system', `API & Outbound settings updated. Server Gemini key live: ${this.state.serverConfig.geminiConfigured ? 'YES' : 'NO'}. Daily Limit: ${this.state.outboundDailyLimit}. Autopilot send: ${this.state.bypassEmailVerification}`);
+            this.appendConsoleLine('system', `API, outbound, and sales asset settings updated. Server Gemini key live: ${this.state.serverConfig.geminiConfigured ? 'YES' : 'NO'}. Daily Limit: ${this.state.outboundDailyLimit}. Autopilot send: ${this.state.bypassEmailVerification}`);
             alert("Settings saved successfully.");
         });
 
@@ -414,6 +431,7 @@ class AutopilotApp {
             this.state.bizWebsite = websiteVal;
             this.state.bizDesc = document.getElementById("biz-desc").value;
             this.state.bizAudience = document.getElementById("biz-audience").value;
+            this.state.bizSwot = this.dom.bizSwotInput.value;
             this.state.adBudget = parseFloat(document.getElementById("ad-budget").value);
             this.state.dealValue = parseFloat(this.dom.dealValueInput.value);
             this.state.conversionRate = parseFloat(this.dom.conversionRateInput.value);
@@ -701,6 +719,19 @@ class AutopilotApp {
         if (!Array.isArray(this.state.competitorUrls)) {
             this.state.competitorUrls = [];
         }
+        if (!this.state.companySocialLinks || typeof this.state.companySocialLinks !== 'object') {
+            this.state.companySocialLinks = {};
+        }
+        if (Array.isArray(this.state.competitorProfiles)) {
+            this.state.competitorProfiles = this.state.competitorProfiles.reduce((acc, profile) => {
+                const domain = this.normalizeCompetitorDomain(profile.domain || profile.website || profile.name || '');
+                if (domain) acc[domain] = { ...profile, domain };
+                return acc;
+            }, {});
+        }
+        if (!this.state.competitorProfiles || typeof this.state.competitorProfiles !== 'object') {
+            this.state.competitorProfiles = {};
+        }
         this.clearKnownDemoState();
         
         // Ensure enabledAgents exists
@@ -733,6 +764,10 @@ class AutopilotApp {
                 firstCampaignId: null,
                 secondCampaignId: null,
                 thirdCampaignId: null,
+                bookingLink: '',
+                salesPageUrl: '',
+                demoVideoUrl: '',
+                youtubePageUrl: '',
                 dailyScrapeEnabled: false,
                 dailyScrapeQuery: '',
                 autoEnrollScrapedLeads: false,
@@ -750,6 +785,10 @@ class AutopilotApp {
             firstCampaignId: null,
             secondCampaignId: null,
             thirdCampaignId: null,
+            bookingLink: '',
+            salesPageUrl: '',
+            demoVideoUrl: '',
+            youtubePageUrl: '',
             dailyScrapeEnabled: false,
             dailyScrapeQuery: '',
             autoEnrollScrapedLeads: false,
@@ -776,6 +815,7 @@ class AutopilotApp {
         document.getElementById("biz-website").value = this.state.bizWebsite;
         document.getElementById("biz-desc").value = this.state.bizDesc;
         document.getElementById("biz-audience").value = this.state.bizAudience;
+        this.dom.bizSwotInput.value = this.state.bizSwot || "";
         document.getElementById("ad-budget").value = this.state.adBudget;
         this.dom.dealValueInput.value = this.state.dealValue || 1000;
         this.dom.conversionRateInput.value = this.state.conversionRate || 10;
@@ -823,6 +863,10 @@ class AutopilotApp {
         this.dom.settingsDailyLimit.value = this.state.outboundDailyLimit || 50;
         this.state.bypassEmailVerification = this.state.crmAutopilot.bypassEmailVerification || this.state.bypassEmailVerification || false;
         this.dom.settingsBypassVerification.checked = this.state.bypassEmailVerification;
+        this.dom.settingsBookingLink.value = this.state.crmAutopilot.bookingLink || '';
+        this.dom.settingsSalesPageUrl.value = this.state.crmAutopilot.salesPageUrl || '';
+        this.dom.settingsDemoVideoUrl.value = this.state.crmAutopilot.demoVideoUrl || '';
+        this.dom.settingsYoutubePageUrl.value = this.state.crmAutopilot.youtubePageUrl || '';
         
         this.dom.previewBizName.innerText = this.state.bizName;
         try {
@@ -977,10 +1021,14 @@ class AutopilotApp {
             bizWebsite: this.state.bizWebsite,
             bizDesc: this.state.bizDesc,
             bizAudience: this.state.bizAudience,
+            bizSwot: this.state.bizSwot,
+            businessReport: this.state.businessReport,
+            companySocialLinks: this.state.companySocialLinks,
             adBudget: this.state.adBudget,
             dealValue: this.state.dealValue,
             conversionRate: this.state.conversionRate,
             competitorUrls: this.state.competitorUrls,
+            competitorProfiles: this.state.competitorProfiles,
             enabledAgents: this.state.enabledAgents,
             contentAutopilot: this.state.contentAutopilot,
             crmAutopilot: this.state.crmAutopilot,
@@ -1101,24 +1149,36 @@ class AutopilotApp {
             const data = await response.json();
             
             // Format and load text areas
-            const descriptionText = data.description;
-            const coreOffersText = data.offers;
+            const descriptionText = data.description || "";
+            const coreOffersText = data.offers || "";
+            const valueText = data.valueProposition ? `\n\nValue Proposition:\n${data.valueProposition}` : "";
             
             document.getElementById("biz-name").value = data.businessName || document.getElementById("biz-name").value;
-            document.getElementById("biz-desc").value = `${descriptionText}\n\nCore Offers:\n${coreOffersText}`;
+            document.getElementById("biz-desc").value = `${descriptionText}\n\nCore Offers:\n${coreOffersText}${valueText}`;
+            this.dom.bizSwotInput.value = data.swotProfile || "";
+            this.state.bizSwot = data.swotProfile || "";
+            this.state.businessReport = data.businessReport || "";
+            this.state.companySocialLinks = data.companySocialLinks || {};
             
             // Auto-populate target audience and competitors on scan!
             if (data.audience) {
                 document.getElementById("biz-audience").value = data.audience;
             }
-            if (data.competitors) {
-                const scannedCompetitors = data.competitors.split(',').map(c => c.trim()).filter(c => c);
+            const competitorSource = data.competitors || (Array.isArray(data.competitorProfiles) ? data.competitorProfiles.map(profile => profile.domain).join(', ') : '');
+            if (competitorSource) {
+                const scannedCompetitors = this.parseCompetitorDomains(competitorSource);
+                this.storeCompetitorProfiles(data.competitorProfiles || []);
                 this.state.competitorUrls = scannedCompetitors;
                 this.renderCompetitorList();
                 this.syncCompetitorHiddenInput();
             }
+            this.state.bizName = document.getElementById("biz-name").value;
+            this.state.bizWebsite = url;
+            this.state.bizDesc = document.getElementById("biz-desc").value;
+            this.state.bizAudience = document.getElementById("biz-audience").value;
+            this.saveState();
             
-            this.appendConsoleLine('system', `Website scan complete for: ${url}. AI extracted name, description, core offers, audience, and competitors.`);
+            this.appendConsoleLine('system', `Deep onboarding research complete for: ${url}. AI built the company profile, audience, competitors, social links, and SWOT profile.`);
             
         } catch (error) {
             console.error("Website scan failed:", error);
@@ -1198,10 +1258,12 @@ class AutopilotApp {
             }
 
             const data = await response.json();
-            const discoveredCompetitors = data.competitors.split(',').map(c => c.trim()).filter(c => c);
+            const discoveredCompetitors = this.parseCompetitorDomains(data.competitors);
+            this.storeCompetitorProfiles(data.competitorProfiles || []);
             this.state.competitorUrls = discoveredCompetitors;
             this.renderCompetitorList();
             this.syncCompetitorHiddenInput();
+            this.saveState();
             this.appendConsoleLine('system', `Competitor discovery complete. Identified competitor domains: ${data.competitors}`);
 
         } catch (error) {
@@ -1215,11 +1277,86 @@ class AutopilotApp {
 
     // ── Competitor List Management ──────────────────────────────────────
     
+    normalizeCompetitorDomain(value) {
+        let domain = String(value || '').trim();
+        if (!domain) return "";
+        domain = domain.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase();
+        return domain;
+    }
+
+    parseCompetitorDomains(value) {
+        return String(value || '')
+            .split(',')
+            .map(domain => this.normalizeCompetitorDomain(domain))
+            .filter(Boolean);
+    }
+
+    storeCompetitorProfiles(profiles = []) {
+        if (!Array.isArray(profiles)) return;
+        this.state.competitorProfiles = this.state.competitorProfiles || {};
+        profiles.forEach(profile => {
+            const domain = this.normalizeCompetitorDomain(profile.domain || profile.website || profile.name || '');
+            if (!domain) return;
+            this.state.competitorProfiles[domain] = {
+                ...profile,
+                domain,
+                socialLinks: profile.socialLinks || {}
+            };
+        });
+    }
+
+    escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    getStrategicContext() {
+        const competitorSummaries = this.state.competitorUrls
+            .map(domain => {
+                const cleanDomain = this.normalizeCompetitorDomain(domain);
+                const profile = (this.state.competitorProfiles || {})[cleanDomain] || {};
+                const parts = [
+                    cleanDomain,
+                    profile.summary,
+                    profile.strengths ? `Strengths: ${profile.strengths}` : '',
+                    profile.differentiationAgainstCompany ? `Positioning: ${profile.differentiationAgainstCompany}` : ''
+                ].filter(Boolean);
+                return parts.join(' - ');
+            })
+            .filter(Boolean)
+            .join('\n');
+
+        return [
+            this.state.bizSwot ? `SWOT profile:\n${this.state.bizSwot}` : '',
+            this.state.businessReport ? `Business intelligence report:\n${this.state.businessReport}` : '',
+            competitorSummaries ? `Competitor intelligence:\n${competitorSummaries}` : ''
+        ].filter(Boolean).join('\n\n');
+    }
+
     renderCompetitorList() {
         const list = this.dom.competitorList;
         list.innerHTML = '';
         
         this.state.competitorUrls.forEach((domain, index) => {
+            const cleanDomain = this.normalizeCompetitorDomain(domain);
+            const profile = (this.state.competitorProfiles || {})[cleanDomain] || {};
+            const socialLinks = profile.socialLinks || {};
+            const socialHtml = Object.entries(socialLinks)
+                .filter(([, href]) => href)
+                .map(([platform, href]) => `<a href="${this.escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="competitor-social-link">${this.escapeHtml(platform)}</a>`)
+                .join('');
+            const summaryHtml = profile.summary || profile.strengths || profile.differentiationAgainstCompany
+                ? `<div class="competitor-profile">
+                        ${profile.summary ? `<p>${this.escapeHtml(profile.summary)}</p>` : ''}
+                        ${profile.strengths ? `<small><strong>Strengths:</strong> ${this.escapeHtml(profile.strengths)}</small>` : ''}
+                        ${profile.differentiationAgainstCompany ? `<small><strong>Positioning:</strong> ${this.escapeHtml(profile.differentiationAgainstCompany)}</small>` : ''}
+                        ${socialHtml ? `<div class="competitor-social-links">${socialHtml}</div>` : ''}
+                   </div>`
+                : '';
             const tag = document.createElement('div');
             tag.className = 'competitor-tag';
             tag.setAttribute('draggable', 'true');
@@ -1227,8 +1364,11 @@ class AutopilotApp {
             tag.innerHTML = `
                 <span class="drag-handle"><i class="fa-solid fa-grip-vertical"></i></span>
                 <span class="competitor-rank">${index + 1}</span>
-                <span class="competitor-domain">${domain}</span>
-                <button type="button" class="btn-remove-competitor" data-domain="${domain}"><i class="fa-solid fa-xmark"></i></button>
+                <span class="competitor-card-body">
+                    <span class="competitor-domain">${this.escapeHtml(cleanDomain)}</span>
+                    ${summaryHtml}
+                </span>
+                <button type="button" class="btn-remove-competitor" data-domain="${this.escapeHtml(cleanDomain)}"><i class="fa-solid fa-xmark"></i></button>
             `;
             
             // Drag events
@@ -1265,7 +1405,7 @@ class AutopilotApp {
             // Remove button
             tag.querySelector('.btn-remove-competitor').addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.removeCompetitor(domain);
+                this.removeCompetitor(cleanDomain);
             });
             
             list.appendChild(tag);
@@ -1293,7 +1433,7 @@ class AutopilotApp {
         const newOrder = [];
         tags.forEach(tag => {
             const domain = tag.querySelector('.competitor-domain').textContent;
-            newOrder.push(domain);
+            newOrder.push(this.normalizeCompetitorDomain(domain));
         });
         this.state.competitorUrls = newOrder;
         
@@ -1312,10 +1452,10 @@ class AutopilotApp {
         if (!domain) return;
         
         // Clean up — remove protocol, trailing slashes
-        domain = domain.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+        domain = this.normalizeCompetitorDomain(domain);
         
         // Check for duplicates
-        if (this.state.competitorUrls.includes(domain)) {
+        if (this.state.competitorUrls.some(existing => this.normalizeCompetitorDomain(existing) === domain)) {
             input.value = '';
             return;
         }
@@ -1327,7 +1467,8 @@ class AutopilotApp {
     }
     
     removeCompetitor(domain) {
-        this.state.competitorUrls = this.state.competitorUrls.filter(c => c !== domain);
+        const cleanDomain = this.normalizeCompetitorDomain(domain);
+        this.state.competitorUrls = this.state.competitorUrls.filter(c => this.normalizeCompetitorDomain(c) !== cleanDomain);
         this.renderCompetitorList();
         this.syncCompetitorHiddenInput();
     }
@@ -1567,11 +1708,11 @@ class AutopilotApp {
                         
                         if (Date.now() - lead.lastStepTime >= delayMs) {
                             // Send next step!
-                            const customizedBody = nextStep.body
+                            const personalizedBody = nextStep.body
                                 .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
                                 .replace(/\[Agent Name\]/g, "Sales Agent")
-                                .replace(/\[Your Name\]/g, this.state.bizName)
-                                .replace(/\[CTA Link\]/g, campaign.videoAsset || this.state.bizWebsite);
+                                .replace(/\[Your Name\]/g, this.state.bizName);
+                            const customizedBody = this.applySalesAssetPlaceholders(personalizedBody, campaign);
 
                             lead.currentCampaignStep = nextStepIndex + 1;
                             lead.lastStepTime = Date.now();
@@ -1608,11 +1749,11 @@ class AutopilotApp {
                                 const nextCampaign = campaigns.find(c => String(c.id) === String(nextCampaignId));
                                 if (nextCampaign && nextCampaign.steps && nextCampaign.steps.length > 0) {
                                     const step1 = nextCampaign.steps[0];
-                                    const customizedBody = step1.body
+                                    const personalizedBody = step1.body
                                         .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
                                         .replace(/\[Agent Name\]/g, "Sales Agent")
-                                        .replace(/\[Your Name\]/g, this.state.bizName)
-                                        .replace(/\[CTA Link\]/g, nextCampaign.videoAsset || this.state.bizWebsite);
+                                        .replace(/\[Your Name\]/g, this.state.bizName);
+                                    const customizedBody = this.applySalesAssetPlaceholders(personalizedBody, nextCampaign);
 
                                     lead.currentCampaignId = nextCampaign.id;
                                     lead.currentCampaignStep = 1;
@@ -1786,9 +1927,11 @@ class AutopilotApp {
 "[Write a conversational, punchy 2-3 sentence speech/script that matches the visual duration]"`;
         }
 
-        const prompt = `You are a social media copywriter for '${this.state.bizName}'.
+const prompt = `You are a social media copywriter for '${this.state.bizName}'.
 Description: ${this.state.bizDesc}
 Target Audience: ${this.state.bizAudience}
+Strategic context:
+${this.getStrategicContext() || 'No deep research profile has been generated yet.'}
 
 Draft a social media post optimized specifically for the ${platformSpec} platform about: "${topic}".
 Rule: ${platformRule}
@@ -2070,6 +2213,8 @@ Only respond with the post text. No other commentary or wrapping.`;
 Your client is '${this.state.bizName}'. 
 Description of their business: ${this.state.bizDesc}
 Their target audience is: ${this.state.bizAudience}
+Strategic context:
+${this.getStrategicContext() || 'No deep research profile has been generated yet.'}
 Write 3 variations of short-form ad copies focusing on: "${topic}".
 Each variation should contain:
 1. Headline (max 40 chars)
@@ -2252,9 +2397,11 @@ Call to Action: Get Started`;
 "[Write a conversational, punchy 2-3 sentence speech/script that matches the visual duration]"`;
                 }
 
-                const prompt = `You are a social media copywriter for '${this.state.bizName}'.
+const prompt = `You are a social media copywriter for '${this.state.bizName}'.
 Description: ${this.state.bizDesc}
 Target Audience: ${this.state.bizAudience}
+Strategic context:
+${this.getStrategicContext() || 'No deep research profile has been generated yet.'}
 
 Draft a social media post optimized specifically for the ${platformSpec} platform about: "${topic}".
 Rule: ${platformRule}
@@ -3408,11 +3555,30 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         }
     }
 
+    getDefaultCampaignCta() {
+        const settings = this.state.crmAutopilot || {};
+        return settings.demoVideoUrl || settings.youtubePageUrl || settings.salesPageUrl || this.state.bizWebsite || '';
+    }
+
+    applySalesAssetPlaceholders(text, campaign = {}) {
+        const settings = this.state.crmAutopilot || {};
+        const campaignCta = campaign.videoAsset || this.getDefaultCampaignCta();
+        const bookingFallback = settings.bookingLink || settings.salesPageUrl || this.state.bizWebsite || 'reply with a couple times that work for you';
+        return String(text || '')
+            .replace(/\[CTA Link\]/g, campaignCta)
+            .replace(/\[Booking Link\]/g, bookingFallback)
+            .replace(/\[Calendar Link\]/g, bookingFallback)
+            .replace(/\[Demo Link\]/g, settings.demoVideoUrl || settings.youtubePageUrl || campaignCta)
+            .replace(/\[YouTube Link\]/g, settings.youtubePageUrl || settings.demoVideoUrl || campaignCta)
+            .replace(/\[Sales Page\]/g, settings.salesPageUrl || campaignCta)
+            .replace(/\[Website\]/g, this.state.bizWebsite || settings.salesPageUrl || campaignCta);
+    }
+
     // CRM Outbound Campaign Creation
     async handleCrmCampaignCreate() {
         const name = this.dom.campaignName.value.trim();
         const type = this.dom.campaignType.value;
-        const videoAsset = this.dom.campaignVideoAsset.value.trim();
+        const videoAsset = this.dom.campaignVideoAsset.value.trim() || this.getDefaultCampaignCta();
         const instructions = this.dom.campaignInstructions.value.trim();
 
         if (!name) {
@@ -3533,7 +3699,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                 </div>
                 <div class="modal-body" style="max-height:480px; overflow-y:auto; padding-right:8px;">
                     <div style="background:rgba(0,229,255,0.05); border:1px solid var(--accent); border-radius:6px; padding:10px 14px; margin-bottom:16px; font-size:0.8rem; color:var(--text-secondary);">
-                        <i class="fa-solid fa-info-circle text-accent"></i> Make edits below. Use <strong>[CTA Link]</strong> and <strong>[Lead Name]</strong> placeholders. New lead drafts will automatically fetch these templates.
+                        <i class="fa-solid fa-info-circle text-accent"></i> Make edits below. Use <strong>[CTA Link]</strong>, <strong>[Booking Link]</strong>, <strong>[Demo Link]</strong>, <strong>[Sales Page]</strong>, and <strong>[Lead Name]</strong> placeholders. New lead drafts will automatically fetch these templates.
                     </div>
                     ${stepsHtml}
                 </div>
@@ -3592,7 +3758,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
 
         container.innerHTML = this.state.verificationQueue.map(c => {
             const targetLeadsCount = Number.isFinite(Number(c.targetLeadsCount)) ? Number(c.targetLeadsCount) : 0;
-            const ctaLink = c.videoAsset || this.state.bizWebsite || '';
+            const ctaLink = c.videoAsset || this.getDefaultCampaignCta();
             const ctaLabel = ctaLink || 'No CTA link saved';
             const stepsHtml = c.steps.map((s, index) => `
                 <div style="background:rgba(255,255,255,0.015); border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:12px; margin-bottom:10px;">
@@ -3606,7 +3772,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                     <div style="margin-bottom:6px;">
                         <input type="text" class="queue-subject-${c.id}" data-step="${index}" value="${s.subject.replace(/"/g, '&quot;')}" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:4px; padding:6px 10px; color:var(--text-primary); font-size:0.8rem; width:100%; box-sizing:border-box;" placeholder="Subject Line">
                     </div>
-                    <textarea class="queue-body-${c.id}" data-step="${index}" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:4px; padding:8px 10px; color:var(--text-primary); font-size:0.8rem; width:100%; min-height:260px; box-sizing:border-box; font-family:inherit; resize:vertical; line-height:1.4;">${ctaLink ? s.body.replace(/\[CTA Link\]/g, ctaLink) : s.body}</textarea>
+                    <textarea class="queue-body-${c.id}" data-step="${index}" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:4px; padding:8px 10px; color:var(--text-primary); font-size:0.8rem; width:100%; min-height:260px; box-sizing:border-box; font-family:inherit; resize:vertical; line-height:1.4;">${this.applySalesAssetPlaceholders(s.body, c)}</textarea>
                 </div>
             `).join("");
 
@@ -3797,17 +3963,26 @@ Output only the response email body. No headers or subject lines.`;
 
             const prompt = `You are the outbound AI Sales Agent for '${this.state.bizName}'.
 We are selling: ${this.state.bizDesc}
+Configured sales links:
+Booking/calendar link: ${this.state.crmAutopilot.bookingLink || 'not configured'}
+Default demo video link: ${this.state.crmAutopilot.demoVideoUrl || 'not configured'}
+YouTube page/channel: ${this.state.crmAutopilot.youtubePageUrl || 'not configured'}
+Sales page: ${this.state.crmAutopilot.salesPageUrl || 'not configured'}
 Customer details: Name: ${lead.name}, Company: ${lead.company}.
 Customer response: "${lastMsg.text}"
 
-Write a friendly, professional response confirming booking or sharing a link to schedule a demo. Be extremely helpful and direct. Keep it under 4 sentences.`;
+Write a friendly, professional response confirming booking or sharing a link to schedule a demo. Use the configured booking link when available. If no booking link is configured, ask for a couple times that work instead of inventing a URL. Be extremely helpful and direct. Keep it under 4 sentences.`;
 
             let replyText = "";
             try {
                 replyText = await this.queryGeminiAPI(prompt);
             } catch (err) {
-                replyText = `Hi ${lead.name.split(" ")[0]},\n\nI would love to set up a quick 10-minute call to show you how ${this.state.bizName || 'our team'} can help with the workflow problems you mentioned.\n\nYou can book a convenient slot here: [Booking Link]. Let me know if you have any questions in the meantime.`;
+                const bookingFallback = this.state.crmAutopilot.bookingLink
+                    ? `You can book a convenient slot here: ${this.state.crmAutopilot.bookingLink}`
+                    : 'Reply with a couple times that work for you and we can coordinate from there';
+                replyText = `Hi ${lead.name.split(" ")[0]},\n\nI would love to set up a quick 10-minute call to show you how ${this.state.bizName || 'our team'} can help with the workflow problems you mentioned.\n\n${bookingFallback}. Let me know if you have any questions in the meantime.`;
             }
+            replyText = this.applySalesAssetPlaceholders(replyText);
 
             lead.stage = "Demo Scheduled";
             lead.history.push({
@@ -4073,11 +4248,11 @@ Write a friendly, professional response confirming booking or sharing a link to 
                 const campaign = campaigns.find(c => c.id === firstCampaignId);
                 if (campaign && campaign.steps && campaign.steps.length > 0) {
                     const step1 = campaign.steps[0];
-                    const customizedBody = step1.body
+                    const personalizedBody = step1.body
                         .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
                         .replace(/\[Agent Name\]/g, "Sales Agent")
-                        .replace(/\[Your Name\]/g, this.state.bizName)
-                        .replace(/\[CTA Link\]/g, campaign.videoAsset || this.state.bizWebsite);
+                        .replace(/\[Your Name\]/g, this.state.bizName);
+                    const customizedBody = this.applySalesAssetPlaceholders(personalizedBody, campaign);
 
                     lead.stage = "Emailed";
                     lead.currentCampaignId = campaign.id;
@@ -4183,9 +4358,11 @@ Write a friendly, professional response confirming booking or sharing a link to 
             this.dom.agentTasks[dotId].innerText = `Formulating answer for visitor...`;
         }
 
-        const prompt = `You are the front-line client response agent for '${this.state.bizName}'.
+const prompt = `You are the front-line client response agent for '${this.state.bizName}'.
 Business profile: ${this.state.bizDesc}
 Target audience: ${this.state.bizAudience}
+Strategic context:
+${this.getStrategicContext() || 'No deep research profile has been generated yet.'}
 Visitor question: "${session.currentQuestion}"
 
 Operating rules:

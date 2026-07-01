@@ -9,7 +9,7 @@ Last updated: 2026-07-01
 - Initial project backup was pushed to GitHub at commit `1aebfc5a8b59ec5ee45febc4edf4a8b6950cad7f`.
 - Production app is hosted at `https://agents.realestatecrmpro.com`.
 - VPS app path: `/opt/ad-agency-autopilot`.
-- Runtime is separate from ClaimPilot even though it uses the same VPS.
+- Runtime is on the ClaimPilot/shared VPS `178.156.178.56`, but the project is separate; only modify `/opt/ad-agency-autopilot`.
 - VPS deployment is currently file-copy based, not a Git checkout.
 - Do not modify `fluffysbait.com`; it is a real production site.
 
@@ -54,6 +54,58 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Deep onboarding update was deployed live to the correct ClaimPilot/shared VPS path: `/opt/ad-agency-autopilot`.
+- Deployment backup of replaced runtime files: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T155254Z`.
+- Rebuilt/restarted only the `ad-agency-autopilot` Docker Compose service.
+- Live verification passed:
+  - `https://agents.realestatecrmpro.com/api/app-config` returned `{"geminiConfigured":true}`.
+  - Public HTML contains `SWOT Profile`, `Competitor Intelligence`, the deep research profile copy, Step 5 Budget, and Step 6 Autopilot Employees.
+  - `docker compose ps` shows `ad-agency-autopilot` healthy, with `ad-agency-lead-scraper` and `ad-agency-autopilot-tunnel` still running.
+- Latest commit subject: `Deepen onboarding business intelligence`.
+- Repo status: committed locally; push to GitHub is in progress.
+
+## Previous Update
+
+- User preference recorded in `MEMORY.md`: after completing project updates, push/deploy them live by default unless blocked, explicitly paused, or unsafe.
+
+## Previous Update
+
+- Rebuilt onboarding around a deeper business intelligence scan.
+- Setup order is now:
+  - 1 Business Identity and website scan
+  - 2 Product & Audience
+  - 3 Competitor Intelligence
+  - 4 SWOT Profile
+  - 5 Budget & Goals
+  - 6 Autopilot Employees
+- `/api/scrape` now crawls the homepage plus relevant internal pages, extracts company social links, and uses Gemini Search grounding to produce:
+  - company profile, core offers, audience, value proposition
+  - ranked competitor domains
+  - competitor summaries, strengths, weaknesses, differentiators, and public social links
+  - SWOT profile paragraphs
+  - compact business report for downstream agents
+- `/api/competitors` now uses Gemini Search grounding and can return structured competitor profiles/social links, not just domains.
+- Browser state now persists `bizSwot`, `businessReport`, `companySocialLinks`, ranked `competitorUrls`, and `competitorProfiles`.
+- Competitor cards now show optional AI summaries, positioning notes, and social links while preserving drag-to-rank behavior.
+- Ad, social, and visitor-support prompts now include a shared strategic context built from SWOT, business report, and competitor intelligence.
+- Deep scan and competitor auto-discovery save state immediately after filling the onboarding UI.
+
+## Previous Update
+
+- Added reusable sales-link settings for campaign and follow-up automation.
+- New Settings fields:
+  - Booking / calendar link
+  - Sales page URL
+  - Default demo YouTube video
+  - YouTube page / channel
+- Backend CRM settings now persists `bookingLink`, `salesPageUrl`, `demoVideoUrl`, and `youtubePageUrl`.
+- Campaign generation now gives Gemini these configured assets and defaults a blank campaign CTA to demo video -> YouTube page -> sales page -> business website.
+- Real Mailgun campaign sends and backend follow-up sends now resolve placeholders: `[CTA Link]`, `[Booking Link]`, `[Calendar Link]`, `[Demo Link]`, `[YouTube Link]`, `[Sales Page]`, and `[Website]`.
+- Inbound Mailgun reply AI now receives the configured sales links, uses the booking link for demo/call requests, uses video/YouTube links for demo-video requests, and avoids inventing URLs when a link is missing.
+- Browser-side CRM simulation was updated to use the same placeholder behavior.
+
+## Previous Update
+
 - Built the durable CRM lead pipeline automation engine.
 - Git commit pushed: `6c6aed4` Build CRM lead pipeline automation engine.
 - Added `campaign_enrollments` SQLite table plus `lastStepTime` on leads.
@@ -82,7 +134,6 @@ Last updated: 2026-07-01
   - reply tracking vs missing open/click/signup tracking
 - Autopilot Settings now supports a third follow-up campaign selector.
 - The old wording that implied real scraped leads auto-enroll automatically was changed; real scraped leads remain `Scraped` until a campaign is approved.
-- Browser-side simulation can now transition through Campaign 1 -> 2 -> 3, but real Mailgun Step 2/3 scheduling still needs a backend worker.
 - Production verified: live HTML contains the workflow UI, `/api/crm-state` includes `leadStageCounts` and `thirdCampaignId`, and containers are healthy.
 
 ## Previous Update
@@ -94,7 +145,6 @@ Last updated: 2026-07-01
 - Approval now refuses to proceed with zero `Scraped` leads, shows a confirmation with the exact count, and labels the action as sending Step 1 now.
 - The server now updates the same campaign to `Active` on approval instead of creating a new campaign and deleting the old one, so enrolled leads keep a valid campaign id.
 - Production currently has one lead total, but zero `Scraped` leads; the existing lead is stage `Hot Lead`, so the pending campaign should not email it.
-- Important gap: Step 1 is the real Mailgun send. Step 2/3 are still only browser-side simulated drip behavior until a backend scheduler/worker is added.
 
 ## Password Prompt Update
 
@@ -121,10 +171,20 @@ Last updated: 2026-07-01
 
 ## Verification
 
+- Current local syntax checks passed after the onboarding update:
+  - `node --check app.js`
+  - `node --check server.js`
+- Local dev server is currently running at `http://127.0.0.1:3199` and `/api/app-config` returned `{"geminiConfigured":true}`.
+- The new deep onboarding scan UI has not yet been browser-tested end to end with a real client site; production deployment itself is live and public HTML/API checks passed.
+- Live Gemini/Search behavior still needs a UI scan test with a configured API key because `/api/scrape` now performs multi-page crawling plus grounded research.
 - Local code checks passed:
   - `node --check server.js`
   - `node --check app.js`
   - `node --check db.js`
+  - `git diff --check`
+- Current local smoke test passed on temporary port `3199`:
+  - `/api/app-config` returned `geminiConfigured: true`
+  - `/api/crm-state` included `bookingLink`, `salesPageUrl`, `demoVideoUrl`, and `youtubePageUrl`
 - Local SQLite migration check passed via `db.initDb()`; existing lead rows now expose `address`, `sourceUrl`, and `discoveryQuery`.
 - `docker compose config` passed.
 - Local Docker verification passed:

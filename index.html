@@ -261,7 +261,7 @@
                                 <span class="step-badge">1</span>
                                 <div>
                                     <h3 class="step-title">Business Identity</h3>
-                                    <p class="step-helper">Your business name and website. Hit <strong>Scan</strong> to auto-fill your description, audience, and competitors from your site.</p>
+                                    <p class="step-helper">Your business name and website. Hit <strong>Scan</strong> to build a deep company, competitor, social, and SWOT research profile.</p>
                                 </div>
                             </div>
                             <div class="form-group-row">
@@ -287,7 +287,7 @@
                                 <span class="step-badge">2</span>
                                 <div>
                                     <h3 class="step-title">Product & Audience</h3>
-                                    <p class="step-helper">Describe your value proposition and who you're selling to. This drives all AI-generated copy and targeting.</p>
+                                    <p class="step-helper">AI fills this from the scan, then uses it to guide ad copy, targeting, social posts, and client replies.</p>
                                 </div>
                             </div>
 
@@ -312,10 +312,57 @@
                             </div>
                         </div>
 
-                        <!-- STEP 3: Budget & Goals -->
+                        <!-- STEP 3: Competitors (Ranked) -->
                         <div class="onboarding-step">
                             <div class="step-header">
                                 <span class="step-badge">3</span>
+                                <div>
+                                    <h3 class="step-title">Competitor Intelligence</h3>
+                                    <p class="step-helper">AI discovers competitors, summarizes their positioning, and surfaces social profiles so your agents can monitor what the market is posting.</p>
+                                </div>
+                            </div>
+
+                            <div class="competitor-manager">
+                                <div class="competitor-list" id="competitor-list">
+                                    <!-- Populated dynamically -->
+                                </div>
+                                <div class="competitor-add-row">
+                                    <div class="input-with-button" style="flex:1;">
+                                        <input type="text" id="competitor-add-input" placeholder="Enter a competitor domain (e.g. competitor.com)">
+                                        <button type="button" class="btn btn-outline" id="btn-add-competitor">
+                                            <i class="fa-solid fa-plus"></i> Add
+                                        </button>
+                                    </div>
+                                    <button type="button" class="btn btn-outline" id="btn-find-competitors">
+                                        <i class="fa-solid fa-users-viewfinder text-orange"></i> Auto-Discover
+                                    </button>
+                                </div>
+                                <p class="competitor-hint"><i class="fa-solid fa-grip-vertical"></i> Drag competitors to reorder by relevance — #1 is analyzed first</p>
+                            </div>
+                            <!-- Hidden input to keep backward compat with form reads -->
+                            <input type="hidden" id="competitor-urls" value="">
+                        </div>
+
+                        <!-- STEP 4: SWOT Profile -->
+                        <div class="onboarding-step">
+                            <div class="step-header">
+                                <span class="step-badge">4</span>
+                                <div>
+                                    <h3 class="step-title">SWOT Profile</h3>
+                                    <p class="step-helper">AI summarizes strengths, weaknesses, opportunities, and threats into paragraphs your agents can reuse for strategy, ads, posts, and inbox responses.</p>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="biz-swot">Business Analysis</label>
+                                <textarea id="biz-swot" rows="9" placeholder="Run the website scan to generate a detailed SWOT profile. You can edit this before launching autopilot."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- STEP 5: Budget & Goals -->
+                        <div class="onboarding-step">
+                            <div class="step-header">
+                                <span class="step-badge">5</span>
                                 <div>
                                     <h3 class="step-title">Budget & Goals</h3>
                                     <p class="step-helper">Set your ad budget, expected deal value, and primary marketing objective. Your Ad Strategy Agent uses these to allocate spend.</p>
@@ -348,41 +395,10 @@
                             </div>
                         </div>
 
-                        <!-- STEP 4: Competitors (Ranked) -->
+                        <!-- STEP 6: Autopilot Employees -->
                         <div class="onboarding-step">
                             <div class="step-header">
-                                <span class="step-badge">4</span>
-                                <div>
-                                    <h3 class="step-title">Competitor Intelligence</h3>
-                                    <p class="step-helper">Add competitors and drag to rank by relevance. Your Content Agent will prioritize the top-ranked competitors when researching social trends and generating content ideas.</p>
-                                </div>
-                            </div>
-
-                            <div class="competitor-manager">
-                                <div class="competitor-list" id="competitor-list">
-                                    <!-- Populated dynamically -->
-                                </div>
-                                <div class="competitor-add-row">
-                                    <div class="input-with-button" style="flex:1;">
-                                        <input type="text" id="competitor-add-input" placeholder="Enter a competitor domain (e.g. competitor.com)">
-                                        <button type="button" class="btn btn-outline" id="btn-add-competitor">
-                                            <i class="fa-solid fa-plus"></i> Add
-                                        </button>
-                                    </div>
-                                    <button type="button" class="btn btn-outline" id="btn-find-competitors">
-                                        <i class="fa-solid fa-users-viewfinder text-orange"></i> Auto-Discover
-                                    </button>
-                                </div>
-                                <p class="competitor-hint"><i class="fa-solid fa-grip-vertical"></i> Drag competitors to reorder by relevance — #1 is analyzed first</p>
-                            </div>
-                            <!-- Hidden input to keep backward compat with form reads -->
-                            <input type="hidden" id="competitor-urls" value="">
-                        </div>
-
-                        <!-- STEP 5: Autopilot Employees -->
-                        <div class="onboarding-step">
-                            <div class="step-header">
-                                <span class="step-badge">5</span>
+                                <span class="step-badge">6</span>
                                 <div>
                                     <h3 class="step-title">Autopilot Employees</h3>
                                     <p class="step-helper">Enable or disable each AI agent. Active agents run continuously — monitoring, generating, and acting on your behalf. Disabled agents are paused entirely.</p>
@@ -1119,7 +1135,8 @@
                                         </div>
                                         <div class="form-group">
                                             <label for="campaign-video-asset">Campaign Call-To-Action (CTA) Link</label>
-                                            <input type="text" id="campaign-video-asset" placeholder="e.g. https://www.realestatecrmpro.com/video or landing page link" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                            <input type="text" id="campaign-video-asset" placeholder="Optional: demo video or landing page link" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                            <p class="step-helper" style="margin-top:4px;">Leave blank to use the default demo video, YouTube page, sales page, or website from Settings.</p>
                                         </div>
                                         <div class="form-group">
                                             <label for="campaign-instructions">Target Audience & Core Message / Video Angle</label>
@@ -1349,7 +1366,26 @@
                                 <span>Bypass Email Verification (Full Autopilot Outbound)</span>
                             </label>
                         </div>
-                        <button class="btn btn-primary" id="btn-save-settings" style="width:100%;">Save API & Outbound Settings</button>
+                        <h3 style="margin-top:24px; border-top:1px solid var(--border-color); padding-top:20px;"><i class="fa-solid fa-link"></i> Sales Links</h3>
+                        <div class="form-group">
+                            <label for="settings-booking-link">Booking / Calendar Link</label>
+                            <input type="url" id="settings-booking-link" placeholder="https://calendly.com/your-team/demo" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                            <p class="helper-text">Used when a lead asks for a demo, call, calendar, or meeting.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-sales-page-url">Sales Page URL</label>
+                            <input type="url" id="settings-sales-page-url" placeholder="https://www.realestatecrmpro.com" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-demo-video-url">Default Demo YouTube Video</label>
+                            <input type="url" id="settings-demo-video-url" placeholder="https://www.youtube.com/watch?v=..." style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                            <p class="helper-text">Used as the default campaign CTA when the campaign-specific CTA field is blank.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-youtube-page-url">YouTube Page / Channel</label>
+                            <input type="url" id="settings-youtube-page-url" placeholder="https://www.youtube.com/@yourchannel" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                        </div>
+                        <button class="btn btn-primary" id="btn-save-settings" style="width:100%;">Save API, Links & Outbound Settings</button>
                     </div>
 
                     <!-- Right Integrations -->
