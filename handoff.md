@@ -73,7 +73,13 @@ Last updated: 2026-07-01
   - Local Docker rebuild with `docker compose up -d --build ad-agency-autopilot`.
   - Local `http://127.0.0.1:3100/api/app-config` returned `geminiConfigured: true`.
   - Local HTML no longer references `agent-simulation.js`, does reference `app.js?v=20260701-no-demo-activity`, contains `Real Activity Log`, and no longer contains `4 Agents Online`.
-- Not yet deployed live in this pass.
+- Git commit pushed: `e1c75dd` Remove demo activity paths.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T202318Z-no-demo-activity`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - `agent-simulation.js` was removed from the live app directory.
+  - Public `/api/app-config` returned `geminiConfigured: true`.
+  - Public HTML no longer references `agent-simulation.js`, does reference `app.js?v=20260701-no-demo-activity`, contains `Real Activity Log`, and no longer contains `4 Agents Online`.
 
 ## Previous Product Review
 
