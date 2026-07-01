@@ -1,0 +1,11 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ad-agency-autopilot-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    env_file:
+      - .cloudflared.env
+    depends_on:
+      ad-agency-autopilot:
+        condition: service_healthy

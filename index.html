@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ad Agency Autopilot | Autonomous Marketing Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- App Stylesheet -->
+    <link rel="stylesheet" href="index.css">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-plane-departure logo-icon"></i>
+                </div>
+                <div class="brand-info">
+                    <span class="brand-name">AUTOPILOT</span>
+                    <span class="brand-tagline">Marketing Agency</span>
+                </div>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="#dashboard" class="nav-item active" data-view="dashboard">
+                    <i class="fa-solid fa-chart-line nav-icon"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#setup" class="nav-item" data-view="setup">
+                    <i class="fa-solid fa-sliders nav-icon"></i>
+                    <span>Agency Onboarding</span>
+                </a>
+                <a href="#ads" class="nav-item" data-view="ads">
+                    <i class="fa-solid fa-rectangle-ad nav-icon"></i>
+                    <span>Ad Campaigns</span>
+                </a>
+                <a href="#content" class="nav-item" data-view="content">
+                    <i class="fa-solid fa-photo-film nav-icon"></i>
+                    <span>Content Studio</span>
+                </a>
+                <a href="#crm" class="nav-item" data-view="crm">
+                    <i class="fa-solid fa-address-book nav-icon"></i>
+                    <span>Sales CRM</span>
+                </a>
+                <a href="#support" class="nav-item" data-view="support">
+                    <i class="fa-solid fa-comments nav-icon"></i>
+                    <span>Support Hub</span>
+                </a>
+                <a href="#settings" class="nav-item" data-view="settings">
+                    <i class="fa-solid fa-gear nav-icon"></i>
+                    <span>Integrations</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="agent-status-card">
+                    <div class="agent-status-header">
+                        <span class="status-dot pulsing-green"></span>
+                        <span class="status-text">Ready for Client</span>
+                    </div>
+                    <p class="status-desc">AI Agents active & managing operations.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Top Navigation / Status Header -->
+            <header class="app-header">
+                <div class="header-left">
+                    <h1 id="view-title">Dashboard Overview</h1>
+                    <p id="view-subtitle" class="text-muted">Real-time status of your autonomous marketing operations.</p>
+                </div>
+                <div class="header-right">
+                    <div class="header-stat">
+                        <span class="stat-label">Total Leads</span>
+                        <span class="stat-value" id="header-leads">0</span>
+                    </div>
+                    <div class="header-stat">
+                        <span class="stat-label">Ad Budget Spent</span>
+                        <span class="stat-value" id="header-spend">$0.00</span>
+                    </div>
+                    <div class="header-stat">
+                        <span class="stat-label">System Mode</span>
+                        <span class="stat-value text-accent" id="header-api-status">
+                            <i class="fa-solid fa-microchip"></i> Gemini Live
+                        </span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <section id="dashboard-view" class="view-section active">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon-wrapper purple-bg">
+                            <i class="fa-solid fa-eye"></i>
+                        </div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Ad Impressions</span>
+                            <h3 class="kpi-value" id="kpi-impressions">0</h3>
+                            <span class="kpi-change text-success"><i class="fa-solid fa-arrow-trend-up"></i> +12% vs last week</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon-wrapper cyan-bg">
+                            <i class="fa-solid fa-arrow-pointer"></i>
+                        </div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Clicks & CTR</span>
+                            <h3 class="kpi-value" id="kpi-clicks">0 <span class="kpi-subtext">(0.0%)</span></h3>
+                            <span class="kpi-change text-success"><i class="fa-solid fa-arrow-trend-up"></i> +8.5% vs last week</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon-wrapper green-bg">
+                            <i class="fa-solid fa-user-plus"></i>
+                        </div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Leads Acquired</span>
+                            <h3 class="kpi-value" id="kpi-leads">0</h3>
+                            <span class="kpi-change text-success"><i class="fa-solid fa-arrow-trend-up"></i> +24% vs last week</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon-wrapper orange-bg">
+                            <i class="fa-solid fa-wallet"></i>
+                        </div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Estimated Revenue</span>
+                            <h3 class="kpi-value" id="kpi-revenue">$0</h3>
+                            <span class="kpi-change text-success"><i class="fa-solid fa-arrow-trend-up"></i> +18% ROI</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-layout">
+                    <!-- Left: Chart & Live Feed -->
+                    <div class="dashboard-left">
+                        <div class="dashboard-panel chart-panel">
+                            <div class="panel-header">
+                                <h3>Acquisition Performance</h3>
+                                <div class="panel-actions">
+                                    <span class="badge">Last 7 Days</span>
+                                </div>
+                            </div>
+                            <div class="panel-content chart-container" id="performance-chart">
+                                <!-- SVG Chart will be rendered here dynamically -->
+                            </div>
+                        </div>
+
+                        <div class="dashboard-panel console-panel">
+                            <div class="panel-header">
+                                <h3><i class="fa-solid fa-terminal text-accent"></i> Live Agent Activity Log</h3>
+                                <div class="panel-actions">
+                                    <button class="btn btn-sm btn-outline" id="clear-console-btn">Clear Log</button>
+                                    <span class="status-dot pulsing-green"></span>
+                                </div>
+                            </div>
+                            <div class="panel-content console-content" id="console-log-stream">
+                                <!-- Simulated logs will append here -->
+                                <div class="console-line system-line">[SYSTEM] Initializing Autopilot Marketing Orchestrator...</div>
+                                <div class="console-line system-line">[SYSTEM] Connected to Gemini AI engine. All agent protocols loaded.</div>
+                                <div class="console-line system-line">[SYSTEM] Awaiting onboarding initialization.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Active AI Employees -->
+                    <div class="dashboard-right">
+                        <div class="dashboard-panel agents-panel">
+                            <div class="panel-header">
+                                <h3>Active AI Employees</h3>
+                                <span class="badge">4 Agents Online</span>
+                            </div>
+                            <div class="panel-content">
+                                <div class="agent-list">
+                                    <div class="agent-item">
+                                        <div class="agent-avatar purple-bg">
+                                            <i class="fa-solid fa-rectangle-ad"></i>
+                                        </div>
+                                        <div class="agent-details">
+                                            <h4>Ad Strategy Agent</h4>
+                                            <p id="agent-ad-task">Optimizing bidding on Google Ads</p>
+                                        </div>
+                                        <div class="agent-status">
+                                            <span class="status-indicator working" id="status-ad-agent"></span>
+                                        </div>
+                                    </div>
+                                    <div class="agent-item">
+                                        <div class="agent-avatar cyan-bg">
+                                            <i class="fa-solid fa-photo-film"></i>
+                                        </div>
+                                        <div class="agent-details">
+                                            <h4>Social Media Content Agent</h4>
+                                            <p id="agent-content-task">Drafting Twitter updates</p>
+                                        </div>
+                                        <div class="agent-status">
+                                            <span class="status-indicator working" id="status-content-agent"></span>
+                                        </div>
+                                    </div>
+                                    <div class="agent-item">
+                                        <div class="agent-avatar green-bg">
+                                            <i class="fa-solid fa-comments"></i>
+                                        </div>
+                                        <div class="agent-details">
+                                            <h4>24/7 Support Agent</h4>
+                                            <p id="agent-support-task">Monitoring customer chat lines</p>
+                                        </div>
+                                        <div class="agent-status">
+                                            <span class="status-indicator idling" id="status-support-agent"></span>
+                                        </div>
+                                    </div>
+                                    <div class="agent-item">
+                                        <div class="agent-avatar orange-bg">
+                                            <i class="fa-solid fa-address-book"></i>
+                                        </div>
+                                        <div class="agent-details">
+                                            <h4>Outbound Sales Agent</h4>
+                                            <p id="agent-sales-task">Following up with engaged leads</p>
+                                        </div>
+                                        <div class="agent-status">
+                                            <span class="status-indicator thinking" id="status-sales-agent"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Platform Overview Card -->
+                        <div class="dashboard-panel promo-panel">
+                            <h3>Autopilot Framework</h3>
+                            <p>Operating under the 80/20 automation principle. Taste & direction remain human; all operational execution is autonomously delegated to AI.</p>
+                            <div class="promo-footer">
+                                <span><i class="fa-solid fa-user-tie"></i> Solo Founder Console</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Setup / Onboarding View -->
+            <section id="setup-view" class="view-section">
+                <div class="form-container">
+                    <div class="form-header">
+                        <h2><i class="fa-solid fa-wand-magic-sparkles text-purple"></i> Autopilot Agency Setup</h2>
+                        <p>Walk through each step to configure your AI marketing workforce. Once initialized, your agents will autonomously research competitors, generate ads, create content, handle support, and close leads.</p>
+                    </div>
+
+                    <form id="onboarding-form" class="dashboard-form">
+
+                        <!-- STEP 1: Business Identity -->
+                        <div class="onboarding-step">
+                            <div class="step-header">
+                                <span class="step-badge">1</span>
+                                <div>
+                                    <h3 class="step-title">Business Identity</h3>
+                                    <p class="step-helper">Your business name and website. Hit <strong>Scan</strong> to auto-fill your description, audience, and competitors from your site.</p>
+                                </div>
+                            </div>
+                            <div class="form-group-row">
+                                <div class="form-group">
+                                    <label for="biz-name">Business Name</label>
+                                    <input type="text" id="biz-name" placeholder="e.g. Your client business" required value="">
+                                </div>
+                                <div class="form-group">
+                                    <label for="biz-website">Website URL</label>
+                                    <div class="input-with-button">
+                                        <input type="text" id="biz-website" placeholder="e.g. https://cleared2close.com" value="https://cleared2close.com">
+                                        <button type="button" class="btn btn-outline" id="btn-scan-website">
+                                            <i class="fa-solid fa-wand-magic-sparkles text-purple"></i> Scan
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- STEP 2: Description & Audience -->
+                        <div class="onboarding-step">
+                            <div class="step-header">
+                                <span class="step-badge">2</span>
+                                <div>
+                                    <h3 class="step-title">Product & Audience</h3>
+                                    <p class="step-helper">Describe your value proposition and who you're selling to. This drives all AI-generated copy and targeting.</p>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="biz-desc" style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span>Business Description & Core Offer</span>
+                                    <span id="scan-status" class="text-secondary" style="font-size:0.75rem; text-transform:none; font-weight:normal; display:none;">
+                                        <i class="fa-solid fa-spinner fa-spin text-purple"></i> Scanning website...
+                                    </span>
+                                </label>
+                                <textarea id="biz-desc" rows="4" placeholder="Describe what your business does, the value proposition, and the main product or service you sell." required>A modern real estate platform that automates transaction coordination, helping agents manage files, compliance, and communication to get deals closed faster with zero mistakes.</textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="biz-audience">Target Audience / ICP</label>
+                                <div class="input-with-button">
+                                    <input type="text" id="biz-audience" placeholder="e.g. Solo real estate agents, independent brokerages, transaction coordinators" required value="Solo real estate agents, residential brokers, transaction coordinators">
+                                    <button type="button" class="btn btn-outline" id="btn-find-audience">
+                                        <i class="fa-solid fa-magnifying-glass-chart text-cyan"></i> Find
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- STEP 3: Budget & Goals -->
+                        <div class="onboarding-step">
+                            <div class="step-header">
+                                <span class="step-badge">3</span>
+                                <div>
+                                    <h3 class="step-title">Budget & Goals</h3>
+                                    <p class="step-helper">Set your ad budget, expected deal value, and primary marketing objective. Your Ad Strategy Agent uses these to allocate spend.</p>
+                                </div>
+                            </div>
+
+                            <div class="form-group-row" style="grid-template-columns: repeat(3, 1fr);">
+                                <div class="form-group">
+                                    <label for="ad-budget">Monthly Ad Budget ($)</label>
+                                    <input type="number" id="ad-budget" min="100" max="10000" step="50" value="1500" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="deal-value">Avg. Closed Deal Value ($)</label>
+                                    <input type="number" id="deal-value" min="1" max="100000" value="1000" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="conversion-rate">Lead-to-Close Rate (%)</label>
+                                    <input type="number" id="conversion-rate" min="0.1" max="100" step="0.1" value="10" required>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="marketing-goal">Primary Goal</label>
+                                <select id="marketing-goal" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px; color: var(--text-primary);">
+                                    <option value="lead-gen" selected>Generate Leads / Form Signups</option>
+                                    <option value="demo">Book Demo Meetings</option>
+                                    <option value="sales">Drive Direct Purchases</option>
+                                    <option value="traffic">Increase Website Traffic</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- STEP 4: Competitors (Ranked) -->
+                        <div class="onboarding-step">
+                            <div class="step-header">
+                                <span class="step-badge">4</span>
+                                <div>
+                                    <h3 class="step-title">Competitor Intelligence</h3>
+                                    <p class="step-helper">Add competitors and drag to rank by relevance. Your Content Agent will prioritize the top-ranked competitors when researching social trends and generating content ideas.</p>
+                                </div>
+                            </div>
+
+                            <div class="competitor-manager">
+                                <div class="competitor-list" id="competitor-list">
+                                    <!-- Populated dynamically -->
+                                </div>
+                                <div class="competitor-add-row">
+                                    <div class="input-with-button" style="flex:1;">
+                                        <input type="text" id="competitor-add-input" placeholder="Enter a competitor domain (e.g. competitor.com)">
+                                        <button type="button" class="btn btn-outline" id="btn-add-competitor">
+                                            <i class="fa-solid fa-plus"></i> Add
+                                        </button>
+                                    </div>
+                                    <button type="button" class="btn btn-outline" id="btn-find-competitors">
+                                        <i class="fa-solid fa-users-viewfinder text-orange"></i> Auto-Discover
+                                    </button>
+                                </div>
+                                <p class="competitor-hint"><i class="fa-solid fa-grip-vertical"></i> Drag competitors to reorder by relevance — #1 is analyzed first</p>
+                            </div>
+                            <!-- Hidden input to keep backward compat with form reads -->
+                            <input type="hidden" id="competitor-urls" value="">
+                        </div>
+
+                        <!-- STEP 5: Autopilot Employees -->
+                        <div class="onboarding-step">
+                            <div class="step-header">
+                                <span class="step-badge">5</span>
+                                <div>
+                                    <h3 class="step-title">Autopilot Employees</h3>
+                                    <p class="step-helper">Enable or disable each AI agent. Active agents run continuously — monitoring, generating, and acting on your behalf. Disabled agents are paused entirely.</p>
+                                </div>
+                            </div>
+
+                            <div class="agent-toggles-grid">
+                                <!-- Ad Strategy Agent -->
+                                <div class="agent-workflow-card" data-agent="ad">
+                                    <div class="agent-card-header">
+                                        <div class="agent-card-identity">
+                                            <i class="fa-solid fa-rectangle-ad text-purple"></i>
+                                            <h4>Ad Strategy Agent</h4>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="toggle-ad-agent" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="agent-card-workflow">
+                                        <div class="workflow-step"><i class="fa-solid fa-magnifying-glass"></i><span>Monitors keyword auctions</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-sliders"></i><span>Adjusts bids & budget</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-chart-line"></i><span>Reports performance</span></div>
+                                    </div>
+                                    <p class="agent-card-desc">Autonomously deploys Google & Meta campaigns, reallocates budget to top-performing ad sets, and generates new ad copy variations.</p>
+                                </div>
+
+                                <!-- Content Creator Agent -->
+                                <div class="agent-workflow-card" data-agent="content">
+                                    <div class="agent-card-header">
+                                        <div class="agent-card-identity">
+                                            <i class="fa-solid fa-photo-film text-cyan"></i>
+                                            <h4>Content Creator Agent</h4>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="toggle-content-agent" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="agent-card-workflow">
+                                        <div class="workflow-step"><i class="fa-solid fa-binoculars"></i><span>Researches competitor trends</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-pen-fancy"></i><span>Drafts social posts</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-calendar-check"></i><span>Publishes on schedule</span></div>
+                                    </div>
+                                    <p class="agent-card-desc">Scrapes competitor social feeds for high-engagement topics, rewrites them for your brand voice, and queues posts for your review or auto-publish.</p>
+                                </div>
+
+                                <!-- 24/7 Support Agent -->
+                                <div class="agent-workflow-card" data-agent="support">
+                                    <div class="agent-card-header">
+                                        <div class="agent-card-identity">
+                                            <i class="fa-solid fa-comments text-green"></i>
+                                            <h4>24/7 Support Agent</h4>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="toggle-support-agent" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="agent-card-workflow">
+                                        <div class="workflow-step"><i class="fa-solid fa-message"></i><span>Monitors live chat</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-robot"></i><span>Answers questions via AI</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-fire"></i><span>Flags warm leads</span></div>
+                                    </div>
+                                    <p class="agent-card-desc">Responds to website visitors using your business knowledge base, resolves common questions, and escalates high-intent visitors to your sales pipeline.</p>
+                                </div>
+
+                                <!-- Sales CRM Agent -->
+                                <div class="agent-workflow-card" data-agent="sales">
+                                    <div class="agent-card-header">
+                                        <div class="agent-card-identity">
+                                            <i class="fa-solid fa-address-book text-orange"></i>
+                                            <h4>Sales CRM Agent</h4>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="toggle-sales-agent" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="agent-card-workflow">
+                                        <div class="workflow-step"><i class="fa-solid fa-user-plus"></i><span>Captures inbound leads</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-envelope-open-text"></i><span>Sends drip sequences</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-handshake"></i><span>Books meetings</span></div>
+                                    </div>
+                                    <p class="agent-card-desc">Captures leads from ad campaigns, sends personalized email drip sequences, tracks engagement signals, and auto-books demo meetings when intent is high.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary btn-lg" id="setup-submit-btn">
+                                <i class="fa-solid fa-rocket"></i> Initialize Autopilot Agency
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Ad Campaigns View -->
+            <section id="ads-view" class="view-section">
+                <div class="ads-layout">
+                    <!-- Left: Active Campaigns -->
+                    <div class="ads-left">
+                        <div class="dashboard-panel">
+                            <div class="panel-header">
+                                <h3>Active Ad Campaigns</h3>
+                                <button class="btn btn-sm btn-primary" id="btn-request-ad">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI Generate Campaign
+                                </button>
+                            </div>
+                            <div class="panel-content">
+                                <div class="campaigns-table-container">
+                                    <table class="campaigns-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Campaign Name</th>
+                                                <th>Status</th>
+                                                <th>Budget / Daily</th>
+                                                <th>Clicks</th>
+                                                <th>Impressions</th>
+                                                <th>Conversions</th>
+                                                <th>Cost per Lead</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="campaigns-list-body">
+                                            <!-- Dynamic campaigns list -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-panel" id="ai-generator-panel" style="margin-top: 20px;">
+                            <div class="panel-header">
+                                <h3><i class="fa-solid fa-wand-magic-sparkles text-purple"></i> AI Campaign Variant Generator</h3>
+                            </div>
+                            <div class="panel-content">
+                                <div class="generator-inputs">
+                                    <div class="form-group">
+                                        <label for="ad-gen-topic">Ad Angle / Focus Area</label>
+                                        <input type="text" id="ad-gen-topic" placeholder="e.g. Saving hours on paperwork, eliminating transaction mistakes, speed up compliance checks" value="Saving hours on paperwork for independent real estate agents">
+                                    </div>
+                                    <button class="btn btn-primary" id="generate-ad-btn">Generate Copy Options</button>
+                                </div>
+                                <div class="generator-output" id="ad-generator-results" style="display:none; margin-top: 20px;">
+                                    <!-- Results from Gemini -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Creative Preview -->
+                    <div class="ads-right">
+                        <div class="dashboard-panel">
+                            <div class="panel-header">
+                                <h3>Ad Creative Preview</h3>
+                                <span class="badge">Google Search & Meta Copy</span>
+                            </div>
+                            <div class="panel-content">
+                                <div class="creative-previews">
+                                    <!-- Meta Mock -->
+                                    <div class="meta-mock-card">
+                                        <div class="mock-header">
+                                            <div class="mock-avatar">C2C</div>
+                                            <div class="mock-header-text">
+                                                <span class="mock-title" id="preview-biz-name">Client Business</span>
+                                                <span class="mock-sub">Sponsored · <i class="fa-solid fa-globe"></i></span>
+                                            </div>
+                                        </div>
+                                        <p class="mock-body" id="preview-meta-body">Your generated ad preview will appear here after onboarding and campaign creation.</p>
+                                        <div class="mock-image-container" id="ad-mock-image-box">
+                                            <div class="image-placeholder">
+                                                <i class="fa-solid fa-image"></i>
+                                                <span>AI Creative Image</span>
+                                            </div>
+                                        </div>
+                                        <div class="mock-footer">
+                                            <div class="mock-footer-left">
+                                                <span class="mock-domain" id="preview-domain">cleared2close.com</span>
+                                                <span class="mock-headline" id="preview-headline">Campaign headline preview</span>
+                                            </div>
+                                            <button class="btn-mock-action">Learn More</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Content Studio View -->
+            <section id="content-view" class="view-section">
+                <!-- Sub-navigation Tabs -->
+                <div class="content-studio-tabs">
+                    <button class="studio-tab active" data-target="studio-drafts">
+                        <i class="fa-solid fa-file-signature"></i> Drafts
+                    </button>
+                    <button class="studio-tab" data-target="studio-trends">
+                        <i class="fa-solid fa-users-viewfinder"></i> Research & Trends
+                    </button>
+                    <button class="studio-tab" data-target="studio-queue">
+                        <i class="fa-solid fa-clock"></i> Scheduled Queue
+                    </button>
+                    <button class="studio-tab" data-target="studio-analytics">
+                        <i class="fa-solid fa-paper-plane"></i> Sent Log & Analytics
+                    </button>
+                    <button class="studio-tab" data-target="studio-downloader">
+                        <i class="fa-solid fa-cloud-arrow-down text-purple"></i> Asset Downloader
+                    </button>
+                    <button class="studio-tab" data-target="studio-autopilot-settings">
+                        <i class="fa-solid fa-robot text-purple"></i> Autopilot Settings
+                    </button>
+                </div>
+
+                <!-- 1. DRAFTS VIEW -->
+                <div class="studio-panel-view active" id="studio-drafts">
+                    <div class="content-header-actions" style="display:flex; flex-direction:column; gap:12px;">
+                        <div class="generator-bar">
+                            <input type="text" id="content-topic-input" placeholder="Enter a topic for AI Social Media Agent..." value="Why agents waste 10+ hours a week on transaction coordination and how to stop it." style="flex-grow:1;">
+                            <button class="btn btn-primary" id="btn-generate-content" style="white-space: nowrap;">
+                                <i class="fa-solid fa-paper-plane"></i> Draft Social Post
+                            </button>
+                            <button class="btn btn-outline" id="btn-auto-ingest-video" onclick="App.handleAutoIngestVideo()" style="color:var(--purple); border-color:var(--purple); height:42px; white-space: nowrap;">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Ingest Viral Reel
+                            </button>
+                            <button class="btn btn-outline" id="btn-clear-drafts" onclick="App.clearAllDrafts()" style="color:var(--orange); border-color:var(--orange); height:42px; white-space: nowrap;">
+                                <i class="fa-solid fa-trash-can"></i> Clear Drafts
+                            </button>
+                        </div>
+                        <div class="platform-checkboxes" style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; background:rgba(0,0,0,0.15); padding:10px 16px; border-radius:8px; border:1px solid var(--border-color);">
+                            <span class="text-muted" style="font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Draft to:</span>
+                            <label class="checkbox-label" style="font-size:0.8rem;"><input type="checkbox" name="platform-target" value="facebook"> <i class="fa-brands fa-facebook text-blue"></i> Facebook</label>
+                            <label class="checkbox-label" style="font-size:0.8rem;"><input type="checkbox" name="platform-target" value="instagram" checked> <i class="fa-brands fa-instagram text-purple"></i> Instagram</label>
+                            <label class="checkbox-label" style="font-size:0.8rem;"><input type="checkbox" name="platform-target" value="reels"> <i class="fa-solid fa-clapperboard text-pink"></i> Reels Storyboard</label>
+                            <label class="checkbox-label" style="font-size:0.8rem;"><input type="checkbox" name="platform-target" value="twitter" checked> <i class="fa-brands fa-twitter text-cyan"></i> X (Twitter)</label>
+                            <label class="checkbox-label" style="font-size:0.8rem;"><input type="checkbox" name="platform-target" value="reddit"> <i class="fa-brands fa-reddit text-orange"></i> Reddit</label>
+                            <label class="checkbox-label" style="font-size:0.8rem;"><input type="checkbox" name="platform-target" value="linkedin" checked> <i class="fa-brands fa-linkedin text-blue"></i> LinkedIn</label>
+                            <label class="checkbox-label" style="font-size:0.8rem;"><input type="checkbox" name="platform-target" value="youtube"> <i class="fa-brands fa-youtube text-red"></i> YouTube</label>
+                        </div>
+                    </div>
+                    <div class="social-posts-grid" id="social-posts-container">
+                        <!-- Dynamic Social Media Drafts -->
+                    </div>
+                </div>
+
+                <!-- 2. RESEARCH & TRENDS VIEW -->
+                <div class="studio-panel-view" id="studio-trends">
+                    <div class="trends-instruction" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <span class="text-muted" style="font-size: 0.9rem;"><i class="fa-solid fa-circle-info text-cyan"></i> These competitor posts have high engagement. Use the AI to rewrite them to target your own business value proposition.</span>
+                        <button class="btn btn-outline btn-sm" id="btn-refresh-trends">
+                            <i class="fa-solid fa-rotate"></i> Refresh Trends
+                        </button>
+                    </div>
+                    <div class="social-posts-grid" id="trends-container">
+                        <!-- Dynamic Competitor Trends -->
+                    </div>
+                </div>
+
+                <!-- 3. SCHEDULED QUEUE VIEW -->
+                <div class="studio-panel-view" id="studio-queue">
+                    <div class="social-posts-grid" id="queue-container">
+                        <!-- Scheduled posts -->
+                    </div>
+                </div>
+
+                <!-- 4. ANALYTICS VIEW -->
+                <div class="studio-panel-view" id="studio-analytics">
+                    <div class="social-posts-grid" id="analytics-container">
+                        <!-- Published posts with metrics -->
+                    </div>
+                </div>
+
+                <!-- 6. ASSET DOWNLOADER VIEW -->
+                <div class="studio-panel-view" id="studio-downloader">
+                    <div class="form-container" style="max-width:100%; margin:0; padding:24px;">
+                        <div style="border-bottom:1px solid var(--border-color); padding-bottom:12px; margin-bottom:20px;">
+                            <h3 style="margin:0; font-size:1.2rem; color:var(--text-primary);"><i class="fa-solid fa-cloud-arrow-down text-purple"></i> AI Video Asset Ingestion (yt-dlp)</h3>
+                            <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-secondary);">Download videos, extract audio tracks, and generate transcripts from external URLs for creative re-purposing.</p>
+                        </div>
+
+                        <div style="display:flex; gap:12px; margin-bottom:20px;">
+                            <input type="text" id="downloader-url-input" placeholder="Paste YouTube, TikTok, Vimeo, or Instagram Reel URL..." style="flex-grow:1; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:6px; padding:10px 14px; color:var(--text-primary); font-size:0.85rem;">
+                            <button class="btn btn-primary" id="btn-inspect-video" style="white-space:nowrap; padding:0 20px;">
+                                <i class="fa-solid fa-magnifying-glass"></i> Inspect Asset
+                            </button>
+                        </div>
+
+                        <!-- Video Metadata Card (hidden on load) -->
+                        <div id="downloader-metadata-card" style="display:none; background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:10px; padding:20px; margin-bottom:24px; gap:20px; flex-wrap:wrap;">
+                            <div style="width:200px; height:120px; border-radius:6px; overflow:hidden; background:#000; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                <img id="downloader-thumb" src="" alt="Video Thumbnail" style="width:100%; height:100%; object-fit:cover;">
+                            </div>
+                            <div style="flex-grow:1; min-width:260px; display:flex; flex-direction:column; justify-content:space-between;">
+                                <div>
+                                    <h4 id="downloader-title" style="margin:0 0 6px 0; font-size:1.1rem; color:var(--text-primary);">Video Title</h4>
+                                    <p id="downloader-author" style="margin:0 0 12px 0; font-size:0.8rem; color:var(--text-secondary);"><i class="fa-solid fa-user"></i> Channel Name</p>
+                                </div>
+                                <div style="display:flex; gap:16px; align-items:center; font-size:0.8rem; color:var(--text-secondary);">
+                                    <span><i class="fa-solid fa-clock"></i> Duration: <strong id="downloader-duration" style="color:var(--text-primary);">0:00</strong></span>
+                                </div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:10px; min-width:180px; justify-content:center;">
+                                <button class="btn btn-primary" id="btn-download-video" style="width:100%; font-size:0.8rem; padding:8px 12px;">
+                                    <i class="fa-solid fa-video"></i> Download Video (MP4)
+                                </button>
+                                <button class="btn btn-outline" id="btn-extract-audio" style="width:100%; font-size:0.8rem; padding:8px 12px; border-color:var(--purple); color:var(--purple);">
+                                    <i class="fa-solid fa-music"></i> Extract Audio (M4A)
+                                </button>
+                                <button class="btn btn-outline" id="btn-extract-transcript" style="width:100%; font-size:0.8rem; padding:8px 12px; border-color:var(--orange); color:var(--orange);">
+                                    <i class="fa-solid fa-quote-left"></i> Extract Transcript
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Active Processing/Spinner (hidden on load) -->
+                        <div id="downloader-processing" style="display:none; align-items:center; justify-content:center; gap:12px; background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:20px; margin-bottom:24px; text-align:center;">
+                            <i class="fa-solid fa-spinner fa-spin text-purple" style="font-size:1.5rem;"></i>
+                            <span id="downloader-processing-text" style="font-size:0.85rem; color:var(--text-primary);">Downloading asset...</span>
+                        </div>
+
+                        <!-- Interactive Media Player Container (hidden on load) -->
+                        <div id="downloader-player-box" style="display:none; background:rgba(0,0,0,0.4); border:1px solid var(--border-color); border-radius:10px; padding:20px; margin-bottom:24px; text-align:center;">
+                            <h4 id="downloader-player-title" style="margin:0 0 12px 0; font-size:0.9rem; color:var(--text-secondary); text-align:left;">
+                                <i class="fa-solid fa-play-circle text-orange"></i> Preview Asset:
+                            </h4>
+                            <div id="downloader-player-container" style="max-width:100%; border-radius:8px; overflow:hidden; background:#000; margin:0 auto; display:inline-block;">
+                                <!-- Will dynamically insert video/audio tags -->
+                            </div>
+                        </div>
+
+                        <!-- Transcript Result Container (hidden on load) -->
+                        <div id="downloader-transcript-box" style="display:none; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:10px; padding:20px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:10px; margin-bottom:14px;">
+                                <h4 style="margin:0; font-size:0.95rem; color:var(--text-primary);"><i class="fa-solid fa-quote-left text-orange"></i> Extracted Transcript / Captions</h4>
+                                <button class="btn btn-outline" id="btn-adapt-transcript" style="font-size:0.75rem; padding:4px 10px; border-color:var(--orange); color:var(--orange);">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> Adapt Video to Social Post
+                                </button>
+                            </div>
+                            <div id="downloader-transcript-text" style="font-size:0.85rem; color:var(--text-secondary); max-height:220px; overflow-y:auto; line-height:1.5; font-family:var(--font-sans); text-align:left; background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; border:1px solid rgba(255,255,255,0.03);">
+                                Transcript content...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. AUTOPILOT SETTINGS VIEW -->
+                <div class="studio-panel-view" id="studio-autopilot-settings">
+                    <div class="form-container" style="max-width:100%; margin:0; padding:24px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border-color); padding-bottom:12px;">
+                            <div>
+                                <h3 style="margin:0; font-size:1.2rem; color:var(--text-primary);"><i class="fa-solid fa-robot text-purple"></i> Content Creator Autopilot Rules</h3>
+                                <p style="margin:4px 0 0 0; font-size:0.8rem; color:var(--text-secondary);">Train your Content Agent on how frequently to generate social posts.</p>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:16px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:0.8rem; font-weight:600; text-transform:uppercase; color:var(--text-secondary);">Autopilot Status:</span>
+                                    <label class="toggle-switch" style="width:36px; height:20px;">
+                                        <input type="checkbox" id="content-autopilot-master-enabled" checked>
+                                        <span class="toggle-slider" style="border-radius:20px;"></span>
+                                    </label>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:0.8rem; font-weight:600; text-transform:uppercase; color:var(--text-secondary);">Autopilot Mode:</span>
+                                    <select id="content-autopilot-publish-mode" style="background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:6px; padding:6px 12px; color:var(--text-primary); font-size:0.8rem;">
+                                        <option value="draft">Auto-Draft (Review first)</option>
+                                        <option value="publish">Auto-Publish Live (100% Autopilot)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Media Attach Option -->
+                        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; padding:12px 16px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <strong style="font-size:0.85rem; color:var(--text-primary);"><i class="fa-solid fa-photo-film text-purple"></i> Auto-Attach Visual Media Assets</strong>
+                                <p style="margin:2px 0 0 0; font-size:0.75rem; color:var(--text-secondary);">Automatically attach AI-generated images or real estate looping stock videos to autopilot posts.</p>
+                            </div>
+                            <label class="toggle-switch" style="width:36px; height:20px;">
+                                <input type="checkbox" id="content-autopilot-media" checked>
+                                <span class="toggle-slider" style="border-radius:20px;"></span>
+                            </label>
+                        </div>
+
+                        <div class="frequency-settings-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">
+                            <!-- Facebook -->
+                            <div class="onboarding-step" style="padding:16px; gap:12px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-weight:600; font-size:0.9rem;"><i class="fa-brands fa-facebook text-blue"></i> Facebook Schedule</span>
+                                    <label class="toggle-switch" style="width:36px; height:20px;">
+                                        <input type="checkbox" id="frequency-facebook-enabled" checked>
+                                        <span class="toggle-slider" style="border-radius:20px;"></span>
+                                    </label>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">Post</span>
+                                    <input type="number" id="frequency-facebook-val" min="1" max="10" value="1" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); width:50px; text-align:center; font-size:0.8rem;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">time(s) per</span>
+                                    <select id="frequency-facebook-interval" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); font-size:0.8rem;">
+                                        <option value="day">Day</option>
+                                        <option value="week">Week</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Instagram -->
+                            <div class="onboarding-step" style="padding:16px; gap:12px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-weight:600; font-size:0.9rem;"><i class="fa-brands fa-instagram text-purple"></i> Instagram Schedule</span>
+                                    <label class="toggle-switch" style="width:36px; height:20px;">
+                                        <input type="checkbox" id="frequency-instagram-enabled" checked>
+                                        <span class="toggle-slider" style="border-radius:20px;"></span>
+                                    </label>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">Post</span>
+                                    <input type="number" id="frequency-instagram-val" min="1" max="10" value="2" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); width:50px; text-align:center; font-size:0.8rem;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">time(s) per</span>
+                                    <select id="frequency-instagram-interval" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); font-size:0.8rem;">
+                                        <option value="day" selected>Day</option>
+                                        <option value="week">Week</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- LinkedIn -->
+                            <div class="onboarding-step" style="padding:16px; gap:12px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-weight:600; font-size:0.9rem;"><i class="fa-brands fa-linkedin text-blue"></i> LinkedIn Schedule</span>
+                                    <label class="toggle-switch" style="width:36px; height:20px;">
+                                        <input type="checkbox" id="frequency-linkedin-enabled" checked>
+                                        <span class="toggle-slider" style="border-radius:20px;"></span>
+                                    </label>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">Post</span>
+                                    <input type="number" id="frequency-linkedin-val" min="1" max="10" value="1" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); width:50px; text-align:center; font-size:0.8rem;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">time(s) per</span>
+                                    <select id="frequency-linkedin-interval" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); font-size:0.8rem;">
+                                        <option value="day">Day</option>
+                                        <option value="week" selected>Week</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- X (Twitter) -->
+                            <div class="onboarding-step" style="padding:16px; gap:12px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-weight:600; font-size:0.9rem;"><i class="fa-brands fa-twitter text-cyan"></i> X (Twitter) Schedule</span>
+                                    <label class="toggle-switch" style="width:36px; height:20px;">
+                                        <input type="checkbox" id="frequency-twitter-enabled" checked>
+                                        <span class="toggle-slider" style="border-radius:20px;"></span>
+                                    </label>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">Post</span>
+                                    <input type="number" id="frequency-twitter-val" min="1" max="10" value="1" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); width:50px; text-align:center; font-size:0.8rem;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">time(s) per</span>
+                                    <select id="frequency-twitter-interval" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); font-size:0.8rem;">
+                                        <option value="day" selected>Day</option>
+                                        <option value="week">Week</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Reddit -->
+                            <div class="onboarding-step" style="padding:16px; gap:12px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-weight:600; font-size:0.9rem;"><i class="fa-brands fa-reddit text-orange"></i> Reddit Schedule</span>
+                                    <label class="toggle-switch" style="width:36px; height:20px;">
+                                        <input type="checkbox" id="frequency-reddit-enabled">
+                                        <span class="toggle-slider" style="border-radius:20px;"></span>
+                                    </label>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">Post</span>
+                                    <input type="number" id="frequency-reddit-val" min="1" max="10" value="1" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); width:50px; text-align:center; font-size:0.8rem;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">time(s) per</span>
+                                    <select id="frequency-reddit-interval" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); font-size:0.8rem;">
+                                        <option value="day">Day</option>
+                                        <option value="week" selected>Week</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- YouTube -->
+                            <div class="onboarding-step" style="padding:16px; gap:12px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-weight:600; font-size:0.9rem;"><i class="fa-brands fa-youtube text-red"></i> YouTube Schedule</span>
+                                    <label class="toggle-switch" style="width:36px; height:20px;">
+                                        <input type="checkbox" id="frequency-youtube-enabled">
+                                        <span class="toggle-slider" style="border-radius:20px;"></span>
+                                    </label>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">Post</span>
+                                    <input type="number" id="frequency-youtube-val" min="1" max="10" value="1" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); width:50px; text-align:center; font-size:0.8rem;">
+                                    <span style="font-size:0.8rem; color:var(--text-secondary);">time(s) per</span>
+                                    <select id="frequency-youtube-interval" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:6px; color:var(--text-primary); font-size:0.8rem;">
+                                        <option value="day">Day</option>
+                                        <option value="week" selected>Week</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+                <!-- Schedule Post Modal -->
+                <div class="modal-overlay" id="schedule-modal" style="display:none;">
+                    <div class="modal-card">
+                        <div class="modal-header">
+                            <h3><i class="fa-solid fa-clock"></i> Schedule Social Post</h3>
+                            <button class="modal-close" id="btn-close-modal">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted" style="margin-bottom: 15px;">Select a date and time to auto-publish this post.</p>
+                            <div class="form-group">
+                                <label for="schedule-datetime">Publish Date & Time</label>
+                                <input type="datetime-local" id="schedule-datetime" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px; color: var(--text-primary); width:100%; box-sizing:border-box;">
+                            </div>
+                        </div>
+                        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                            <button class="btn btn-outline" id="btn-cancel-schedule">Cancel</button>
+                            <button class="btn btn-primary" id="btn-confirm-schedule">Schedule Post</button>
+                        </div>
+                    </div>
+                </div>
+
+            <!-- AI Avatar Spokesperson Studio Modal -->
+            <div class="modal-overlay" id="avatar-modal" style="display:none;">
+                <div class="modal-card" style="max-width: 600px;">
+                    <div class="modal-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 15px;">
+                        <h3><i class="fa-solid fa-user-tie text-purple"></i> AI Avatar Spokesperson Studio</h3>
+                        <button class="modal-close" onclick="App.closeAvatarModal()">&times;</button>
+                    </div>
+                    <div class="modal-body" style="padding-top: 15px;">
+                        <p class="text-muted" style="font-size:0.85rem; margin-bottom: 20px;">Recreate competitor videos by selecting a photorealistic virtual actor to speak your script, avoiding raw video theft.</p>
+                        
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px;">
+                            <div class="form-group">
+                                <label style="font-size:0.85rem; font-weight:600; color:var(--text-primary); display:block; margin-bottom:6px;">Virtual Actor</label>
+                                <select id="avatar-actor-select" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; color: var(--text-primary); width:100%;">
+                                    <option value="sarah">Sarah (Friendly Agent - Warm Voice)</option>
+                                    <option value="john">John (Executive Broker - Deep Voice)</option>
+                                    <option value="david">David (Tech-focused Broker - Energetic Voice)</option>
+                                    <option value="chloe">Chloe (Luxury Advisor - Premium Voice)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label style="font-size:0.85rem; font-weight:600; color:var(--text-primary); display:block; margin-bottom:6px;">Outfit & Background Style</label>
+                                <select id="avatar-style-select" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; color: var(--text-primary); width:100%;">
+                                    <option value="office">Modern Loft Workspace</option>
+                                    <option value="home">Luxury Living Room</option>
+                                    <option value="studio">Professional Clean Backdrop</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom:20px;">
+                            <label style="font-size:0.85rem; font-weight:600; color:var(--text-primary); display:block; margin-bottom:6px;">Spokesperson Script</label>
+                            <textarea id="avatar-script-input" rows="4" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px; color: var(--text-primary); width:100%; box-sizing:border-box; font-family:inherit; font-size:0.85rem; resize:vertical;"></textarea>
+                        </div>
+
+                        <!-- Avatar Rendering Simulator Output -->
+                        <div id="avatar-render-progress-box" style="display:none; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: left;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                                <span id="avatar-progress-status" style="font-size:0.85rem; font-weight:600; color:var(--purple);"><i class="fa-solid fa-spinner fa-spin"></i> Initializing model...</span>
+                                <span id="avatar-progress-percent" style="font-size:0.85rem; font-weight:600; color:var(--text-secondary);">0%</span>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; border:1px solid var(--border-color);">
+                                <div id="avatar-progress-bar" style="background: linear-gradient(90deg, var(--purple), var(--accent)); width: 0%; height: 100%; transition: width 0.3s ease;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                        <button class="btn btn-outline" id="btn-close-avatar-studio" onclick="App.closeAvatarModal()">Cancel</button>
+                        <button class="btn btn-primary" id="btn-generate-avatar-confirm" onclick="App.handleRenderAvatar()" style="background:var(--purple); border-color:var(--purple);">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Render AI Spokesperson Video
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sales CRM View -->
+            <section id="crm-view" class="view-section">
+                <!-- Sub-navigation Tabs -->
+                <div class="content-studio-tabs" style="margin-bottom: 20px;">
+                    <button class="crm-tab active" data-target="crm-pipeline">
+                        <i class="fa-solid fa-address-book"></i> Lead Pipeline
+                    </button>
+                    <button class="crm-tab" data-target="crm-verification">
+                        <i class="fa-solid fa-envelope-shield"></i> Verification Queue <span class="badge" id="crm-verification-badge" style="background:var(--orange); color:#fff; display:none; margin-left:6px; font-size:0.7rem; padding:2px 6px;">0</span>
+                    </button>
+                    <button class="crm-tab" data-target="crm-campaigns">
+                        <i class="fa-solid fa-bullhorn"></i> Outreach Campaigns
+                    </button>
+                    <button class="crm-tab" data-target="crm-autopilot-settings">
+                        <i class="fa-solid fa-robot text-purple"></i> Autopilot Settings
+                    </button>
+                </div>
+
+                <!-- 1. LEAD PIPELINE VIEW -->
+                <div class="crm-panel-view active" id="crm-pipeline">
+                    <div class="lead-scraper-bar" style="display:flex; gap:16px; margin-bottom:20px; background:rgba(0,0,0,0.15); padding:16px; border-radius:8px; border:1px solid var(--border-color); align-items:center; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <i class="fa-solid fa-spider text-purple" style="font-size:1.5rem;"></i>
+                            <h4 style="margin:0; font-size:0.95rem; text-transform:uppercase; letter-spacing:0.5px;">Outbound Scraper</h4>
+                        </div>
+                        <div style="flex-grow:1; min-width:200px; display:flex; flex-direction:column; gap:4px;">
+                            <label style="font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--text-secondary);">Target City & Niche</label>
+                            <input type="text" id="crm-scrape-niche" placeholder="e.g. Realtors in Miami, Real Estate Agents in Denver" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:6px; padding:10px; color:var(--text-primary); font-size:0.9rem;">
+                        </div>
+                        <div style="width:120px; display:flex; flex-direction:column; gap:4px;">
+                            <label style="font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--text-secondary);">Leads to Find</label>
+                            <input type="number" id="crm-scrape-count" min="10" max="1000" value="30" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:6px; padding:10px; color:var(--text-primary); font-size:0.9rem; text-align:center;">
+                        </div>
+                        <button class="btn btn-primary" id="btn-crm-scrape" style="align-self:flex-end; height:41px;">
+                            <i class="fa-solid fa-magnifying-glass"></i> Scrape Leads
+                        </button>
+                    </div>
+
+                    <div class="crm-layout">
+                        <!-- Left: Pipeline & Contacts -->
+                        <div class="crm-left">
+                            <div class="dashboard-panel">
+                                <div class="panel-header" style="border-bottom:none; padding-bottom:8px;">
+                                    <h3>Acquired Lead Pipeline</h3>
+                                    <span class="badge" id="crm-lead-count">0 Leads</span>
+                                </div>
+                                <div style="padding: 0 16px 12px 16px; display:flex; gap:8px; border-bottom:1px solid var(--border-color); flex-wrap:wrap;">
+                                    <input type="text" id="crm-leads-search" placeholder="Search name/email/company..." style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; color:var(--text-primary); font-size:0.8rem; flex-grow:1; min-width:140px;">
+                                    <select id="crm-leads-stage-filter" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; color:var(--text-primary); font-size:0.8rem; min-width:120px;">
+                                        <option value="All">All Stages</option>
+                                        <option value="Scraped">Scraped</option>
+                                        <option value="Emailed">Emailed</option>
+                                        <option value="Hot Lead">Hot Lead</option>
+                                        <option value="Demo Scheduled">Demo Scheduled</option>
+                                        <option value="Requires Handoff">Requires Handoff</option>
+                                        <option value="Opted Out">Opted Out</option>
+                                        <option value="DNC">Blacklisted (DNC)</option>
+                                    </select>
+                                </div>
+                                <div class="panel-content" style="padding-top:12px;">
+                                    <div class="leads-list" id="leads-list-container">
+                                        <!-- Dynamic leads list -->
+                                    </div>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; border-top:1px solid var(--border-color); padding-top:12px;">
+                                        <button class="btn btn-outline btn-xs" id="btn-leads-prev" style="padding:4px 8px;"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+                                        <span style="font-size:0.75rem; color:var(--text-secondary);" id="leads-pagination-info">Page 1 of 1</span>
+                                        <button class="btn btn-outline btn-xs" id="btn-leads-next" style="padding:4px 8px;">Next <i class="fa-solid fa-chevron-right"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: AI Sales Logs -->
+                        <div class="crm-right">
+                            <div class="dashboard-panel chat-panel" style="height: 100%;">
+                                <div class="panel-header" id="selected-lead-header">
+                                    <h3>Outbound Negotiation Log</h3>
+                                    <p class="text-muted">Select a lead to inspect conversation</p>
+                                </div>
+                                <div class="panel-content chat-messages" id="crm-chat-messages">
+                                    <div class="empty-state">
+                                        <i class="fa-solid fa-address-card"></i>
+                                        <p>Select a lead on the left to see the AI Sales Agent's conversation logs (outbound email follow-ups & automated responses).</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. VERIFICATION QUEUE VIEW -->
+                <div class="crm-panel-view" id="crm-verification" style="display:none;">
+                    <div style="background:rgba(255,145,0,0.05); border:1px solid var(--orange); border-radius:8px; padding:12px 16px; margin-bottom:20px; display:flex; align-items:center; gap:12px;">
+                        <i class="fa-solid fa-envelope-shield text-orange" style="font-size:1.5rem;"></i>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">
+                            <strong>Email Verification Enabled:</strong> Outbound emails will wait here for your manual approval. Once you review and approve a draft, it is dispatched. You can turn this off in Settings to run on 100% autopilot.
+                        </div>
+                    </div>
+                    
+                    <div class="verification-list-grid" id="crm-verification-container" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap:20px;">
+                        <!-- Dynamic verification emails -->
+                        <div class="empty-state" style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-secondary);">
+                            <i class="fa-solid fa-circle-check" style="font-size: 2.5rem; color: var(--green); margin-bottom: 15px;"></i>
+                            <p>Verification queue is empty! Start a campaign to generate outbound emails for review.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. EMAIL CAMPAIGNS VIEW -->
+                <div class="crm-panel-view" id="crm-campaigns" style="display:none;">
+                    <div class="crm-layout">
+                        <!-- Left: Form -->
+                        <div class="crm-left">
+                            <div class="dashboard-panel">
+                                <div class="panel-header">
+                                    <h3>Create AI Email Campaign</h3>
+                                </div>
+                                <div class="panel-content">
+                                    <form id="crm-campaign-form" style="display:flex; flex-direction:column; gap:14px;">
+                                        <div class="form-group">
+                                            <label for="campaign-name">Campaign Name</label>
+                                            <input type="text" id="campaign-name" placeholder="e.g. Cold Realtor Outreach Miami" required style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="campaign-type">Campaign Type</label>
+                                            <select id="campaign-type" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                                <option value="cold-outreach">Cold Outreach Drip (3-Step)</option>
+                                                <option value="newsletter">Sales Newsletter Campaign (3-Step)</option>
+                                                <option value="video-promo">Video Promo Campaign (3-Step Drip)</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="campaign-video-asset">Campaign Call-To-Action (CTA) Link</label>
+                                            <input type="text" id="campaign-video-asset" placeholder="e.g. https://www.realestatecrmpro.com/video or landing page link" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="campaign-instructions">Target Audience & Core Message / Video Angle</label>
+                                            <textarea id="campaign-instructions" placeholder="e.g. Focus on showing realtors how they waste 10 hours a week on manual transaction coordination. Pitch our automated CRM as the solution." style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; min-height:100px; box-sizing:border-box; font-family:inherit;"></textarea>
+                                        </div>
+                                        <button class="btn btn-primary" id="btn-create-campaign" type="submit" style="width:100%; padding:12px;">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Campaign Drip
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: List of active campaigns -->
+                        <div class="crm-right">
+                            <div class="dashboard-panel">
+                                <div class="panel-header">
+                                    <h3>Active Campaigns</h3>
+                                </div>
+                                <div class="panel-content">
+                                    <div class="campaigns-list" id="crm-campaigns-container" style="display:flex; flex-direction:column; gap:16px;">
+                                        <!-- Dynamic campaigns list -->
+                                        <div class="empty-state" style="padding: 40px; text-align: center; color: var(--text-secondary);">
+                                            <i class="fa-solid fa-bullhorn" style="font-size: 2.5rem; color: var(--purple); margin-bottom: 15px;"></i>
+                                            <p>No active email campaigns. Design one on the left!</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. CRM AUTOPILOT SETTINGS VIEW -->
+                <div class="crm-panel-view" id="crm-autopilot-settings" style="display:none;">
+                    <div class="crm-layout">
+                        <!-- Left: Autopilot Rules -->
+                        <div class="crm-left">
+                            <div class="dashboard-panel">
+                                <div class="panel-header">
+                                    <h3><i class="fa-solid fa-robot text-purple"></i> Sales Agent Autopilot Settings</h3>
+                                </div>
+                                <div class="panel-content" style="display:flex; flex-direction:column; gap:16px;">
+                                    <div class="form-group">
+                                        <label for="crm-lead-limit">Daily Lead Intake Limit (Mailing List)</label>
+                                        <input type="number" id="crm-lead-limit" min="10" max="1000" value="100" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                        <p class="step-helper" style="margin-top:4px;">Limits how many new leads the agent automatically scrapes and enrolls in campaigns daily.</p>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="crm-first-campaign">Default First Drip Campaign</label>
+                                        <select id="crm-first-campaign" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                            <option value="">-- No Active Campaign --</option>
+                                            <!-- Dynamically populated -->
+                                        </select>
+                                        <p class="step-helper" style="margin-top:4px;">New leads will automatically be enrolled in this campaign.</p>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="crm-second-campaign">Follow-up Second Campaign</label>
+                                        <select id="crm-second-campaign" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                            <option value="">-- No Active Campaign --</option>
+                                            <!-- Dynamically populated -->
+                                        </select>
+                                        <p class="step-helper" style="margin-top:4px;">Leads who complete the first campaign without replying will transition to this follow-up drip.</p>
+                                    </div>
+
+                                    <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
+                                        <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+                                            <span style="font-size:0.85rem; color:var(--text-primary);">Auto-Pause Drip on Lead Reply</span>
+                                            <label class="toggle-switch" style="width:36px; height:20px;">
+                                                <input type="checkbox" id="crm-auto-pause" checked>
+                                                <span class="toggle-slider" style="border-radius:20px;"></span>
+                                            </label>
+                                        </label>
+                                        <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+                                            <span style="font-size:0.85rem; color:var(--text-primary);">Simulate Unsubscribe Replies (5% rate)</span>
+                                            <label class="toggle-switch" style="width:36px; height:20px;">
+                                                <input type="checkbox" id="crm-simulate-unsubs" checked>
+                                                <span class="toggle-slider" style="border-radius:20px;"></span>
+                                            </label>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Do Not Contact List -->
+                        <div class="crm-right">
+                            <div class="dashboard-panel" style="height:100%;">
+                                <div class="panel-header">
+                                    <h3>Do Not Contact (DNC) List</h3>
+                                    <span class="badge warning-badge" id="crm-dnc-count">0 Blacklisted</span>
+                                </div>
+                                <div class="panel-content" style="display:flex; flex-direction:column; gap:16px;">
+                                    <div style="display:flex; gap:10px;">
+                                        <input type="email" id="crm-dnc-add-input" placeholder="blacklist-email@domain.com" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; color:var(--text-primary); font-size:0.85rem; flex:1;">
+                                        <button class="btn btn-outline" id="btn-add-dnc" style="padding:0 14px; font-size:0.8rem;"><i class="fa-solid fa-ban"></i> Block</button>
+                                    </div>
+
+                                    <div style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.15);">
+                                        <table style="width:100%; border-collapse:collapse; font-size:0.8rem; text-align:left;">
+                                            <thead>
+                                                <tr style="border-bottom:1px solid var(--border-color); background:rgba(255,255,255,0.02);">
+                                                    <th style="padding:10px;">Blocked Lead Email</th>
+                                                    <th style="padding:10px; width:70px; text-align:center;">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="crm-dnc-list-body">
+                                                <!-- Dynamic DNC emails -->
+                                                <tr>
+                                                    <td colspan="2" style="padding:20px; text-align:center; color:var(--text-secondary); font-style:italic;">No emails on the blacklist.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p class="competitor-hint"><i class="fa-solid fa-shield-halved"></i> Leads on this blacklist are protected against re-importing and outbound emails are permanently halted.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            </section>
+
+            <!-- Support Hub View -->
+            <section id="support-view" class="view-section">
+                <div class="support-layout">
+                    <!-- Left: Active Inquiries -->
+                    <div class="support-left">
+                        <div class="dashboard-panel">
+                            <div class="panel-header">
+                                <h3>Visitor Conversations</h3>
+                                <span class="badge" id="support-chat-count">0 Active</span>
+                            </div>
+                            <div class="panel-content">
+                                <div class="support-sessions-list" id="support-sessions-container">
+                                    <!-- Dynamic visitor chat list -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Live Monitoring -->
+                    <div class="support-right">
+                        <div class="dashboard-panel chat-panel" style="height: 100%;">
+                            <div class="panel-header" id="selected-support-header">
+                                <h3>Live Chat Monitoring</h3>
+                                <p class="text-muted">Observe AI Support Agent responding to web visitors in real-time.</p>
+                            </div>
+                            <div class="panel-content chat-messages" id="support-chat-messages">
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-comments"></i>
+                                    <p>Select an active session to monitor customer questions and AI-generated support answers.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings & Integrations View -->
+            <section id="settings-view" class="view-section">
+                <div class="settings-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap:24px; margin-bottom:24px;">
+                    <!-- Left Settings -->
+                    <div class="settings-card">
+                        <h3>API Configuration</h3>
+                        <div class="form-group">
+                            <label for="settings-api-key">Gemini API Key</label>
+                            <div class="input-with-button">
+                                <input type="password" id="settings-api-key" placeholder="Enter Gemini API key">
+                                <button class="btn btn-outline" id="toggle-key-visibility"><i class="fa-solid fa-eye"></i></button>
+                            </div>
+                            <p class="helper-text">This key is pre-loaded from config.js and used to call the Gemini API for copywriting and chatting.</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="settings-use-fallback" checked>
+                                <span>Use Simulation Fallback if API Rate-limited or Offline</span>
+                            </label>
+                        </div>
+                        <h3 style="margin-top:24px; border-top:1px solid var(--border-color); padding-top:20px;"><i class="fa-solid fa-envelope"></i> Sales Email Autopilot</h3>
+                        <div class="form-group">
+                            <label for="settings-daily-limit">Daily Outbound Limit</label>
+                            <input type="number" id="settings-daily-limit" min="10" max="1000" value="50" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="settings-bypass-verification">
+                                <span>Bypass Email Verification (Full Autopilot Outbound)</span>
+                            </label>
+                        </div>
+                        <button class="btn btn-primary" id="btn-save-settings" style="width:100%;">Save API & Outbound Settings</button>
+                    </div>
+
+                    <!-- Right Integrations -->
+                    <div class="settings-card">
+                        <h3>Marketing Integrations</h3>
+                        <p class="helper-text" style="margin-bottom:16px;">Route updates automatically through Make.com Webhook trigger.</p>
+                        <div class="integration-list" style="display:flex; flex-direction:column; gap:16px;">
+                            
+                            <!-- Webhook Route Indicators -->
+                            <div class="integration-item" style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.01); border:1px solid var(--border-color); border-radius:8px; padding:12px 16px;">
+                                <div class="integration-meta" style="display:flex; gap:12px; align-items:center;">
+                                    <i class="fa-brands fa-linkedin text-accent" style="font-size:1.4rem;"></i>
+                                    <span style="font-size:0.85rem; color:var(--text-primary);">LinkedIn Publishing</span>
+                                </div>
+                                <span id="webhook-linkedin-badge" class="badge">Inactive</span>
+                            </div>
+
+                            <div class="integration-item" style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.01); border:1px solid var(--border-color); border-radius:8px; padding:12px 16px;">
+                                <div class="integration-meta" style="display:flex; gap:12px; align-items:center;">
+                                    <i class="fa-brands fa-x-twitter text-primary" style="font-size:1.4rem;"></i>
+                                    <span style="font-size:0.85rem; color:var(--text-primary);">X / Twitter Publishing</span>
+                                </div>
+                                <span id="webhook-twitter-badge" class="badge">Inactive</span>
+                            </div>
+
+                            <div class="integration-item" style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.01); border:1px solid var(--border-color); border-radius:8px; padding:12px 16px;">
+                                <div class="integration-meta" style="display:flex; gap:12px; align-items:center;">
+                                    <i class="fa-brands fa-google text-accent" style="font-size:1.4rem; color:#4285F4;"></i>
+                                    <span style="font-size:0.85rem; color:var(--text-primary);">Google Ads Deployment</span>
+                                </div>
+                                <span id="webhook-google-badge" class="badge">Inactive</span>
+                            </div>
+
+                            <div class="integration-item" style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.01); border:1px solid var(--border-color); border-radius:8px; padding:12px 16px;">
+                                <div class="integration-meta" style="display:flex; gap:12px; align-items:center;">
+                                    <i class="fa-brands fa-meta text-purple" style="font-size:1.4rem; color:#0668E1;"></i>
+                                    <span style="font-size:0.85rem; color:var(--text-primary);">Meta Ads Deployment</span>
+                                </div>
+                                <span id="webhook-meta-badge" class="badge">Inactive</span>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Make.com Webhook Integration Manager -->
+                <div class="settings-card" style="width:100%; box-sizing:border-box;">
+                    <h3><i class="fa-solid fa-circle-nodes" style="color:var(--purple);"></i> Make.com Webhook Manager</h3>
+                    <p class="helper-text" style="margin-bottom:20px;">Use **Make.com** (or N8N) to link your social media and ad manager accounts in minutes. Simply create a **Custom Webhook Trigger** in Make, paste the URL below, and we will send all post and ad payloads there automatically.</p>
+                    
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:24px;">
+                        <div>
+                            <div class="form-group">
+                                <label for="settings-make-webhook" style="font-weight:600; color:var(--text-primary);">Make.com Webhook URL</label>
+                                <input type="text" id="settings-make-webhook" placeholder="https://hook.us1.make.com/xxxxxxxxxxxxxx" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box; margin-bottom:12px;">
+                            </div>
+                            <div style="display:flex; gap:12px;">
+                                <button class="btn btn-primary" id="btn-save-webhook" onclick="App.saveWebhookSettings()" style="flex:1;">Save Webhook URL</button>
+                                <button class="btn btn-outline" id="btn-test-webhook" onclick="App.testWebhookConnection()" style="flex:1;"><i class="fa-solid fa-paper-plane"></i> Send Test Payload</button>
+                            </div>
+                        </div>
+
+                        <div style="background:rgba(255,255,255,0.015); border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:16px;">
+                            <h4 style="margin:0 0 10px 0; color:var(--accent);">Trigger Payload Structure</h4>
+                            <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:10px;">Whenever you publish or launch, we send this JSON object to your webhook:</p>
+                            <pre style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:12px; margin:0; font-size:0.75rem; color:#A7F3D0; font-family:monospace; white-space:pre-wrap; line-height:1.4;">
+{
+  "type": "social-post" | "ad-campaign",
+  "platforms": ["linkedin", "twitter"],
+  "content": "Text copywriting goes here...",
+  "ctaLink": "https://www.realestatecrmpro.com",
+  "timestamp": "2026-06-29T12:00:00Z"
+}</pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- App JavaScript files -->
+    <script src="config.js"></script>
+    <script src="agent-simulation.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
