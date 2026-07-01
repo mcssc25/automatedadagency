@@ -63,7 +63,16 @@ Last updated: 2026-07-01
   - `node --check app.js`
   - `node --check server.js`
   - `git diff --check`
-- Deployment status: pending for this entry.
+- Git commits pushed: `8958aef` Force onboarding field size refresh, `94161f7` Disable cache for app shell assets.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backups:
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260701T183706Z-force-field-size-refresh`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260701T183926Z-no-cache-field-size`
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public HTML contains versioned `index.css?v=20260701-auto-grow-fields` and `app.js?v=20260701-auto-grow-fields`.
+  - Public HTML contains inline `min-height:340px` for `biz-desc` and `min-height:560px` for `biz-swot`.
+  - Public versioned `app.js` contains important-priority auto-grow style setters.
+  - Public `/` response now sends `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate`.
 
 ## Previous Update
 
