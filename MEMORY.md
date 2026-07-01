@@ -39,6 +39,7 @@ Last updated: 2026-07-01
 - Onboarding scan is intended to be deep business intelligence: multi-page company crawl plus Gemini Search grounding for company profile, offers, audience, competitor profiles/socials, SWOT, and a compact business report.
 - Onboarding state includes `bizSwot`, `businessReport`, `companySocialLinks`, ranked `competitorUrls`, and `competitorProfiles`; ad, social, and support prompts reuse this strategic context.
 - Onboarding scan requests Gemini JSON mode and can repair invalid AI JSON before parsing, because long report fields can include unescaped newlines or malformed string content.
+- Onboarding competitor discovery targets at least 5 competitors when possible; manually added competitors call `/api/competitor-profile` to enrich summaries, differentiators, and social links.
 - Setup box order is: 1 Business Identity, 2 Product & Audience, 3 Competitor Intelligence, 4 SWOT Profile, 5 Budget & Goals, 6 Autopilot Employees.
 
 ## Working Agreements

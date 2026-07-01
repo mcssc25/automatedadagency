@@ -443,6 +443,122 @@ function parseModelJson(rawText) {
     }
 }
 
+function normalizeSwotProfile(value, fallbackReport = '') {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (value && typeof value === 'object') {
+        const sections = [
+            ['Strengths', value.strengths || value.Strengths],
+            ['Weaknesses', value.weaknesses || value.Weaknesses],
+            ['Opportunities', value.opportunities || value.Opportunities],
+            ['Threats', value.threats || value.Threats]
+        ].filter(([, body]) => body);
+
+        if (sections.length) {
+            return sections.map(([label, body]) => {
+                const text = Array.isArray(body) ? body.join('; ') : String(body);
+                return `${label}: ${text}`;
+            }).join('\n\n');
+        }
+    }
+
+    const report = String(fallbackReport || '').trim();
+    const swotIndex = report.toLowerCase().indexOf('swot');
+    if (swotIndex !== -1) {
+        return report.slice(swotIndex, swotIndex + 1600).trim();
+    }
+
+    return '';
+}
+
+function normalizeCompetitorProfile(profile = {}) {
+    const domain = normalizeDomain(profile.domain || profile.website || profile.url || profile.name || '');
+    if (!domain) return null;
+    return {
+        name: String(profile.name || domain).trim(),
+        domain,
+        summary: String(profile.summary || '').trim(),
+        strengths: String(profile.strengths || '').trim(),
+        weaknesses: String(profile.weaknesses || '').trim(),
+        differentiationAgainstCompany: String(profile.differentiationAgainstCompany || profile.positioning || '').trim(),
+        socialLinks: profile.socialLinks && typeof profile.socialLinks === 'object' ? profile.socialLinks : {}
+    };
+}
+
+function mergeCompetitorProfiles(...profileGroups) {
+    const byDomain = new Map();
+    profileGroups.flat().filter(Boolean).forEach(profile => {
+        const normalized = normalizeCompetitorProfile(profile);
+        if (!normalized) return;
+        byDomain.set(normalized.domain, {
+            ...(byDomain.get(normalized.domain) || {}),
+            ...normalized,
+            socialLinks: {
+                ...((byDomain.get(normalized.domain) || {}).socialLinks || {}),
+                ...(normalized.socialLinks || {})
+            }
+        });
+    });
+    return Array.from(byDomain.values());
+}
+
+async function researchCompetitorProfiles({ businessName, description, offers, existingDomains = [], minimum = 5 }) {
+    const excludeList = existingDomains.filter(Boolean).join(', ') || 'none';
+    const prompt = `You are a competitive intelligence researcher.
+Use Google Search grounding to identify enough additional real direct competitors to reach at least ${minimum} total competitor domains for this business.
+Do not include these already-known competitors unless adding missing profile details for them: ${excludeList}
+
+Business:
+Name: ${businessName || 'Unknown'}
+Description: ${description || 'Not provided'}
+Core Offers: ${offers || 'Not provided'}
+
+Return ONLY valid JSON:
+{
+  "competitorProfiles": [
+    {
+      "name": "Competitor name",
+      "domain": "competitor.com",
+      "summary": "What they offer and who they serve.",
+      "strengths": "Specific competitive strengths.",
+      "weaknesses": "Openings or limitations compared with this business.",
+      "differentiationAgainstCompany": "How this business can position against them.",
+      "socialLinks": {
+        "linkedin": "",
+        "facebook": "",
+        "instagram": "",
+        "youtube": "",
+        "tiktok": "",
+        "x": ""
+      }
+    }
+  ]
+}`;
+
+    const raw = await queryGeminiWithSearch(prompt, { json: true });
+    const data = await parseModelJsonWithRepair(raw);
+    return Array.isArray(data.competitorProfiles) ? data.competitorProfiles : [];
+}
+
+async function ensureMinimumCompetitorProfiles({ profiles, competitorDomains = [], businessName, description, offers, minimum = 5 }) {
+    let merged = mergeCompetitorProfiles(
+        profiles,
+        competitorDomains.map(domain => ({ domain }))
+    );
+
+    if (merged.length < minimum) {
+        const additional = await researchCompetitorProfiles({
+            businessName,
+            description,
+            offers,
+            existingDomains: merged.map(profile => profile.domain),
+            minimum
+        });
+        merged = mergeCompetitorProfiles(merged, additional);
+    }
+
+    return merged;
+}
+
 async function parseModelJsonWithRepair(rawText) {
     try {
         return parseModelJson(rawText);
@@ -906,6 +1022,8 @@ Rules:
 - Prefer verifiable public facts from the company site and search results.
 - Do not invent exact pricing, integrations, guarantees, or social URLs. Use empty strings when unknown.
 - Competitors must be real businesses in the same buying category, not vague alternatives.
+- Return 5-8 direct competitors whenever possible. If the market is small, return every credible direct competitor you can verify.
+- Always populate swotProfile as four labeled paragraphs: Strengths, Weaknesses, Opportunities, Threats.
 - Keep paragraphs concise but specific enough for AI ad copy, social content, and client email replies.
 - Return ONLY valid JSON with no markdown.
 
@@ -925,7 +1043,7 @@ Return this exact JSON shape:
   "offers": "- Offer 1\\n- Offer 2\\n- Offer 3",
   "audience": "Segment 1, Segment 2, Segment 3, Segment 4",
   "valueProposition": "A concise positioning statement for ads and outreach.",
-  "competitors": "competitor1.com, competitor2.com, competitor3.com",
+  "competitors": "competitor1.com, competitor2.com, competitor3.com, competitor4.com, competitor5.com",
   "companySocialLinks": {
     "website": "https://example.com",
     "linkedin": "",
@@ -959,19 +1077,27 @@ Return this exact JSON shape:
 
         const rawJsonResult = await queryGeminiWithSearch(prompt, { json: true });
         const result = await parseModelJsonWithRepair(rawJsonResult);
-        const competitorProfiles = Array.isArray(result.competitorProfiles) ? result.competitorProfiles : [];
+        const initialProfiles = Array.isArray(result.competitorProfiles) ? result.competitorProfiles : [];
+        const listedDomains = String(result.competitors || '').split(',').map(domain => normalizeDomain(domain)).filter(Boolean);
+        const competitorProfiles = await ensureMinimumCompetitorProfiles({
+            profiles: initialProfiles,
+            competitorDomains: listedDomains,
+            businessName: result.businessName,
+            description: result.description,
+            offers: result.offers,
+            minimum: 5
+        });
         const competitorDomains = competitorProfiles
             .map(profile => normalizeDomain(profile.domain || profile.website || profile.name))
             .filter(Boolean);
-        const competitors = result.competitors || competitorDomains.join(', ');
+        const competitors = competitorDomains.join(', ');
+        const swotProfile = normalizeSwotProfile(result.swotProfile || result.swot || result.SWOT || result.businessAnalysis, result.businessReport);
 
         res.json({
             ...result,
             competitors,
-            competitorProfiles: competitorProfiles.map(profile => ({
-                ...profile,
-                domain: normalizeDomain(profile.domain || profile.website || profile.name)
-            })),
+            swotProfile,
+            competitorProfiles,
             researchMeta: {
                 pagesScanned: websiteResearch.pagesScanned,
                 companyDomain: websiteResearch.baseHost,
@@ -1020,7 +1146,7 @@ app.post('/api/competitors', async (req, res) => {
     }
 
     const prompt = `You are a strategic marketing executive.
-Use Google Search grounding to identify 3-5 real direct competitors for the business profile below. Include useful public social profile URLs when you can verify them.
+Use Google Search grounding to identify 5-8 real direct competitors for the business profile below. Include useful public social profile URLs when you can verify them.
 
 Business Profile:
 Description: ${description}
@@ -1028,7 +1154,7 @@ Core Offers: ${offers || 'Not defined'}
 
 Return ONLY valid JSON in this shape:
 {
-  "competitors": "competitor1.com, competitor2.com, competitor3.com",
+  "competitors": "competitor1.com, competitor2.com, competitor3.com, competitor4.com, competitor5.com",
   "competitorProfiles": [
     {
       "name": "Competitor name",
@@ -1053,17 +1179,71 @@ Return ONLY valid JSON in this shape:
         console.log(`[Competitors Agent] Querying Gemini for Competitor domains...`);
         const rawResult = await queryGeminiWithSearch(prompt, { json: true });
         const data = await parseModelJsonWithRepair(rawResult);
-        const competitorProfiles = Array.isArray(data.competitorProfiles) ? data.competitorProfiles : [];
+        const listedDomains = String(data.competitors || '').split(',').map(domain => normalizeDomain(domain)).filter(Boolean);
+        const competitorProfiles = await ensureMinimumCompetitorProfiles({
+            profiles: Array.isArray(data.competitorProfiles) ? data.competitorProfiles : [],
+            competitorDomains: listedDomains,
+            businessName: '',
+            description,
+            offers,
+            minimum: 5
+        });
         res.json({
-            competitors: data.competitors || competitorProfiles.map(profile => normalizeDomain(profile.domain)).filter(Boolean).join(', '),
-            competitorProfiles: competitorProfiles.map(profile => ({
-                ...profile,
-                domain: normalizeDomain(profile.domain || profile.website || profile.name)
-            }))
+            competitors: competitorProfiles.map(profile => profile.domain).filter(Boolean).join(', '),
+            competitorProfiles
         });
     } catch (error) {
         console.error(`[Competitors Error]`, error.message);
         res.status(500).json({ error: `Competitor lookup failed: ${error.message}` });
+    }
+});
+
+app.post('/api/competitor-profile', async (req, res) => {
+    const { domain, description, offers, businessName } = req.body;
+    const cleanDomain = normalizeDomain(domain || '');
+    if (!cleanDomain) {
+        return res.status(400).json({ error: "Competitor domain is required" });
+    }
+
+    const prompt = `You are a competitive intelligence researcher.
+Use Google Search grounding to research this specific competitor and find its useful public social profiles.
+
+Our business:
+Name: ${businessName || 'Unknown'}
+Description: ${description || 'Not provided'}
+Core Offers: ${offers || 'Not provided'}
+
+Competitor domain: ${cleanDomain}
+
+Return ONLY valid JSON:
+{
+  "competitorProfile": {
+    "name": "Competitor name",
+    "domain": "${cleanDomain}",
+    "summary": "What they offer and who they serve.",
+    "strengths": "Specific competitive strengths.",
+    "weaknesses": "Openings or limitations compared with our business.",
+    "differentiationAgainstCompany": "How our business can position against them.",
+    "socialLinks": {
+      "linkedin": "",
+      "facebook": "",
+      "instagram": "",
+      "youtube": "",
+      "tiktok": "",
+      "x": ""
+    }
+  }
+}`;
+
+    try {
+        console.log(`[Competitor Profile] Researching ${cleanDomain}...`);
+        const rawResult = await queryGeminiWithSearch(prompt, { json: true });
+        const data = await parseModelJsonWithRepair(rawResult);
+        const profile = normalizeCompetitorProfile(data.competitorProfile || data);
+        res.json({ competitorProfile: profile || { domain: cleanDomain, name: cleanDomain, socialLinks: {} } });
+    } catch (error) {
+        console.error(`[Competitor Profile Error]`, error.message);
+        res.status(500).json({ error: `Competitor profile lookup failed: ${error.message}` });
     }
 });
 

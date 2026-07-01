@@ -1151,11 +1151,12 @@ class AutopilotApp {
             const descriptionText = data.description || "";
             const coreOffersText = data.offers || "";
             const valueText = data.valueProposition ? `\n\nValue Proposition:\n${data.valueProposition}` : "";
+            const swotText = this.normalizeSwotText(data.swotProfile || data.swot || data.SWOT || data.businessAnalysis, data.businessReport);
             
             document.getElementById("biz-name").value = data.businessName || document.getElementById("biz-name").value;
             document.getElementById("biz-desc").value = `${descriptionText}\n\nCore Offers:\n${coreOffersText}${valueText}`;
-            this.dom.bizSwotInput.value = data.swotProfile || "";
-            this.state.bizSwot = data.swotProfile || "";
+            this.dom.bizSwotInput.value = swotText;
+            this.state.bizSwot = swotText;
             this.state.businessReport = data.businessReport || "";
             this.state.companySocialLinks = data.companySocialLinks || {};
             
@@ -1290,6 +1291,30 @@ class AutopilotApp {
             .filter(Boolean);
     }
 
+    normalizeSwotText(value, fallbackReport = '') {
+        if (typeof value === 'string' && value.trim()) return value.trim();
+        if (value && typeof value === 'object') {
+            const sections = [
+                ['Strengths', value.strengths || value.Strengths],
+                ['Weaknesses', value.weaknesses || value.Weaknesses],
+                ['Opportunities', value.opportunities || value.Opportunities],
+                ['Threats', value.threats || value.Threats]
+            ].filter(([, body]) => body);
+
+            if (sections.length) {
+                return sections.map(([label, body]) => {
+                    const text = Array.isArray(body) ? body.join('; ') : String(body);
+                    return `${label}: ${text}`;
+                }).join('\n\n');
+            }
+        }
+
+        const report = String(fallbackReport || '').trim();
+        const swotIndex = report.toLowerCase().indexOf('swot');
+        if (swotIndex !== -1) return report.slice(swotIndex, swotIndex + 1600).trim();
+        return '';
+    }
+
     storeCompetitorProfiles(profiles = []) {
         if (!Array.isArray(profiles)) return;
         this.state.competitorProfiles = this.state.competitorProfiles || {};
@@ -1302,6 +1327,49 @@ class AutopilotApp {
                 socialLinks: profile.socialLinks || {}
             };
         });
+    }
+
+    async researchCompetitorProfile(domain) {
+        const cleanDomain = this.normalizeCompetitorDomain(domain);
+        if (!cleanDomain) return;
+
+        const description = document.getElementById("biz-desc").value.trim();
+        const parts = description.split("Core Offers:\n");
+        const desc = parts[0].trim();
+        const offers = parts[1] ? parts[1].trim() : "";
+
+        try {
+            const response = await fetch('/api/competitor-profile', {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    domain: cleanDomain,
+                    businessName: document.getElementById("biz-name").value.trim(),
+                    description: desc,
+                    offers
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || "Competitor profile lookup failed");
+            }
+
+            const data = await response.json();
+            this.storeCompetitorProfiles([data.competitorProfile]);
+            this.renderCompetitorList();
+            this.saveState();
+            this.appendConsoleLine('system', `Competitor profile enriched for ${cleanDomain}.`);
+        } catch (error) {
+            console.error("Competitor profile research failed:", error);
+            const existing = this.state.competitorProfiles[cleanDomain] || { domain: cleanDomain, name: cleanDomain, socialLinks: {} };
+            existing.summary = existing.summary && !existing.summary.includes('Researching')
+                ? existing.summary
+                : 'Added to the competitor list. AI profile research did not complete yet; try Auto-Discover to enrich it later.';
+            this.state.competitorProfiles[cleanDomain] = existing;
+            this.renderCompetitorList();
+            this.saveState();
+        }
     }
 
     escapeHtml(value) {
@@ -1445,7 +1513,7 @@ class AutopilotApp {
         this.syncCompetitorHiddenInput();
     }
     
-    addCompetitorFromInput() {
+    async addCompetitorFromInput() {
         const input = this.dom.competitorAddInput;
         let domain = input.value.trim();
         if (!domain) return;
@@ -1455,14 +1523,25 @@ class AutopilotApp {
         
         // Check for duplicates
         if (this.state.competitorUrls.some(existing => this.normalizeCompetitorDomain(existing) === domain)) {
+            if (!this.state.competitorProfiles[domain] || !this.state.competitorProfiles[domain].summary) {
+                this.researchCompetitorProfile(domain);
+            }
             input.value = '';
             return;
         }
         
         this.state.competitorUrls.push(domain);
+        this.state.competitorProfiles[domain] = {
+            domain,
+            name: domain,
+            summary: 'Researching competitor profile, positioning, and social links...',
+            socialLinks: {}
+        };
         input.value = '';
         this.renderCompetitorList();
         this.syncCompetitorHiddenInput();
+        this.saveState();
+        this.researchCompetitorProfile(domain);
     }
     
     removeCompetitor(domain) {
