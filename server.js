@@ -531,19 +531,50 @@ function parseModelJson(rawText) {
     }
 }
 
+function firstNonEmptyField(source, keys = []) {
+    if (!source || typeof source !== 'object') return '';
+    for (const key of keys) {
+        if (source[key]) return source[key];
+    }
+    return '';
+}
+
+function stringifySwotSection(body) {
+    if (!body) return '';
+    if (Array.isArray(body)) return body.map(item => String(item).trim()).filter(Boolean).join('; ');
+    if (typeof body === 'object') {
+        return Object.values(body).map(item => String(item).trim()).filter(Boolean).join('; ');
+    }
+    return String(body).trim();
+}
+
 function normalizeSwotProfile(value, fallbackReport = '') {
     if (typeof value === 'string' && value.trim()) return value.trim();
     if (value && typeof value === 'object') {
+        const nested = firstNonEmptyField(value, [
+            'swotProfile',
+            'swot_profile',
+            'swotAnalysis',
+            'swot_analysis',
+            'SWOT',
+            'SWOTAnalysis',
+            'businessAnalysis'
+        ]);
+        if (nested && nested !== value) {
+            const normalizedNested = normalizeSwotProfile(nested, fallbackReport);
+            if (normalizedNested) return normalizedNested;
+        }
+
         const sections = [
-            ['Strengths', value.strengths || value.Strengths],
-            ['Weaknesses', value.weaknesses || value.Weaknesses],
-            ['Opportunities', value.opportunities || value.Opportunities],
-            ['Threats', value.threats || value.Threats]
+            ['Strengths', firstNonEmptyField(value, ['strengths', 'Strengths', 'strength', 'Strength', 'advantages', 'competitiveAdvantages', 'pros'])],
+            ['Weaknesses', firstNonEmptyField(value, ['weaknesses', 'Weaknesses', 'weakness', 'Weakness', 'gaps', 'limitations', 'cons'])],
+            ['Opportunities', firstNonEmptyField(value, ['opportunities', 'Opportunities', 'opportunity', 'Opportunity', 'growthOpportunities', 'openings'])],
+            ['Threats', firstNonEmptyField(value, ['threats', 'Threats', 'threat', 'Threat', 'risks', 'competitiveThreats'])]
         ].filter(([, body]) => body);
 
         if (sections.length) {
             return sections.map(([label, body]) => {
-                const text = Array.isArray(body) ? body.join('; ') : String(body);
+                const text = stringifySwotSection(body);
                 return `${label}: ${text}`;
             }).join('\n\n');
         }
@@ -556,6 +587,54 @@ function normalizeSwotProfile(value, fallbackReport = '') {
     }
 
     return '';
+}
+
+function buildDeterministicSwotProfile({ businessName, description, offers, valueProposition, competitorProfiles = [] } = {}) {
+    const name = businessName || 'This business';
+    const cleanDescription = String(description || '').trim();
+    const cleanOffers = String(offers || '').replace(/\n+/g, '; ').trim();
+    const cleanValue = String(valueProposition || '').trim();
+    const competitorStrengths = competitorProfiles
+        .map(profile => `${profile.name || profile.domain}: ${profile.strengths || profile.summary || ''}`.trim())
+        .filter(text => text.length > 12)
+        .slice(0, 3)
+        .join(' | ');
+
+    return [
+        `Strengths: ${name} appears strongest around ${cleanValue || cleanDescription || 'its core offer and market positioning'}. The scanned offers point to ${cleanOffers || 'a focused product/service mix'} that can be reused in ads, social posts, and sales replies.`,
+        `Weaknesses: The public scan should be reviewed for proof depth, pricing clarity, comparison pages, demos, case studies, and trust signals. Any missing specifics here can make it harder for AI campaigns to answer objections confidently.`,
+        `Opportunities: ${name} can turn the company profile, competitor gaps, and customer pain points into stronger landing-page copy, comparison content, segmented ads, and repeatable email/social angles. Competitor monitoring can also surface timely posts and objections to respond to.`,
+        `Threats: Competitors may have stronger brand recognition, broader feature pages, more social proof, or clearer category positioning. ${competitorStrengths ? `Notable competitor strengths found: ${competitorStrengths}.` : 'The team should keep monitoring competitor messaging and social channels so campaigns stay current.'}`
+    ].join('\n\n');
+}
+
+async function generateFallbackSwotProfile({ result, competitorProfiles }) {
+    const prompt = `Create a concise SWOT profile for this company based only on the verified research data below.
+Return four labeled paragraphs exactly as:
+Strengths: ...
+
+Weaknesses: ...
+
+Opportunities: ...
+
+Threats: ...
+
+Company research JSON:
+${JSON.stringify({
+        businessName: result.businessName,
+        description: result.description,
+        offers: result.offers,
+        valueProposition: result.valueProposition,
+        competitors: competitorProfiles
+    }).slice(0, 12000)}`;
+
+    try {
+        const response = await queryGemini(prompt, { model: GEMINI_RESEARCH_MODEL });
+        return normalizeSwotProfile(response);
+    } catch (error) {
+        console.warn(`[SWOT Fallback] Gemini fallback failed: ${error.message}`);
+        return '';
+    }
 }
 
 function normalizeCompetitorProfile(profile = {}) {
@@ -1180,7 +1259,31 @@ Return this exact JSON shape:
             .map(profile => normalizeDomain(profile.domain || profile.website || profile.name))
             .filter(Boolean);
         const competitors = competitorDomains.join(', ');
-        const swotProfile = normalizeSwotProfile(result.swotProfile || result.swot || result.SWOT || result.businessAnalysis, result.businessReport);
+        let swotProfile = normalizeSwotProfile(
+            result.swotProfile ||
+            result.swot_profile ||
+            result.swotAnalysis ||
+            result.swot_analysis ||
+            result.SWOT ||
+            result.SWOTAnalysis ||
+            result.businessAnalysis,
+            result.businessReport
+        );
+
+        if (!swotProfile) {
+            console.warn(`[Scraper] Primary research did not include a parseable SWOT. Generating fallback SWOT from company and competitor data.`);
+            swotProfile = await generateFallbackSwotProfile({ result, competitorProfiles });
+        }
+
+        if (!swotProfile) {
+            swotProfile = buildDeterministicSwotProfile({
+                businessName: result.businessName,
+                description: result.description,
+                offers: result.offers,
+                valueProposition: result.valueProposition,
+                competitorProfiles
+            });
+        }
 
         res.json({
             ...result,

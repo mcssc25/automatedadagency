@@ -1151,7 +1151,7 @@ class AutopilotApp {
             const descriptionText = data.description || "";
             const coreOffersText = data.offers || "";
             const valueText = data.valueProposition ? `\n\nValue Proposition:\n${data.valueProposition}` : "";
-            const swotText = this.normalizeSwotText(data.swotProfile || data.swot || data.SWOT || data.businessAnalysis, data.businessReport);
+            const swotText = this.normalizeSwotText(this.getSwotValueFromScan(data), data.businessReport, data);
             
             document.getElementById("biz-name").value = data.businessName || document.getElementById("biz-name").value;
             document.getElementById("biz-desc").value = `${descriptionText}\n\nCore Offers:\n${coreOffersText}${valueText}`;
@@ -1291,19 +1291,61 @@ class AutopilotApp {
             .filter(Boolean);
     }
 
-    normalizeSwotText(value, fallbackReport = '') {
+    getSwotValueFromScan(data = {}) {
+        return data.swotProfile ||
+            data.swot_profile ||
+            data.swotAnalysis ||
+            data.swot_analysis ||
+            data.SWOT ||
+            data.SWOTAnalysis ||
+            data.businessAnalysis ||
+            (data.analysis && (data.analysis.swot || data.analysis.swotProfile)) ||
+            (data.report && (data.report.swot || data.report.swotProfile)) ||
+            "";
+    }
+
+    getFirstSwotField(source, keys = []) {
+        if (!source || typeof source !== 'object') return '';
+        for (const key of keys) {
+            if (source[key]) return source[key];
+        }
+        return '';
+    }
+
+    stringifySwotSection(body) {
+        if (!body) return '';
+        if (Array.isArray(body)) return body.map(item => String(item).trim()).filter(Boolean).join('; ');
+        if (typeof body === 'object') return Object.values(body).map(item => String(item).trim()).filter(Boolean).join('; ');
+        return String(body).trim();
+    }
+
+    normalizeSwotText(value, fallbackReport = '', context = {}) {
         if (typeof value === 'string' && value.trim()) return value.trim();
         if (value && typeof value === 'object') {
+            const nested = this.getFirstSwotField(value, [
+                'swotProfile',
+                'swot_profile',
+                'swotAnalysis',
+                'swot_analysis',
+                'SWOT',
+                'SWOTAnalysis',
+                'businessAnalysis'
+            ]);
+            if (nested && nested !== value) {
+                const normalizedNested = this.normalizeSwotText(nested, fallbackReport, context);
+                if (normalizedNested) return normalizedNested;
+            }
+
             const sections = [
-                ['Strengths', value.strengths || value.Strengths],
-                ['Weaknesses', value.weaknesses || value.Weaknesses],
-                ['Opportunities', value.opportunities || value.Opportunities],
-                ['Threats', value.threats || value.Threats]
+                ['Strengths', this.getFirstSwotField(value, ['strengths', 'Strengths', 'strength', 'Strength', 'advantages', 'competitiveAdvantages', 'pros'])],
+                ['Weaknesses', this.getFirstSwotField(value, ['weaknesses', 'Weaknesses', 'weakness', 'Weakness', 'gaps', 'limitations', 'cons'])],
+                ['Opportunities', this.getFirstSwotField(value, ['opportunities', 'Opportunities', 'opportunity', 'Opportunity', 'growthOpportunities', 'openings'])],
+                ['Threats', this.getFirstSwotField(value, ['threats', 'Threats', 'threat', 'Threat', 'risks', 'competitiveThreats'])]
             ].filter(([, body]) => body);
 
             if (sections.length) {
                 return sections.map(([label, body]) => {
-                    const text = Array.isArray(body) ? body.join('; ') : String(body);
+                    const text = this.stringifySwotSection(body);
                     return `${label}: ${text}`;
                 }).join('\n\n');
             }
@@ -1312,7 +1354,27 @@ class AutopilotApp {
         const report = String(fallbackReport || '').trim();
         const swotIndex = report.toLowerCase().indexOf('swot');
         if (swotIndex !== -1) return report.slice(swotIndex, swotIndex + 1600).trim();
-        return '';
+        return this.buildFallbackSwotText(context);
+    }
+
+    buildFallbackSwotText(context = {}) {
+        const businessName = context.businessName || document.getElementById("biz-name")?.value || "This business";
+        const description = String(context.description || '').trim();
+        const offers = String(context.offers || '').replace(/\n+/g, '; ').trim();
+        const valueProposition = String(context.valueProposition || '').trim();
+        const competitorProfiles = Array.isArray(context.competitorProfiles) ? context.competitorProfiles : [];
+        const competitorStrengths = competitorProfiles
+            .map(profile => `${profile.name || profile.domain}: ${profile.strengths || profile.summary || ''}`.trim())
+            .filter(text => text.length > 12)
+            .slice(0, 3)
+            .join(' | ');
+
+        return [
+            `Strengths: ${businessName} appears strongest around ${valueProposition || description || 'its core offer and market positioning'}. The scanned offers point to ${offers || 'a focused product/service mix'} that can guide ads, social posts, and client replies.`,
+            `Weaknesses: The public scan should be reviewed for proof depth, pricing clarity, comparison pages, demos, case studies, and trust signals. Any missing specifics can make campaigns less convincing when prospects compare alternatives.`,
+            `Opportunities: ${businessName} can turn the company profile, competitor gaps, and customer pain points into stronger landing-page copy, comparison content, segmented ads, and repeatable email/social angles.`,
+            `Threats: Competitors may have stronger brand recognition, broader feature pages, more social proof, or clearer category positioning. ${competitorStrengths ? `Notable competitor strengths found: ${competitorStrengths}.` : 'Keep monitoring competitor messaging and social channels so campaigns stay current.'}`
+        ].join('\n\n');
     }
 
     storeCompetitorProfiles(profiles = []) {

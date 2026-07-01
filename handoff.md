@@ -54,6 +54,18 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Fixed SWOT scan population fallback:
+  - Backend `normalizeSwotProfile()` now accepts snake_case, nested SWOT fields, singular labels, and alternate section names like `gaps`, `limitations`, `risks`, and `competitiveAdvantages`.
+  - `/api/scrape` now guarantees a `swotProfile`: if primary grounded research omits a parseable SWOT, it asks Gemini to create one from the verified company/competitor data, then falls back to a deterministic four-paragraph SWOT if needed.
+  - Frontend scan handling now uses the same broader SWOT extraction and can fill the textarea from varied response shapes or a local fallback instead of leaving the placeholder visible.
+- Local verification completed:
+  - `node --check server.js`
+  - `node --check app.js`
+  - `git diff --check`
+- Deployment status: pending for this entry.
+
+## Previous Update
+
 - Wired Gemini model routing and social media generation upgrades:
   - `queryGemini()` and `queryGeminiWithSearch()` now accept a model override and expose configured model names through `/api/app-config`.
   - Default text tasks stay on `GEMINI_DEFAULT_MODEL=gemini-2.5-flash`.
