@@ -1640,6 +1640,93 @@ body {
     height: 100%;
 }
 
+.selected-lead-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 10px;
+}
+
+.selected-lead-title-row h3 {
+    margin: 2px 0 0;
+    max-width: 680px;
+    font-size: 1rem;
+    line-height: 1.25;
+}
+
+.selected-lead-eyebrow {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.lead-stage-pill {
+    flex: 0 0 auto;
+    border: 1px solid rgba(0, 229, 255, 0.28);
+    border-radius: 999px;
+    color: var(--accent);
+    background: rgba(0, 229, 255, 0.08);
+    padding: 5px 9px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.selected-lead-meta,
+.selected-lead-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lead-meta-chip,
+.lead-detail-link {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    gap: 7px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text-secondary);
+    padding: 6px 9px;
+    font-size: 0.78rem;
+    line-height: 1.2;
+}
+
+.lead-meta-chip i,
+.lead-detail-link i {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+.lead-detail-link {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+.lead-detail-link:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.selected-lead-actions {
+    margin-top: 8px;
+}
+
+.lead-enrollment-note {
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
 .leads-list, .support-sessions-list {
     display: flex;
     flex-direction: column;

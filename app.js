@@ -3774,6 +3774,63 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             ${enrollmentLine}
         `;
 
+        const safeLeadUrl = (value) => {
+            try {
+                const url = new URL(String(value || '').trim());
+                return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+            } catch (error) {
+                return '';
+            }
+        };
+        const leadWebsiteUrl = safeLeadUrl(lead.website);
+        const leadSourceUrl = safeLeadUrl(lead.sourceUrl);
+        const displayLeadAddress = (() => {
+            const rawAddress = String(lead.address || '').trim();
+            if (!rawAddress) return '';
+            if (rawAddress.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(rawAddress);
+                    const cityStateZip = [
+                        parsed.city,
+                        [parsed.state, parsed.postal_code].filter(Boolean).join(' ')
+                    ].filter(Boolean).join(', ');
+                    return [parsed.street, cityStateZip, parsed.country]
+                        .map(part => String(part || '').trim())
+                        .filter(Boolean)
+                        .join(', ');
+                } catch (error) {
+                    return '';
+                }
+            }
+            return rawAddress;
+        })();
+        const leadMetaChips = [
+            lead.company ? `<span class="lead-meta-chip"><i class="fa-solid fa-building"></i>${this.escapeHtml(lead.company)}</span>` : '',
+            lead.email ? `<span class="lead-meta-chip"><i class="fa-solid fa-envelope"></i>${this.escapeHtml(lead.email)}</span>` : '',
+            lead.phone ? `<span class="lead-meta-chip"><i class="fa-solid fa-phone"></i>${this.escapeHtml(lead.phone)}</span>` : '',
+            displayLeadAddress ? `<span class="lead-meta-chip"><i class="fa-solid fa-location-dot"></i>${this.escapeHtml(displayLeadAddress)}</span>` : ''
+        ].filter(Boolean).join('');
+        const leadActionLinks = [
+            leadWebsiteUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(leadWebsiteUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-globe"></i>Website</a>` : '',
+            leadSourceUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(leadSourceUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-map-location-dot"></i>Maps Source</a>` : ''
+        ].filter(Boolean).join('');
+        const safeEnrollmentLine = lead.activeEnrollment
+            ? `<div class="lead-enrollment-note">Campaign ${this.escapeHtml(lead.activeEnrollment.campaignOrder)}: ${this.escapeHtml(lead.activeEnrollment.campaignName || 'Unknown')} &middot; Step ${this.escapeHtml(lead.activeEnrollment.currentStep)} &middot; ${this.escapeHtml(lead.activeEnrollment.status)}</div>`
+            : '';
+
+        this.dom.selectedLeadHeader.innerHTML = `
+            <div class="selected-lead-title-row">
+                <div>
+                    <span class="selected-lead-eyebrow">Outbound Negotiation Log</span>
+                    <h3>${this.escapeHtml(lead.name)}</h3>
+                </div>
+                ${lead.stage ? `<span class="lead-stage-pill">${this.escapeHtml(lead.stage)}</span>` : ''}
+            </div>
+            ${leadMetaChips ? `<div class="selected-lead-meta">${leadMetaChips}</div>` : ''}
+            ${leadActionLinks ? `<div class="selected-lead-actions">${leadActionLinks}</div>` : ''}
+            ${safeEnrollmentLine}
+        `;
+
         if (!lead.history || lead.history.length === 0) {
             this.dom.crmChatMessages.innerHTML = `<div class="empty-state"><p>No conversation logs found.</p></div>`;
             return;
