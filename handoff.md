@@ -58,7 +58,9 @@ Last updated: 2026-07-01
 - Search-grounded Gemini JSON calls request `responseMimeType: "application/json"` when supported, but retry without responseMimeType if Gemini rejects JSON mode with search grounding.
 - `parseModelJson()` retries after escaping literal control characters inside quoted JSON strings, and `parseModelJsonWithRepair()` can ask Gemini to repair malformed JSON while preserving content.
 - Local checks passed: `node --check server.js`, `node --check app.js`, `git diff --check`, and a Node parser smoke test for a literal newline inside `businessReport`.
-- Needs live deploy verification: `/api/scrape` should no longer fail with JSON parse errors for Step 1 onboarding scans.
+- Git commits pushed: `84c3d92` Request and repair onboarding JSON, `ad15851` Fallback JSON mode for grounded scans.
+- Live deployment completed on `/opt/ad-agency-autopilot`; latest backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T161157Z-json-mode-fallback`.
+- Live verification passed: production `/api/scrape` for `www.realestatecrmpro.com` returned `businessName: Real Estate CRM Pro`, description, 4 competitor profiles, SWOT, report, and 2 scanned pages.
 
 ## Previous Update
 
