@@ -54,6 +54,24 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Built the durable CRM lead pipeline automation engine.
+- Git commit pushed: `6c6aed4` Build CRM lead pipeline automation engine.
+- Added `campaign_enrollments` SQLite table plus `lastStepTime` on leads.
+- Campaign approval and bypass sending now create enrollment records and use the shared campaign-step sender.
+- Added backend worker endpoint: `POST /api/crm-pipeline/run`.
+- Added 5-minute backend interval that only acts when explicit automation toggles are enabled.
+- Added Autopilot Settings controls:
+  - Daily scrape search and enable toggle
+  - Auto-enroll Scraped leads into Campaign 1
+  - Auto-send due follow-up steps
+  - Run Pipeline Now
+- Inbound replies now move leads to `Two-Way Conversation`, pause active enrollments when auto-pause is on, and AI handoff moves leads to `Needs Human Action`.
+- Unsubscribes/DNC now move leads to `Quarantined` and pause enrollments.
+- Live deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T094123`.
+- Production verified: app healthy, new `/api/crm-state` automation fields present, live `/api/crm-pipeline/run` smoke test completed with `scraped/enrolled/sent/transitioned/skipped = 0` because automation toggles are off.
+
+## Previous Update
+
 - Improved the CRM campaign workflow so lead selection and campaign routing are visible.
 - Git commit pushed: `aac1c99` Clarify CRM campaign enrollment workflow.
 - Campaigns tab now includes a Campaign Enrollment Workflow panel showing:

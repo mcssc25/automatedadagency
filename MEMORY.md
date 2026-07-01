@@ -30,6 +30,9 @@ Last updated: 2026-07-01
 - Follow-up drip steps are still browser-side simulated behavior; production needs a backend scheduler/worker before Step 2/3 are real Mailgun sends.
 - CRM Campaigns now has a visible Campaign Enrollment Workflow panel showing current Scraped/Emailed/Hot Lead counts, Campaign 1/2/3 chain selections, launch rule, and tracking status.
 - Open/click/signup routing is not connected yet; only inbound replies are tracked through the Mailgun inbound webhook.
+- CRM now has a persistent `campaign_enrollments` ledger so campaign progress is separate from lead pipeline stage.
+- Backend pipeline automation exists behind explicit toggles: daily scrape, auto-enroll Scraped leads into Campaign 1, and auto-send due follow-up steps. Defaults are off.
+- Pipeline stages now include `Scraped`, `Emailed`, `Two-Way Conversation`, `Needs Human Action`, and `Quarantined`.
 
 ## Working Agreements
 
