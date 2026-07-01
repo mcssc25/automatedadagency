@@ -62,7 +62,13 @@ Last updated: 2026-07-01
   - `node --check server.js`
   - `node --check app.js`
   - `git diff --check`
-- Deployment status: pending for this entry.
+- Git commit pushed: `d1d1057` Guarantee onboarding SWOT population.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T174114Z-swot-guarantee`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public `/api/app-config` returns configured Gemini model routing.
+  - Public `app.js` contains `getSwotValueFromScan` and `buildFallbackSwotText`.
+  - Production `/api/scrape` for `www.realestatecrmpro.com` returned 5 competitors and a 2,091-character `swotProfile` containing Strengths, Weaknesses, Opportunities, and Threats.
 
 ## Previous Update
 
