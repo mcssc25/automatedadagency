@@ -412,6 +412,8 @@ class AutopilotApp {
 
         // Web scraping button
         this.dom.btnScanWebsite.addEventListener("click", () => this.handleWebsiteScan());
+        document.getElementById("biz-desc").addEventListener("input", (event) => this.autoGrowSetupTextarea(event.target));
+        this.dom.bizSwotInput.addEventListener("input", (event) => this.autoGrowSetupTextarea(event.target));
 
         // Target audience finder button
         this.dom.btnFindAudience.addEventListener("click", () => this.handleAudienceFind());
@@ -834,6 +836,7 @@ class AutopilotApp {
         document.getElementById("biz-desc").value = this.state.bizDesc;
         document.getElementById("biz-audience").value = this.state.bizAudience;
         this.dom.bizSwotInput.value = this.state.bizSwot || "";
+        this.resizeOnboardingResearchFields();
         document.getElementById("ad-budget").value = this.state.adBudget;
         this.dom.dealValueInput.value = this.state.dealValue || 1000;
         this.dom.conversionRateInput.value = this.state.conversionRate || 10;
@@ -1213,6 +1216,23 @@ class AutopilotApp {
         });
     }
 
+    autoGrowSetupTextarea(textarea) {
+        if (!textarea) return;
+        const minHeight = textarea.id === "biz-swot" ? 560 : 340;
+        const maxHeight = textarea.id === "biz-swot" ? 980 : 720;
+        textarea.style.height = "auto";
+        const nextHeight = Math.min(Math.max(textarea.scrollHeight + 4, minHeight), maxHeight);
+        textarea.style.height = `${nextHeight}px`;
+        textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+    }
+
+    resizeOnboardingResearchFields() {
+        requestAnimationFrame(() => {
+            this.autoGrowSetupTextarea(document.getElementById("biz-desc"));
+            this.autoGrowSetupTextarea(this.dom.bizSwotInput);
+        });
+    }
+
     openLongTextModal(sourceId, title) {
         const source = document.getElementById(sourceId);
         if (!source || !this.dom.longTextModal) return;
@@ -1235,6 +1255,7 @@ class AutopilotApp {
         if (!source) return this.closeLongTextModal();
 
         source.value = this.dom.longTextModalInput.value;
+        this.autoGrowSetupTextarea(source);
         if (this.longTextModalSourceId === "biz-desc") {
             this.state.bizDesc = source.value;
         } else if (this.longTextModalSourceId === "biz-swot") {
@@ -1280,6 +1301,7 @@ class AutopilotApp {
             document.getElementById("biz-name").value = data.businessName || document.getElementById("biz-name").value;
             document.getElementById("biz-desc").value = `${descriptionText}\n\nCore Offers:\n${coreOffersText}${valueText}`;
             this.dom.bizSwotInput.value = swotText;
+            this.resizeOnboardingResearchFields();
             this.state.bizSwot = swotText;
             this.state.businessReport = data.businessReport || "";
             this.state.companySocialLinks = data.companySocialLinks || {};

@@ -54,6 +54,18 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Made onboarding research text fields actually readable:
+  - Product/Core Offer textarea minimum height is now 340px.
+  - SWOT textarea minimum height is now 560px.
+  - Both fields auto-grow after saved state loads, after website scans fill them, after modal saves, and while the user types.
+  - Internal textarea scrollbars are hidden until the field reaches a generous max height.
+- Local verification completed:
+  - `node --check app.js`
+  - `git diff --check`
+- Deployment status: pending for this entry.
+
+## Previous Update
+
 - Improved onboarding scan UX:
   - Added a staged progress panel under Business Identity while `/api/scrape` runs: reading site, researching business, finding competitors, finding socials, developing SWOT, finalizing.
   - Enlarged the Product & Audience and SWOT textareas for finished research.
