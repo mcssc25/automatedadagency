@@ -11,6 +11,7 @@ Last updated: 2026-07-01
 - Production Ad Agency Autopilot runs on the ClaimPilot/shared VPS at `178.156.178.56`; only touch `/opt/ad-agency-autopilot` there, never the separate ClaimPilot project.
 - VPS runtime is separate from ClaimPilot and uses Docker Compose.
 - Production deploys are currently file-copy based on the VPS, not `git pull` based.
+- Live deploy method: SSH/SCP as `root@178.156.178.56` using `$HOME/.ssh/id_ed25519`; backup changed runtime files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`; copy only this app's files; run `docker compose up -d --build ad-agency-autopilot`; verify public URL and `docker compose ps`.
 - Cloudflare Tunnel routes the app hostname to the VPS. Do not alter `fluffysbait.com`.
 - Mailgun outreach sending domain: `outreach.realestatecrmpro.com`.
 - Mailgun account/domain should remain separate from the Real Estate CRM Pro product Mailgun account to protect product deliverability.

@@ -54,6 +54,14 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Confirmed the previous sales-link settings layer is live in production:
+  - Public HTML contains `settings-booking-link`, `settings-sales-page-url`, `settings-demo-video-url`, `settings-youtube-page-url`, and `Sales Links`.
+  - Public `/api/crm-state` returns `bookingLink`, `salesPageUrl`, `demoVideoUrl`, and `youtubePageUrl` under `crmAutopilot`.
+  - Live `/opt/ad-agency-autopilot/server.js` contains placeholder replacement for `[Booking Link]`, `[Demo Link]`, `[YouTube Link]`, and related sales-link settings.
+- Updated `MEMORY.md` with the exact correct live deploy target and method: `root@178.156.178.56`, `/opt/ad-agency-autopilot`, backup first, copy only this project, rebuild only `ad-agency-autopilot`, verify public URL and `docker compose ps`.
+
+## Previous Update
+
 - Deep onboarding update was deployed live to the correct ClaimPilot/shared VPS path: `/opt/ad-agency-autopilot`.
 - Deployment backup of replaced runtime files: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T155254Z`.
 - Rebuilt/restarted only the `ad-agency-autopilot` Docker Compose service.
