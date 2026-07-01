@@ -25,7 +25,7 @@ Last updated: 2026-07-01
 - Outbound email sending blocks DNC recipients.
 - DNC removal is disabled unless `ALLOW_DNC_REMOVAL=true` is intentionally set for admin recovery.
 - Inbound Mailgun replies post to `/api/webhooks/inbound-email` and should appear in the CRM conversation after polling refresh.
-- Lead scraping now prefers the `gosom/google-maps-scraper` sidecar via `LEAD_SCRAPER_URL=http://lead-scraper:8080`, falls back to Gemini search only if the sidecar fails, never creates fake contacts, and imports only leads with both name and valid email.
+- Lead scraping prefers the `gosom/google-maps-scraper` sidecar via `LEAD_SCRAPER_URL=http://lead-scraper:8080`; when Maps returns a website but no email, the app now directly crawls the business homepage/contact-style pages for public emails before falling back to Gemini. It never creates fake contacts and imports only leads with both name and valid email.
 - Lead records now support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
 - The Gemini API key UI is a read-only server-config status field, not a password input, to avoid Chrome password-save prompts.
 - Sales asset settings persist in CRM settings: booking/calendar link, sales page URL, default demo YouTube video, and YouTube page/channel.

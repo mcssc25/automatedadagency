@@ -54,26 +54,47 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Fixed the lead scrape failure where Maps found a business website but the sidecar returned an empty `emails` column:
+  - `server.js` now keeps the `gosom/google-maps-scraper` sidecar for Maps discovery.
+  - If a Maps CSV row has a website but no usable email, the app directly fetches the business homepage and up to a few contact/about/team-style internal pages.
+  - The fallback extracts public emails from raw HTML, `mailto:` links, and common email metadata before Gemini fallback is considered.
+  - Obvious placeholder/assets emails are filtered; imports still require both a lead name and valid email.
+  - Maps `complete_address` JSON blobs are formatted instead of stored raw when possible.
+  - `app.js` now surfaces backend scrape error details when available instead of collapsing to the generic duplicate `Lead scraping failed` message.
+  - `index.html` now loads `app.js?v=20260701-lead-enrichment`.
+- Local verification completed:
+  - `node --check app.js`
+  - `node --check server.js`
+  - `git diff --check`
+- Local Docker verification completed:
+  - Rebuilt `ad-agency-autopilot` with `docker compose up -d --build ad-agency-autopilot`.
+  - Local `http://127.0.0.1:3100/api/app-config` returned `geminiConfigured: true`.
+  - Local `/api/scrape-leads` for `kelly davis realtor in gulf shore alabama` inserted `info@bigbeachal.com` on first run.
+  - Re-running the same local scrape returned `candidateCount: 1` and `skipped.duplicate: 1`; logs showed `[Lead Enrichment] Found 1 public email(s) on https://bigbeachal.com/`.
+- Git commits pushed:
+  - `54c4ce8` Enrich scraped leads from business websites.
+  - `72e558e` Bump lead enrichment asset version.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T193034Z-lead-enrichment`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public `/api/app-config` returned `geminiConfigured: true`.
+  - Public HTML loads `app.js?v=20260701-lead-enrichment`.
+  - Live `server.js` contains the website enrichment fallback.
+  - Production `/api/scrape-leads` for `kelly davis realtor in gulf shore alabama` inserted `Dave and Kelly Davis - Big Beach AL Team` with `info@bigbeachal.com` as a `Scraped` lead.
+  - Public `/api/crm-state` showed stage counts `Hot Lead: 1` and `Scraped: 1` after the smoke test.
+
+## Previous Update
+
 - Added optional human strategy inputs to onboarding:
   - New optional fields inside the SWOT/strategy step: agency goal, core message, and extra details not captured by research.
   - Fields auto-save to browser state and are included in normal onboarding form save.
   - `getStrategicContext()` now prepends these user-provided notes before SWOT, business report, and competitor intelligence.
   - Generated email campaigns now send `strategicContext` to `/api/generate-campaign`, and the backend includes it in the campaign copywriting prompt.
   - Asset version query changed to `20260701-strategy-inputs` for `index.css` and `app.js`.
-- Local verification completed:
-  - `node --check app.js`
-  - `node --check server.js`
-  - `git diff --check`
 - Git commit pushed: `e5cf391` Add optional onboarding strategy inputs.
 - Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T185147Z-optional-strategy-inputs`.
-- Live verification passed:
-  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
-  - Public HTML contains `Optional Strategy Inputs`, `agency-goal`, `core-message`, and `extra-details`.
-  - Public HTML loads `app.js?v=20260701-strategy-inputs`.
-  - Public `app.js` includes optional goal context and sends `strategicContext` to `/api/generate-campaign`.
-  - Live `server.js` includes the additional strategic context in the campaign prompt.
 
-## Previous Update
+## Earlier Update
 
 - Forced onboarding long-field sizing for browsers still seeing short textareas:
   - Added cache-busting query strings to `index.css` and `app.js`.
