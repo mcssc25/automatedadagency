@@ -1220,10 +1220,11 @@ class AutopilotApp {
         if (!textarea) return;
         const minHeight = textarea.id === "biz-swot" ? 560 : 340;
         const maxHeight = textarea.id === "biz-swot" ? 980 : 720;
-        textarea.style.height = "auto";
+        textarea.style.setProperty("min-height", `${minHeight}px`, "important");
+        textarea.style.setProperty("height", "auto", "important");
         const nextHeight = Math.min(Math.max(textarea.scrollHeight + 4, minHeight), maxHeight);
-        textarea.style.height = `${nextHeight}px`;
-        textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+        textarea.style.setProperty("height", `${nextHeight}px`, "important");
+        textarea.style.setProperty("overflow-y", textarea.scrollHeight > maxHeight ? "auto" : "hidden", "important");
     }
 
     resizeOnboardingResearchFields() {

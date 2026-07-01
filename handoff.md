@@ -54,6 +54,17 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Forced onboarding long-field sizing for browsers still seeing short textareas:
+  - Added cache-busting query strings to `index.css` and `app.js`.
+  - Added inline `min-height`/`height` on `biz-desc` and `biz-swot` as a hard fallback.
+  - Updated auto-grow JS to set `min-height`, `height`, and `overflow-y` with important priority.
+- Local verification completed:
+  - `node --check app.js`
+  - `git diff --check`
+- Deployment status: pending for this entry.
+
+## Previous Update
+
 - Made onboarding research text fields actually readable:
   - Product/Core Offer textarea minimum height is now 340px.
   - SWOT textarea minimum height is now 560px.
