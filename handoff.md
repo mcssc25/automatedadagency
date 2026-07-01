@@ -59,6 +59,7 @@ Last updated: 2026-07-01
   - New `/api/competitor-profile` endpoint researches one manually added competitor for summary, strengths, weaknesses, positioning, and social links.
   - Manual Add now stores the domain immediately, shows a researching state, and enriches the competitor profile in the background.
   - SWOT population now accepts `swotProfile`, `swot`, `SWOT`, `businessAnalysis`, object-shaped SWOT, or a SWOT section inside `businessReport`.
+- Gemini API calls now retry transient 429/5xx/network failures with backoff so onboarding does not fail on temporary Gemini 503s during JSON repair or grounded research.
 - Needs live deploy verification: Step 1 scan should populate SWOT and at least 5 competitors when possible; manual competitor add should enrich the card.
 
 ## Previous Update

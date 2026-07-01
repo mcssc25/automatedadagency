@@ -134,6 +134,37 @@ function normalizeCrmState(input = {}) {
     return state;
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function shouldRetryGeminiError(error) {
+    const status = error.response && error.response.status;
+    return ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code) || [429, 500, 502, 503, 504].includes(status);
+}
+
+async function postGeminiWithRetry(url, payload, label) {
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            return await axios.post(url, payload, {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 120000
+            });
+        } catch (error) {
+            lastError = error;
+            if (attempt < 3 && shouldRetryGeminiError(error)) {
+                const status = error.response && error.response.status;
+                console.warn(`[${label}] Gemini request failed (${status || error.code || error.message}); retrying attempt ${attempt + 1}/3.`);
+                await sleep(1000 * attempt);
+                continue;
+            }
+            throw error;
+        }
+    }
+    throw lastError;
+}
+
 function attachEnrollmentSummaries(leads = []) {
     return leads.map(lead => ({
         ...lead,
@@ -307,15 +338,13 @@ async function queryGemini(promptText) {
     }
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
-    const response = await axios.post(url, {
+    const response = await postGeminiWithRetry(url, {
         contents: [{
             parts: [{
                 text: promptText
             }]
         }]
-    }, {
-        headers: { 'Content-Type': 'application/json' }
-    });
+    }, 'Gemini');
 
     if (response.data && response.data.candidates && response.data.candidates[0].content) {
         return response.data.candidates[0].content.parts[0].text;
@@ -350,16 +379,12 @@ async function queryGeminiWithSearch(promptText, options = {}) {
 
     let response;
     try {
-        response = await axios.post(url, payload, {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        response = await postGeminiWithRetry(url, payload, 'Gemini Search');
     } catch (error) {
         if (options.json === true && error.response && error.response.status === 400) {
             console.warn('[Gemini Search] JSON response mode rejected; retrying grounded request without responseMimeType.');
             delete payload.generationConfig;
-            response = await axios.post(url, payload, {
-                headers: { 'Content-Type': 'application/json' }
-            });
+            response = await postGeminiWithRetry(url, payload, 'Gemini Search');
         } else {
             throw error;
         }
