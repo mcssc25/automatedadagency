@@ -28,6 +28,8 @@ Last updated: 2026-07-01
 - The Gemini API key field is masked but marked with password-manager ignore hints so Chrome does not save campaign text as credentials.
 - Campaign approval targets only leads with stage `Scraped`, sends Step 1 immediately through Mailgun, and stores the campaign id/step on those leads.
 - Follow-up drip steps are still browser-side simulated behavior; production needs a backend scheduler/worker before Step 2/3 are real Mailgun sends.
+- CRM Campaigns now has a visible Campaign Enrollment Workflow panel showing current Scraped/Emailed/Hot Lead counts, Campaign 1/2/3 chain selections, launch rule, and tracking status.
+- Open/click/signup routing is not connected yet; only inbound replies are tracked through the Mailgun inbound webhook.
 
 ## Working Agreements
 

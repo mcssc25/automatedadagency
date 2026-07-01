@@ -54,6 +54,21 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Improved the CRM campaign workflow so lead selection and campaign routing are visible.
+- Git commit pushed: `aac1c99` Clarify CRM campaign enrollment workflow.
+- Campaigns tab now includes a Campaign Enrollment Workflow panel showing:
+  - current Scraped audience count for the next Step 1 send
+  - Emailed and Hot Lead counts
+  - configured Campaign 1, Campaign 2, and Campaign 3
+  - manual/bypass launch rule
+  - reply tracking vs missing open/click/signup tracking
+- Autopilot Settings now supports a third follow-up campaign selector.
+- The old wording that implied real scraped leads auto-enroll automatically was changed; real scraped leads remain `Scraped` until a campaign is approved.
+- Browser-side simulation can now transition through Campaign 1 -> 2 -> 3, but real Mailgun Step 2/3 scheduling still needs a backend worker.
+- Production verified: live HTML contains the workflow UI, `/api/crm-state` includes `leadStageCounts` and `thirdCampaignId`, and containers are healthy.
+
+## Previous Update
+
 - Fixed campaign review ambiguity.
 - Git commit pushed: `993f59f` Clarify campaign launch targets and CTA preview.
 - CTA links entered in Campaign Builder are saved as `campaign.videoAsset`; the verification queue now previews that real link instead of leaving `[CTA Link]` visible when a CTA exists.
@@ -63,7 +78,7 @@ Last updated: 2026-07-01
 - Production currently has one lead total, but zero `Scraped` leads; the existing lead is stage `Hot Lead`, so the pending campaign should not email it.
 - Important gap: Step 1 is the real Mailgun send. Step 2/3 are still only browser-side simulated drip behavior until a backend scheduler/worker is added.
 
-## Previous Update
+## Password Prompt Update
 
 - Fixed Chrome password-save prompts caused by the non-login Gemini API key field being interpreted as a credential form.
 - The API key input now uses `autocomplete="new-password"` plus password-manager ignore hints, and its visibility toggle is explicitly a button.
