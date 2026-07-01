@@ -60,8 +60,9 @@ Last updated: 2026-07-01
 
 ## Known Working Tree Item
 
-- `db.js` currently has an uncommitted change adding lead metadata fields: `address`, `sourceUrl`, and `discoveryQuery`.
-- This docs update did not create or commit that code change. Review it before deciding whether to commit, deploy, or discard it.
+- There is an uncommitted lead-scraper integration in progress across `.dockerignore`, `docker-compose.yml`, `server.js`, `db.js`, and `app.js`.
+- The diff appears to add a `gosom/google-maps-scraper` service, `LEAD_SCRAPER_*` app env vars, lead metadata fields (`address`, `sourceUrl`, `discoveryQuery`), scraper CSV/JSON parsing, and CRM UI display of source details.
+- The memory/handoff documentation update did not create or commit those code/config changes. Review them before deciding whether to commit, deploy, or discard them.
 
 ## Verification
 
@@ -74,7 +75,7 @@ Last updated: 2026-07-01
 
 ## Next Steps
 
-- Review the separate `db.js` working-tree change and decide whether it belongs in the next code update.
+- Review the separate lead-scraper working-tree change and decide whether it belongs in the next code update.
 - Continue database/scraper hardening as needed:
   - Add automated tests for duplicate lead insertion.
   - Add tests for unsubscribe/DNC permanence.
