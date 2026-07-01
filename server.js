@@ -184,7 +184,15 @@ function attachEnrollmentSummaries(leads = []) {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
-app.use(express.static(__dirname)); // Serve the frontend from Express
+app.use(express.static(__dirname, {
+    setHeaders: (res, filePath) => {
+        if (/\.(html|js|css)$/i.test(filePath)) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        }
+    }
+})); // Serve the frontend from Express
 
 app.get('/api/app-config', (req, res) => {
     res.json({

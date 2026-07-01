@@ -58,8 +58,10 @@ Last updated: 2026-07-01
   - Added cache-busting query strings to `index.css` and `app.js`.
   - Added inline `min-height`/`height` on `biz-desc` and `biz-swot` as a hard fallback.
   - Updated auto-grow JS to set `min-height`, `height`, and `overflow-y` with important priority.
+  - Express now sends no-cache headers for HTML, JS, and CSS files so future UI changes do not get stuck behind static caching.
 - Local verification completed:
   - `node --check app.js`
+  - `node --check server.js`
   - `git diff --check`
 - Deployment status: pending for this entry.
 
