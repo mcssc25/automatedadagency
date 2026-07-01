@@ -69,7 +69,12 @@ Last updated: 2026-07-01
   - Local Docker rebuild with `docker compose up -d --build ad-agency-autopilot`.
   - Local `/api/generate-image` returned `{"success":true,"mediaUrl":"/downloads/gen_1782942337507_964320.jpg","model":"gemini-3.1-flash-lite-image"}` for a test prompt.
   - Local HTML contains `app.js?v=20260701-generated-draft-images` and the updated generated-image autopilot copy.
-- Not yet deployed live in this pass.
+- Git commit pushed: `1e8591d` Attach generated images to draft posts.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T214652Z-generated-draft-images`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public HTML contains `app.js?v=20260701-generated-draft-images` and the updated generated-image autopilot copy.
+  - Public `/api/generate-image` returned `{"success":true,"mediaUrl":"/downloads/gen_1782942450413_845546.jpg","model":"gemini-3.1-flash-lite-image"}` for a test prompt.
 
 ## Previous Update
 
