@@ -281,6 +281,252 @@ async function queryGeminiWithSearch(promptText) {
     }
 }
 
+function isLikelyEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim().toLowerCase());
+}
+
+function normalizeLeadCandidate(lead = {}, discoveryQuery = '', defaultSource = '') {
+    const rawEmails = Array.isArray(lead.emails)
+        ? lead.emails
+        : String(lead.email || lead.emails || '')
+            .split(/[,\s;|]+/)
+            .filter(Boolean);
+
+    const emails = [...new Set(rawEmails
+        .map(email => String(email || '').trim().toLowerCase())
+        .filter(isLikelyEmail))];
+
+    const name = String(lead.name || lead.title || lead.businessName || lead.company || '').trim();
+    const company = String(lead.company || lead.title || lead.businessName || name || 'Independent').trim();
+    const phone = String(lead.phone || lead.telephone || '').trim();
+    const website = String(lead.website || lead.web_site || lead.url || '').trim();
+    const address = String(lead.address || lead.complete_address || lead.formattedAddress || '').trim();
+    const sourceUrl = String(lead.sourceUrl || lead.source_url || lead.link || website || defaultSource || '').trim();
+
+    return emails.map(email => ({
+        name,
+        company,
+        email,
+        phone,
+        website,
+        address,
+        sourceUrl,
+        discoveryQuery
+    }));
+}
+
+function parseCsvRows(csvText) {
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < csvText.length; i++) {
+        const ch = csvText[i];
+        const next = csvText[i + 1];
+
+        if (ch === '"') {
+            if (inQuotes && next === '"') {
+                field += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (ch === ',' && !inQuotes) {
+            row.push(field);
+            field = '';
+        } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+            if (ch === '\r' && next === '\n') i++;
+            row.push(field);
+            if (row.some(value => value !== '')) rows.push(row);
+            row = [];
+            field = '';
+        } else {
+            field += ch;
+        }
+    }
+
+    if (field || row.length) {
+        row.push(field);
+        if (row.some(value => value !== '')) rows.push(row);
+    }
+
+    if (rows.length < 2) return [];
+
+    const headers = rows[0].map(header => String(header || '').trim().toLowerCase());
+    return rows.slice(1).map(values => {
+        const obj = {};
+        headers.forEach((header, index) => {
+            obj[header] = values[index] || '';
+        });
+        return obj;
+    });
+}
+
+function parseEmailListFromCsvValue(value) {
+    const raw = String(value || '');
+    const matches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+    return [...new Set(matches.map(email => email.toLowerCase()))];
+}
+
+function normalizeMapsCsvRow(row, discoveryQuery) {
+    const pick = (...keys) => {
+        for (const key of keys) {
+            if (row[key] !== undefined && String(row[key]).trim()) return String(row[key]).trim();
+        }
+        return '';
+    };
+
+    const emails = parseEmailListFromCsvValue(pick('emails', 'email'));
+
+    return normalizeLeadCandidate({
+        name: pick('title', 'name', 'business name', 'business_name'),
+        company: pick('title', 'name', 'business name', 'business_name'),
+        emails,
+        phone: pick('phone', 'telephone'),
+        website: pick('website', 'web_site', 'web site'),
+        address: pick('address', 'complete_address', 'complete address'),
+        sourceUrl: pick('link', 'google maps link', 'source_url')
+    }, discoveryQuery, pick('link'));
+}
+
+async function scrapeLeadCandidatesWithMapsSidecar(niche, count) {
+    const baseUrl = (process.env.LEAD_SCRAPER_URL || '').replace(/\/+$/, '');
+    if (!baseUrl) {
+        throw new Error('LEAD_SCRAPER_URL is not configured.');
+    }
+
+    const depth = Math.min(Math.max(parseInt(process.env.LEAD_SCRAPER_DEPTH, 10) || 1, 1), 10);
+    const maxTime = Math.min(Math.max(parseInt(process.env.LEAD_SCRAPER_MAX_TIME_SECONDS, 10) || 600, 180), 1800);
+    const pollMs = Math.min(Math.max(parseInt(process.env.LEAD_SCRAPER_POLL_MS, 10) || 5000, 1000), 15000);
+    const maxPolls = Math.ceil((maxTime * 1000) / pollMs) + 6;
+
+    const createRes = await axios.post(`${baseUrl}/api/v1/jobs`, {
+        name: `CRM Lead Search: ${niche}`,
+        keywords: [niche],
+        lang: 'en',
+        zoom: 15,
+        depth,
+        email: true,
+        max_time: maxTime
+    }, { timeout: 15000 });
+
+    const jobId = createRes.data && createRes.data.id;
+    if (!jobId) throw new Error('Lead scraper did not return a job id.');
+
+    let job = null;
+    for (let attempt = 0; attempt < maxPolls; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollMs));
+        const jobRes = await axios.get(`${baseUrl}/api/v1/jobs/${jobId}`, { timeout: 15000 });
+        job = jobRes.data;
+
+        const status = job.status || job.Status;
+        if (status === 'ok') break;
+        if (status === 'failed') {
+            throw new Error(`Maps scraper job failed: ${job.error || job.Error || 'unknown error'}`);
+        }
+    }
+
+    const finalStatus = job && (job.status || job.Status);
+    if (finalStatus !== 'ok') {
+        throw new Error('Maps scraper timed out before completing.');
+    }
+
+    const csvRes = await axios.get(`${baseUrl}/api/v1/jobs/${jobId}/download`, {
+        timeout: 30000,
+        responseType: 'text',
+        transformResponse: [data => data]
+    });
+
+    const candidates = parseCsvRows(csvRes.data)
+        .flatMap(row => normalizeMapsCsvRow(row, niche));
+
+    return candidates.slice(0, count);
+}
+
+async function scrapeLeadCandidatesWithGemini(niche, count) {
+    const prompt = `Search Google for businesses and decision-makers matching this exact target query: "${niche}".
+Do not reinterpret the target as real estate unless the query itself asks for real estate agents, realtors, brokerages, or a related real estate niche.
+Find up to ${count} real contacts. Prefer owner, founder, manager, principal, agent, partner, or office contact records that are publicly listed on the business website, directory profile, or professional page.
+
+For each contact, extract:
+1. Contact or business name
+2. Company/organization name
+3. Direct or public business email address (must be publicly listed. Do not fabricate!)
+4. Direct or office phone number
+5. Website, directory profile, or source page URL
+6. Business address if publicly available
+
+You MUST return a JSON object with this exact structure:
+{
+  "leads": [
+    {
+      "name": "Sarah Smith",
+      "company": "Example Company",
+      "email": "sarah.smith@example.com",
+      "phone": "(305) 555-1234",
+      "website": "https://www.example.com/sarah-smith",
+      "address": "123 Main St, Miami, FL",
+      "sourceUrl": "https://www.example.com/sarah-smith"
+    }
+  ]
+}
+Return ONLY valid JSON. No markdown blocks, no formatting.`;
+
+    const rawResponse = await queryGeminiWithSearch(prompt);
+    const cleaned = rawResponse.replace(/```json|```/g, "").trim();
+    const data = JSON.parse(cleaned);
+    return (data.leads || []).flatMap(lead => normalizeLeadCandidate(lead, niche));
+}
+
+function insertLeadCandidates(candidates, discoveryQuery) {
+    const insertedLeads = [];
+    const skipped = { dnc: 0, duplicate: 0, invalid: 0 };
+
+    for (const lead of candidates) {
+        if (!lead.name || !isLikelyEmail(lead.email)) {
+            skipped.invalid++;
+            continue;
+        }
+
+        if (db.isEmailDnc(lead.email)) {
+            skipped.dnc++;
+            console.log(`[Scraper] Skipping DNC email: ${lead.email}`);
+            continue;
+        }
+
+        if (db.getLeadByEmail(lead.email)) {
+            skipped.duplicate++;
+            console.log(`[Scraper] Skipping duplicate lead email: ${lead.email}`);
+            continue;
+        }
+
+        const leadRecord = {
+            name: lead.name,
+            company: lead.company || lead.name || 'Independent',
+            email: lead.email,
+            phone: lead.phone || '',
+            website: lead.website || '',
+            address: lead.address || '',
+            sourceUrl: lead.sourceUrl || lead.website || '',
+            discoveryQuery,
+            stage: 'Scraped',
+            history: []
+        };
+
+        const leadId = db.insertLead(leadRecord);
+
+        if (leadId) {
+            insertedLeads.push({
+                id: leadId,
+                ...leadRecord
+            });
+        }
+    }
+
+    return { insertedLeads, skipped };
+}
+
 // 1. Web Scraper & Profile Summarizer Endpoint
 app.post('/api/scrape', async (req, res) => {
     let { url } = req.body;
@@ -1350,95 +1596,45 @@ app.post('/api/scrape-leads', async (req, res) => {
         return res.status(400).json({ error: 'Target city and niche is required.' });
     }
 
-    console.log(`[Scraper] Scraping up to ${count} real contacts for: "${niche}" using search grounding...`);
-    
-    const prompt = `Search Google for businesses and decision-makers matching this exact target query: "${niche}".
-Do not reinterpret the target as real estate unless the query itself asks for real estate agents, realtors, brokerages, or a related real estate niche.
-Find up to ${count} real contacts. Prefer owner, founder, manager, principal, agent, partner, or office contact records that are publicly listed on the business website, directory profile, or professional page.
+    console.log(`[Scraper] Looking for up to ${count} public contacts for: "${niche}"...`);
 
-For each contact, extract:
-1. Contact or business name
-2. Company/organization name
-3. Direct or public business email address (must be publicly listed. Do not fabricate!)
-4. Direct or office phone number
-5. Website, directory profile, or source page URL
+    let candidates = [];
+    let source = 'maps-sidecar';
+    const errors = [];
 
-You MUST return a JSON object with this exact structure:
-{
-  "leads": [
-    {
-      "name": "Sarah Smith",
-      "company": "Example Company",
-      "email": "sarah.smith@example.com",
-      "phone": "(305) 555-1234",
-      "website": "https://www.example.com/sarah-smith"
-    }
-  ]
-}
-Return ONLY valid JSON. No markdown blocks, no formatting.`;
-    
     try {
-        const rawResponse = await queryGeminiWithSearch(prompt);
-        const cleaned = rawResponse.replace(/```json|```/g, "").trim();
-        const data = JSON.parse(cleaned);
-        
-        const leads = data.leads || [];
-        const insertedLeads = [];
-        const skipped = { dnc: 0, duplicate: 0, invalid: 0 };
-        
-        for (const lead of leads) {
-            const email = String(lead.email || '').trim().toLowerCase();
-            const isLikelyEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-            if (!isLikelyEmail || !lead.name) {
-                skipped.invalid++;
-                continue;
-            }
-            
-            // Check DNC first
-            if (db.isEmailDnc(email)) {
-                skipped.dnc++;
-                console.log(`[Scraper] Skipping DNC email: ${email}`);
-                continue;
-            }
-
-            if (db.getLeadByEmail(email)) {
-                skipped.duplicate++;
-                console.log(`[Scraper] Skipping duplicate lead email: ${email}`);
-                continue;
-            }
-            
-            const leadId = db.insertLead({
-                name: lead.name,
-                company: lead.company || 'Independent',
-                email,
-                phone: lead.phone || '',
-                website: lead.website || '',
-                stage: 'Scraped',
-                history: []
-            });
-            
-            if (leadId) {
-                insertedLeads.push({
-                    id: leadId,
-                    name: lead.name,
-                    company: lead.company || 'Independent',
-                    email,
-                    phone: lead.phone || '',
-                    website: lead.website || '',
-                    stage: 'Scraped',
-                    history: []
-                });
-            }
-        }
-        
-        res.json({ leads: insertedLeads, skipped });
+        candidates = await scrapeLeadCandidatesWithMapsSidecar(niche, count);
     } catch (error) {
-        console.error(`[Scrape Leads Error]`, error.message);
-        res.status(502).json({
+        errors.push(`maps-sidecar: ${error.message}`);
+        console.warn(`[Maps Scraper Error] ${error.message}`);
+    }
+
+    if (candidates.length === 0) {
+        try {
+            source = 'gemini-search';
+            candidates = await scrapeLeadCandidatesWithGemini(niche, count);
+        } catch (error) {
+            errors.push(`gemini-search: ${error.message}`);
+            console.error(`[Gemini Lead Search Error] ${error.message}`);
+        }
+    }
+
+    if (candidates.length === 0) {
+        return res.status(502).json({
             error: 'Lead scraping failed before any leads were inserted.',
-            details: error.message
+            details: errors.join(' | ')
         });
     }
+
+    const { insertedLeads, skipped } = insertLeadCandidates(candidates.slice(0, count), niche);
+
+    res.json({
+        leads: insertedLeads,
+        skipped,
+        source,
+        candidateCount: candidates.length,
+        warnings: errors
+    });
 });
 
 // Approve and Launch Campaign Endpoint

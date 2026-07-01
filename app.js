@@ -3118,9 +3118,17 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             this.dom.crmChatMessages.innerHTML = `<div class="empty-state"><p>Select a lead to see conversation logs.</p></div>`;
             return;
         }
+        const details = [lead.company, lead.email, lead.phone, lead.website, lead.address]
+            .filter(Boolean)
+            .join(' | ');
+        const sourceLine = lead.sourceUrl
+            ? `<p class="text-muted" style="font-size:0.75rem;">Source: ${lead.sourceUrl}</p>`
+            : '';
+
         this.dom.selectedLeadHeader.innerHTML = `
             <h3>Outbound Negotiation Log: ${lead.name}</h3>
-            <p class="text-muted">${lead.company} · ${lead.email} · ${lead.phone}</p>
+            <p class="text-muted">${details}</p>
+            ${sourceLine}
         `;
 
         if (!lead.history || lead.history.length === 0) {
@@ -3180,12 +3188,13 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                 this.state.leadsPage = 1;
                 await this.fetchLeadsFromServer();
                 
-                let logMsg = `Scraped and loaded ${data.leads.length} leads for "${niche}" into pipeline.`;
+                let logMsg = `Scraped and loaded ${data.leads.length} leads for "${niche}" into pipeline via ${data.source || 'lead scraper'}.`;
                 this.appendConsoleLine('agent-sales', logMsg);
                 
                 alert(`Successfully scraped and added ${data.leads.length} new leads!`);
             } else {
-                alert("No leads found for that query.");
+                const skipped = data.skipped ? ` Skipped: ${JSON.stringify(data.skipped)}` : '';
+                alert(`No new name + email leads found for that query.${skipped}`);
             }
         } catch (error) {
             console.error("CRM Lead Scrape failed:", error);

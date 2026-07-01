@@ -1,14 +1,30 @@
 services:
+  lead-scraper:
+    image: gosom/google-maps-scraper:latest
+    container_name: ad-agency-lead-scraper
+    restart: unless-stopped
+    command: ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - lead-scraper-data:/gmapsdata
+      - gmaps-playwright-cache:/opt
+
   ad-agency-autopilot:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: ad-agency-autopilot
     restart: unless-stopped
+    depends_on:
+      - lead-scraper
     env_file:
       - .env
     environment:
       PORT: "3000"
+      LEAD_SCRAPER_URL: "http://lead-scraper:8080"
+      LEAD_SCRAPER_DEPTH: "1"
+      LEAD_SCRAPER_MAX_TIME_SECONDS: "600"
     ports:
       - "127.0.0.1:3100:3000"
     volumes:
@@ -20,3 +36,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+volumes:
+  lead-scraper-data:
+  gmaps-playwright-cache:

@@ -10,3 +10,4 @@ credentials.json
 .DS_Store
 *.tmp
 data/backups
+lead-scraper-data

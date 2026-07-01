@@ -89,6 +89,13 @@ function migrateExistingData() {
     }
 }
 
+function ensureColumn(table, column, definition) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (!columns.some(col => col.name === column)) {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+}
+
 // Initialize Database Schema
 function initDb() {
     // 1. Leads Table
@@ -100,6 +107,9 @@ function initDb() {
             email TEXT UNIQUE NOT NULL,
             phone TEXT,
             website TEXT,
+            address TEXT,
+            sourceUrl TEXT,
+            discoveryQuery TEXT,
             stage TEXT NOT NULL DEFAULT 'Scraped',
             history TEXT NOT NULL DEFAULT '[]',
             currentCampaignId INTEGER,
@@ -107,6 +117,10 @@ function initDb() {
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    ensureColumn('leads', 'address', 'TEXT');
+    ensureColumn('leads', 'sourceUrl', 'TEXT');
+    ensureColumn('leads', 'discoveryQuery', 'TEXT');
 
     // 2. DNC List Table
     db.exec(`
@@ -203,7 +217,7 @@ function getLeadByEmail(email) {
     return prepareLeadRow(row);
 }
 
-function insertLead({ name, company, email, phone, website, stage = 'Scraped', history = [] }) {
+function insertLead({ name, company, email, phone, website, address, sourceUrl, discoveryQuery, stage = 'Scraped', history = [] }) {
     const emailClean = normalizeEmail(email);
     if (!emailClean) return null;
 
@@ -216,8 +230,8 @@ function insertLead({ name, company, email, phone, website, stage = 'Scraped', h
     
     try {
         const stmt = db.prepare(
-            `INSERT OR IGNORE INTO leads (name, company, email, phone, website, stage, history) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
+            `INSERT OR IGNORE INTO leads (name, company, email, phone, website, address, sourceUrl, discoveryQuery, stage, history) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         );
         const result = stmt.run(
             normalizeText(name),
@@ -225,6 +239,9 @@ function insertLead({ name, company, email, phone, website, stage = 'Scraped', h
             emailClean,
             normalizeText(phone),
             normalizeText(website),
+            normalizeText(address),
+            normalizeText(sourceUrl),
+            normalizeText(discoveryQuery),
             finalStage,
             historyStr
         );
@@ -243,7 +260,7 @@ function updateLead(lead) {
     const finalStage = isDnc ? (lead.stage === 'Opted Out' ? 'Opted Out' : 'DNC') : lead.stage;
     const historyStr = JSON.stringify(lead.history || []);
     const stmt = db.prepare(
-        `UPDATE leads SET name = ?, company = ?, email = ?, phone = ?, website = ?, stage = ?, 
+        `UPDATE leads SET name = ?, company = ?, email = ?, phone = ?, website = ?, address = ?, sourceUrl = ?, discoveryQuery = ?, stage = ?, 
          history = ?, currentCampaignId = ?, currentCampaignStep = ? WHERE id = ?`
     );
     const result = stmt.run(
@@ -252,6 +269,9 @@ function updateLead(lead) {
         emailClean, 
         normalizeText(lead.phone), 
         normalizeText(lead.website), 
+        normalizeText(lead.address),
+        normalizeText(lead.sourceUrl),
+        normalizeText(lead.discoveryQuery),
         finalStage, 
         historyStr,
         isDnc ? null : (lead.currentCampaignId || null),
