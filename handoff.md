@@ -54,6 +54,25 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Added Content Studio `Today's AI Recommendation`:
+  - New button beside `Draft Social Post` in the Drafts tab.
+  - Uses selected platforms, business description, target audience, strategic context, and any already-loaded trend cards to ask Gemini for one recommended topic for today.
+  - Fills the topic input with the recommendation and immediately runs the normal draft flow for the checked platforms.
+  - Fails visibly if Gemini is unavailable; no canned recommendation fallback is used.
+  - Generator bar now wraps controls on narrower screens.
+  - Asset versions changed to `index.css?v=20260701-post-recommendation` and `app.js?v=20260701-post-recommendation`.
+- Local verification completed:
+  - `node --check app.js`
+  - `node --check server.js`
+  - `git diff --check` (only normal Windows CRLF warnings)
+  - Local Docker rebuild with `docker compose up -d --build ad-agency-autopilot`.
+  - Local `/api/app-config` returned `geminiConfigured: true`.
+  - Local HTML contains `Today's AI Recommendation`, `btn-recommend-content`, `index.css?v=20260701-post-recommendation`, and `app.js?v=20260701-post-recommendation`.
+- Still next: generated drafts should use the real backend image-generation route to attach local visual assets instead of external image URLs.
+- Not yet deployed live in this pass.
+
+## Previous Update
+
 - Fixed the misleading dashboard startup log after onboarding is already saved.
 - Code changes:
   - `app.js` now appends a context-aware startup status line after `loadState()`.
@@ -84,7 +103,7 @@ Last updated: 2026-07-01
 - Next likely build priorities:
   - Install/package `yt-dlp` in Docker or replace it with a managed ingestion service, then expand auto-ingest to collect/rank multiple candidates.
   - Change draft generation/autopilot to call `/api/generate-image-prompt` and `/api/generate-image` automatically, store local `/downloads` assets, and show graceful fallback states instead of broken images.
-  - Add a `Get AI recommendation for today's post` button that uses onboarding context plus viral research to choose the topic, draft copy, and generate media.
+  - Improve the daily recommendation path so it can pull a fresh trend batch first and attach real generated media automatically.
   - Separate demo dashboard/support labels from real backend job/activity records before calling the product autonomous.
 
 ## Latest Code Update

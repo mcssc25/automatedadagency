@@ -193,6 +193,7 @@ class AutopilotApp {
         // Content Studio & Tabs
         this.dom.contentTopicInput = document.getElementById("content-topic-input");
         this.dom.btnGenerateContent = document.getElementById("btn-generate-content");
+        this.dom.btnRecommendContent = document.getElementById("btn-recommend-content");
         this.dom.socialPostsContainer = document.getElementById("social-posts-container");
         this.dom.studioTabs = document.querySelectorAll(".studio-tab");
         this.dom.studioViews = document.querySelectorAll(".studio-panel-view");
@@ -504,6 +505,7 @@ class AutopilotApp {
 
         // Social Content generator button
         this.dom.btnGenerateContent.addEventListener("click", () => this.handleContentGeneration());
+        this.dom.btnRecommendContent.addEventListener("click", () => this.handleRecommendedPostOfDay());
 
         // Content Studio sub-tab switching
         this.dom.studioTabs.forEach(tab => {
@@ -2697,6 +2699,77 @@ Only respond with the post text. No other commentary or wrapping.`;
         } finally {
             this.dom.btnGenerateContent.disabled = false;
             this.dom.btnGenerateContent.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Draft Social Post`;
+        }
+    }
+
+    async handleRecommendedPostOfDay() {
+        const checkedPlatforms = Array.from(document.querySelectorAll('input[name="platform-target"]:checked')).map(cb => cb.value);
+        if (checkedPlatforms.length === 0) {
+            alert("Select at least one platform before asking for today's recommendation.");
+            return;
+        }
+        if (!this.state.serverConfig || !this.state.serverConfig.geminiConfigured) {
+            alert("Gemini is not configured on the server, so I cannot recommend a post topic yet.");
+            return;
+        }
+
+        const btn = this.dom.btnRecommendContent;
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Recommending...`;
+
+        try {
+            const trendContext = Array.isArray(this.state.competitorTrends) && this.state.competitorTrends.length > 0
+                ? this.state.competitorTrends.slice(0, 6).map(t => `- ${t.platform || 'social'}: ${t.topic || ''} | ${t.body || ''} | engagement: ${t.engagement || 'unknown'}`).join("\n")
+                : "No live trend cards are loaded yet. Use the strategic business context and likely audience pain points.";
+
+            const today = new Date().toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric"
+            });
+
+            const prompt = `You are the daily content strategist for '${this.state.bizName || 'this business'}'.
+Today is ${today}.
+
+Business description:
+${this.state.bizDesc || 'No business description saved yet.'}
+
+Target audience:
+${this.state.bizAudience || 'No target audience saved yet.'}
+
+Strategic context:
+${this.getStrategicContext() || 'No deep research profile has been generated yet.'}
+
+Recent trend context:
+${trendContext}
+
+Selected platforms: ${checkedPlatforms.join(', ')}
+
+Recommend ONE specific post topic for today that is timely, likely to earn attention, and useful for this audience.
+The topic should be specific enough that a copywriter can draft from it immediately.
+Do not write the post. Return only the topic as one sentence, no numbering, no quotes, no commentary.`;
+
+            const rawTopic = await this.queryGeminiAPI(prompt);
+            const topic = String(rawTopic || "")
+                .split("\n")
+                .map(line => line.replace(/^[-*\d.)\s]+/, "").trim())
+                .find(Boolean);
+
+            if (!topic) {
+                throw new Error("AI returned an empty recommendation.");
+            }
+
+            this.dom.contentTopicInput.value = topic;
+            this.appendConsoleLine('agent-content', `Recommended post topic for today: "${topic}"`);
+            await this.handleContentGeneration();
+        } catch (error) {
+            console.error("Recommended post generation failed:", error);
+            alert("Could not create today's recommended post: " + error.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
         }
     }
 

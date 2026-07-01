@@ -11,7 +11,7 @@
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- App Stylesheet -->
-    <link rel="stylesheet" href="index.css?v=20260701-crm-lead-header">
+    <link rel="stylesheet" href="index.css?v=20260701-post-recommendation">
 </head>
 <body class="dark-theme">
     <div class="app-container">
@@ -669,6 +669,9 @@
                             <input type="text" id="content-topic-input" placeholder="Enter a topic for AI Social Media Agent..." value="Why agents waste 10+ hours a week on transaction coordination and how to stop it." style="flex-grow:1;">
                             <button class="btn btn-primary" id="btn-generate-content" style="white-space: nowrap;">
                                 <i class="fa-solid fa-paper-plane"></i> Draft Social Post
+                            </button>
+                            <button class="btn btn-outline" id="btn-recommend-content" style="color:var(--accent); border-color:var(--accent); height:42px; white-space: nowrap;">
+                                <i class="fa-solid fa-lightbulb"></i> Today's AI Recommendation
                             </button>
                             <button class="btn btn-outline" id="btn-auto-ingest-video" onclick="App.handleAutoIngestVideo()" style="color:var(--purple); border-color:var(--purple); height:42px; white-space: nowrap;">
                                 <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Ingest Viral Reel
@@ -1520,6 +1523,6 @@
 
     <!-- App JavaScript files -->
     <script src="config.js"></script>
-    <script src="app.js?v=20260701-startup-client-status"></script>
+    <script src="app.js?v=20260701-post-recommendation"></script>
 </body>
 </html>
