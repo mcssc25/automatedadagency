@@ -18,6 +18,10 @@ db.initDb();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_DEFAULT_MODEL = process.env.GEMINI_DEFAULT_MODEL || 'gemini-2.5-flash';
+const GEMINI_RESEARCH_MODEL = process.env.GEMINI_RESEARCH_MODEL || 'gemini-3.5-flash';
+const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-lite-image';
+const GEMINI_VIDEO_MODEL = process.env.GEMINI_VIDEO_MODEL || 'gemini-omni-flash-preview';
 const DATA_DIR = path.join(__dirname, 'data');
 const CRM_STATE_FILE = path.join(DATA_DIR, 'crm-state.json');
 const CRM_SETTINGS_FILE = path.join(DATA_DIR, 'crm-settings.json');
@@ -143,13 +147,15 @@ function shouldRetryGeminiError(error) {
     return ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code) || [429, 500, 502, 503, 504].includes(status);
 }
 
-async function postGeminiWithRetry(url, payload, label) {
+async function postGeminiWithRetry(url, payload, label, timeoutMs = 120000) {
     let lastError;
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
             return await axios.post(url, payload, {
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 120000
+                timeout: timeoutMs,
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity
             });
         } catch (error) {
             lastError = error;
@@ -182,7 +188,13 @@ app.use(express.static(__dirname)); // Serve the frontend from Express
 
 app.get('/api/app-config', (req, res) => {
     res.json({
-        geminiConfigured: !!GEMINI_API_KEY
+        geminiConfigured: !!GEMINI_API_KEY,
+        geminiModels: {
+            default: GEMINI_DEFAULT_MODEL,
+            research: GEMINI_RESEARCH_MODEL,
+            image: GEMINI_IMAGE_MODEL,
+            video: GEMINI_VIDEO_MODEL
+        }
     });
 });
 
@@ -332,11 +344,12 @@ app.delete('/api/dnc/:email', (req, res) => {
 });
 
 // Utility: Call Gemini API securely from the backend
-async function queryGemini(promptText) {
+async function queryGemini(promptText, options = {}) {
     if (!GEMINI_API_KEY) {
         throw new Error("Gemini API key is not configured in .env file.");
     }
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const model = options.model || GEMINI_DEFAULT_MODEL;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
     
     const response = await postGeminiWithRetry(url, {
         contents: [{
@@ -344,7 +357,7 @@ async function queryGemini(promptText) {
                 text: promptText
             }]
         }]
-    }, 'Gemini');
+    }, `Gemini:${model}`);
 
     if (response.data && response.data.candidates && response.data.candidates[0].content) {
         return response.data.candidates[0].content.parts[0].text;
@@ -358,7 +371,8 @@ async function queryGeminiWithSearch(promptText, options = {}) {
     if (!GEMINI_API_KEY) {
         throw new Error("Gemini API key is not configured in .env file.");
     }
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const model = options.model || GEMINI_DEFAULT_MODEL;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
     const payload = {
         contents: [{
@@ -379,12 +393,12 @@ async function queryGeminiWithSearch(promptText, options = {}) {
 
     let response;
     try {
-        response = await postGeminiWithRetry(url, payload, 'Gemini Search');
+        response = await postGeminiWithRetry(url, payload, `Gemini Search:${model}`);
     } catch (error) {
         if (options.json === true && error.response && error.response.status === 400) {
             console.warn('[Gemini Search] JSON response mode rejected; retrying grounded request without responseMimeType.');
             delete payload.generationConfig;
-            response = await postGeminiWithRetry(url, payload, 'Gemini Search');
+            response = await postGeminiWithRetry(url, payload, `Gemini Search:${model}`);
         } else {
             throw error;
         }
@@ -395,6 +409,55 @@ async function queryGeminiWithSearch(promptText, options = {}) {
     } else {
         throw new Error("Invalid response format received from Gemini API");
     }
+}
+
+async function createGeminiInteraction({ model, input, responseFormat, generationConfig, label = 'Gemini Interaction', timeoutMs = 120000 }) {
+    if (!GEMINI_API_KEY) {
+        throw new Error("Gemini API key is not configured in .env file.");
+    }
+
+    const payload = { model, input };
+    if (responseFormat) payload.response_format = responseFormat;
+    if (generationConfig) payload.generation_config = generationConfig;
+
+    const response = await postGeminiWithRetry(
+        `https://generativelanguage.googleapis.com/v1beta/interactions?key=${GEMINI_API_KEY}`,
+        payload,
+        `${label}:${model}`,
+        timeoutMs
+    );
+    return response.data;
+}
+
+function extractInteractionMedia(interaction, desiredType) {
+    if (!interaction || typeof interaction !== 'object') return null;
+
+    const directKey = desiredType === 'video' ? 'output_video' : 'output_image';
+    if (interaction[directKey] && interaction[directKey].data) {
+        return interaction[directKey];
+    }
+
+    for (const step of interaction.steps || []) {
+        for (const item of step.content || []) {
+            const itemType = String(item.type || '').toLowerCase();
+            const mimeType = String(item.mime_type || item.mimeType || '').toLowerCase();
+            if (item.data && (itemType === desiredType || mimeType.startsWith(`${desiredType}/`))) {
+                return item;
+            }
+        }
+    }
+
+    return null;
+}
+
+function extensionFromMime(mimeType, fallback) {
+    const clean = String(mimeType || '').toLowerCase();
+    if (clean.includes('jpeg') || clean.includes('jpg')) return 'jpg';
+    if (clean.includes('png')) return 'png';
+    if (clean.includes('webp')) return 'webp';
+    if (clean.includes('mp4')) return 'mp4';
+    if (clean.includes('webm')) return 'webm';
+    return fallback;
 }
 
 function cleanModelJson(rawText) {
@@ -559,7 +622,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-    const raw = await queryGeminiWithSearch(prompt, { json: true });
+    const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
     const data = await parseModelJsonWithRepair(raw);
     return Array.isArray(data.competitorProfiles) ? data.competitorProfiles : [];
 }
@@ -1101,7 +1164,7 @@ Return this exact JSON shape:
   "businessReport": "A detailed but compact report with company profile, market landscape, competitive advantages, improvement opportunities, content angles, ad hooks, and support/email guidance."
 }`;
 
-        const rawJsonResult = await queryGeminiWithSearch(prompt, { json: true });
+        const rawJsonResult = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
         const result = await parseModelJsonWithRepair(rawJsonResult);
         const initialProfiles = Array.isArray(result.competitorProfiles) ? result.competitorProfiles : [];
         const listedDomains = String(result.competitors || '').split(',').map(domain => normalizeDomain(domain)).filter(Boolean);
@@ -1203,7 +1266,7 @@ Return ONLY valid JSON in this shape:
 
     try {
         console.log(`[Competitors Agent] Querying Gemini for Competitor domains...`);
-        const rawResult = await queryGeminiWithSearch(prompt, { json: true });
+        const rawResult = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
         const data = await parseModelJsonWithRepair(rawResult);
         const listedDomains = String(data.competitors || '').split(',').map(domain => normalizeDomain(domain)).filter(Boolean);
         const competitorProfiles = await ensureMinimumCompetitorProfiles({
@@ -1263,7 +1326,7 @@ Return ONLY valid JSON:
 
     try {
         console.log(`[Competitor Profile] Researching ${cleanDomain}...`);
-        const rawResult = await queryGeminiWithSearch(prompt, { json: true });
+        const rawResult = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
         const data = await parseModelJsonWithRepair(rawResult);
         const profile = normalizeCompetitorProfile(data.competitorProfile || data);
         res.json({ competitorProfile: profile || { domain: cleanDomain, name: cleanDomain, socialLinks: {} } });
@@ -2747,12 +2810,44 @@ app.post('/api/generate-image', async (req, res) => {
         return res.status(400).json({ error: "promptText is required" });
     }
 
-    const filename = `gen_${Date.now()}_${Math.floor(Math.random() * 999999)}.jpg`;
+    const fileBase = `gen_${Date.now()}_${Math.floor(Math.random() * 999999)}`;
+
+    // 1. Try Nano Banana 2 Lite through the Interactions API.
+    if (GEMINI_API_KEY) {
+        console.log(`[AI Image Agent] Attempting to generate image using ${GEMINI_IMAGE_MODEL}...`);
+        try {
+            const interaction = await createGeminiInteraction({
+                model: GEMINI_IMAGE_MODEL,
+                input: [{ type: 'text', text: promptText }],
+                label: 'Gemini Image'
+            });
+            const generatedImage = extractInteractionMedia(interaction, 'image');
+
+            if (generatedImage && generatedImage.data) {
+                const ext = extensionFromMime(generatedImage.mime_type || generatedImage.mimeType, 'png');
+                const filename = `${fileBase}.${ext}`;
+                const localPath = path.join(downloadsDir, filename);
+                fs.writeFileSync(localPath, Buffer.from(generatedImage.data, 'base64'));
+                console.log(`[AI Image Agent] Successfully saved ${GEMINI_IMAGE_MODEL} image: ${filename}`);
+                return res.json({
+                    success: true,
+                    mediaUrl: `/downloads/${filename}`,
+                    model: GEMINI_IMAGE_MODEL
+                });
+            }
+
+            console.warn(`[AI Image Agent] ${GEMINI_IMAGE_MODEL} returned no image data.`);
+        } catch (err) {
+            console.warn(`[AI Image Agent] ${GEMINI_IMAGE_MODEL} request failed:`, err.message);
+        }
+    }
+
+    const filename = `${fileBase}.jpg`;
     const localPath = path.join(downloadsDir, filename);
 
-    // 1. Try to generate using Google's Imagen 4 model with the user's GEMINI_API_KEY
+    // 2. Fallback to Imagen 4 for older API keys/accounts that do not yet have Nano Banana Lite.
     if (GEMINI_API_KEY) {
-        console.log(`[AI Image Agent] Attempting to generate image using Gemini Imagen 4...`);
+        console.log(`[AI Image Agent] Falling back to Gemini Imagen 4...`);
         const imagenUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${GEMINI_API_KEY}`;
         
         try {
@@ -2779,7 +2874,8 @@ app.post('/api/generate-image', async (req, res) => {
                     console.log(`[AI Image Agent] Successfully saved generated Imagen 4 image: ${filename}`);
                     return res.json({
                         success: true,
-                        mediaUrl: `/downloads/${filename}`
+                        mediaUrl: `/downloads/${filename}`,
+                        model: 'imagen-4.0-generate-001'
                     });
                 }
             } else {
@@ -2790,7 +2886,7 @@ app.post('/api/generate-image', async (req, res) => {
         }
     }
 
-    // 2. Fallback to local stock photos if Gemini Imagen 4 fails
+    // 3. Fallback to local stock photos if Gemini image generation fails.
     console.log(`[AI Image Agent] Falling back to local stock real estate images.`);
     const fallbacks = [
         'fallback_house.jpg',
@@ -2807,7 +2903,8 @@ app.post('/api/generate-image', async (req, res) => {
             console.log(`[AI Image Agent] Copied fallback ${chosenFallback} to ${filename}`);
             return res.json({
                 success: true,
-                mediaUrl: `/downloads/${filename}`
+                mediaUrl: `/downloads/${filename}`,
+                model: 'local-fallback'
             });
         }
     } catch (copyErr) {
@@ -2824,8 +2921,58 @@ app.post('/api/generate-image', async (req, res) => {
     const ultimateUrl = directUrls[Math.floor(Math.random() * directUrls.length)];
     return res.json({
         success: true,
-        mediaUrl: ultimateUrl
+        mediaUrl: ultimateUrl,
+        model: 'stock-url-fallback'
     });
+});
+
+app.post('/api/generate-video', async (req, res) => {
+    const { promptText, aspectRatio } = req.body;
+    if (!promptText) {
+        return res.status(400).json({ error: "promptText is required" });
+    }
+
+    const safeAspectRatio = ['9:16', '16:9'].includes(aspectRatio) ? aspectRatio : '9:16';
+
+    try {
+        console.log(`[AI Video Agent] Attempting to generate ${safeAspectRatio} video using ${GEMINI_VIDEO_MODEL}...`);
+        const interaction = await createGeminiInteraction({
+            model: GEMINI_VIDEO_MODEL,
+            input: promptText,
+            responseFormat: {
+                type: 'video',
+                aspect_ratio: safeAspectRatio
+            },
+            generationConfig: {
+                video_config: {
+                    task: 'text_to_video'
+                }
+            },
+            label: 'Gemini Video',
+            timeoutMs: 300000
+        });
+        const generatedVideo = extractInteractionMedia(interaction, 'video');
+
+        if (!generatedVideo || !generatedVideo.data) {
+            throw new Error(`${GEMINI_VIDEO_MODEL} returned no video data.`);
+        }
+
+        const ext = extensionFromMime(generatedVideo.mime_type || generatedVideo.mimeType, 'mp4');
+        const filename = `video_${Date.now()}_${Math.floor(Math.random() * 999999)}.${ext}`;
+        const localPath = path.join(downloadsDir, filename);
+        fs.writeFileSync(localPath, Buffer.from(generatedVideo.data, 'base64'));
+        console.log(`[AI Video Agent] Successfully saved ${GEMINI_VIDEO_MODEL} video: ${filename}`);
+
+        res.json({
+            success: true,
+            mediaUrl: `/downloads/${filename}`,
+            model: GEMINI_VIDEO_MODEL,
+            interactionId: interaction.id || null
+        });
+    } catch (error) {
+        console.error(`[AI Video Agent Error]`, error.message);
+        res.status(500).json({ error: `Video generation failed: ${error.message}` });
+    }
 });
 
 

@@ -2731,6 +2731,9 @@ Only respond with the post text. No other commentary or wrapping.`;
                         <i class="fa-solid fa-image"></i> AI Image
                     </button>
                     `}
+                    <button class="card-action-btn btn-video" onclick="App.generatePostVideo('${p.id}')" style="border: 1px solid var(--pink); color: var(--pink); background: transparent;">
+                        <i class="fa-solid fa-video"></i> AI Video
+                    </button>
                     <button class="card-action-btn btn-sched" onclick="App.showScheduleModal('${p.id}')">
                         <i class="fa-solid fa-clock"></i> Schedule
                     </button>
@@ -4690,6 +4693,54 @@ Output only the visitor-facing reply.`;
         }
     }
 
+    async generatePostVideo(postId) {
+        let post = this.state.socialPosts.find(p => String(p.id) === String(postId));
+        if (!post) return;
+
+        const btn = document.querySelector(`[onclick="App.generatePostVideo('${postId}')"], [onclick="App.generatePostVideo(${postId})"]`);
+        const oldHtml = btn ? btn.innerHTML : "";
+
+        const defaultPrompt = this.generateVideoPromptFromPost(post);
+        const userPrompt = prompt("Describe the vertical video you want to generate for this post:", defaultPrompt);
+        if (userPrompt === null) return;
+        const cleanPrompt = userPrompt.trim() || defaultPrompt;
+
+        this.appendConsoleLine('system', `AI Content Agent generating vertical video for Post #${postId}...`);
+        this.appendConsoleLine('agent-content', `Creating video asset: "${cleanPrompt}"`);
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Rendering...`;
+        }
+
+        try {
+            const response = await fetch('/api/generate-video', {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ promptText: cleanPrompt, aspectRatio: "9:16" })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to render video on server");
+            }
+
+            post.mediaUrl = data.mediaUrl;
+            post.mediaModel = data.model || 'gemini-omni-flash-preview';
+            this.saveState();
+            this.renderSocialPostsGrid();
+            this.appendConsoleLine('system', `Successfully attached AI video to Post #${postId}.`);
+        } catch (err) {
+            console.error("AI Video Generation failed:", err);
+            alert("Failed to generate AI video: " + err.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = oldHtml;
+            }
+        }
+    }
+
     generatePromptFromBody(body) {
         let promptText = body
             .replace(/#\w+/g, '') 
@@ -4707,6 +4758,21 @@ Output only the visitor-facing reply.`;
         }
         
         return `Realistic editorial photo about ${sentence}, candid real-world business environment, natural window light, 35mm documentary photography, believable details, imperfect desk or workspace, no text overlays, no logos, no glossy 3D render, no plastic skin, no extra fingers, not stock-photo posing`;
+    }
+
+    generateVideoPromptFromPost(post) {
+        const businessName = this.state.bizName || "the business";
+        let postText = (post.body || "")
+            .replace(/#\w+/g, '')
+            .replace(/\r?\n|\r/g, ' ')
+            .replace(/['"â€œâ€`]/g, '')
+            .trim();
+
+        if (postText.length > 420) {
+            postText = postText.substring(0, 420).trim() + "...";
+        }
+
+        return `Create a 6-8 second vertical 9:16 social media video for ${businessName}. Topic: ${postText}. Make it feel like authentic modern short-form footage with natural camera movement, realistic lighting, clear subject action, emotionally engaging pacing, and no text overlays, captions, logos, watermarks, distorted hands, or surreal AI artifacts.`;
     }
 
     removePostImage(postId, listName) {

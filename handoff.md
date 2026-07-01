@@ -54,6 +54,22 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Wired Gemini model routing and social media generation upgrades:
+  - `queryGemini()` and `queryGeminiWithSearch()` now accept a model override and expose configured model names through `/api/app-config`.
+  - Default text tasks stay on `GEMINI_DEFAULT_MODEL=gemini-2.5-flash`.
+  - Deep onboarding, competitor discovery, competitor supplementation, and manual competitor enrichment use `GEMINI_RESEARCH_MODEL=gemini-3.5-flash`.
+  - AI image generation now tries Nano Banana 2 Lite via `GEMINI_IMAGE_MODEL=gemini-3.1-flash-lite-image` through the Interactions API, then falls back to Imagen 4, local stock, then stock URLs.
+  - Added `/api/generate-video` using `GEMINI_VIDEO_MODEL=gemini-omni-flash-preview`, portrait `9:16`, and a longer timeout for video rendering.
+  - Draft social cards now include an `AI Video` action that generates a vertical video prompt from the post, saves the returned `.mp4` in `/downloads`, and attaches it to the draft.
+  - `.env.example` documents all model routing env vars.
+- Local verification completed:
+  - `node --check server.js`
+  - `node --check app.js`
+  - `git diff --check`
+- Deployment status: not yet deployed in this handoff entry; next step is commit, push, copy runtime files to `/opt/ad-agency-autopilot`, rebuild only `ad-agency-autopilot`, and verify public `/api/app-config` plus static `app.js`.
+
+## Previous Update
+
 - Improved onboarding competitor/SWOT robustness:
   - Scan and Auto-Discover now request 5-8 competitors and supplement results if fewer than 5 are returned.
   - New `/api/competitor-profile` endpoint researches one manually added competitor for summary, strengths, weaknesses, positioning, and social links.
