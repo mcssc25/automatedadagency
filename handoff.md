@@ -54,6 +54,18 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Improved onboarding scan UX:
+  - Added a staged progress panel under Business Identity while `/api/scrape` runs: reading site, researching business, finding competitors, finding socials, developing SWOT, finalizing.
+  - Enlarged the Product & Audience and SWOT textareas for finished research.
+  - Added expand buttons for the Business Description/Core Offer and SWOT fields that open a larger modal editor; saving writes back to the original field and app state.
+  - Added responsive scan-progress and expanded-editor styling in `index.css`.
+- Local verification completed:
+  - `node --check app.js`
+  - `git diff --check`
+- Deployment status: pending for this entry.
+
+## Previous Update
+
 - Fixed SWOT scan population fallback:
   - Backend `normalizeSwotProfile()` now accepts snake_case, nested SWOT fields, singular labels, and alternate section names like `gaps`, `limitations`, `risks`, and `competitiveAdvantages`.
   - `/api/scrape` now guarantees a `swotProfile`: if primary grounded research omits a parseable SWOT, it asks Gemini to create one from the verified company/competitor data, then falls back to a deterministic four-paragraph SWOT if needed.

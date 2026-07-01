@@ -42,6 +42,7 @@ Last updated: 2026-07-01
 - Onboarding scan should always populate SWOT: backend/frontend accept varied SWOT key shapes and fall back to a Gemini-derived or deterministic SWOT from verified company/competitor data when the primary response omits it.
 - Onboarding competitor discovery targets at least 5 competitors when possible; manually added competitors call `/api/competitor-profile` to enrich summaries, differentiators, and social links.
 - Setup box order is: 1 Business Identity, 2 Product & Audience, 3 Competitor Intelligence, 4 SWOT Profile, 5 Budget & Goals, 6 Autopilot Employees.
+- Onboarding UI has a staged scan progress panel and larger expandable editors for long business profile/SWOT fields so deep research does not feel frozen or cramped.
 - Gemini model routing defaults: everyday text uses `GEMINI_DEFAULT_MODEL=gemini-2.5-flash`; deep onboarding/competitor grounded research uses `GEMINI_RESEARCH_MODEL=gemini-3.5-flash`; social image generation tries `GEMINI_IMAGE_MODEL=gemini-3.1-flash-lite-image` before Imagen/stock fallback; social video generation uses `GEMINI_VIDEO_MODEL=gemini-omni-flash-preview`.
 
 ## Working Agreements

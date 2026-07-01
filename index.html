@@ -279,6 +279,23 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="scan-progress-panel" id="scan-progress-panel" style="display:none;">
+                                <div class="scan-progress-topline">
+                                    <span id="scan-progress-title"><i class="fa-solid fa-spinner fa-spin text-purple"></i> Preparing scan...</span>
+                                    <span id="scan-progress-percent">0%</span>
+                                </div>
+                                <div class="scan-progress-track">
+                                    <div class="scan-progress-bar" id="scan-progress-bar"></div>
+                                </div>
+                                <div class="scan-progress-steps" id="scan-progress-steps">
+                                    <span class="scan-step" data-scan-step="crawl"><i class="fa-solid fa-globe"></i> Reading site</span>
+                                    <span class="scan-step" data-scan-step="business"><i class="fa-solid fa-building"></i> Researching business</span>
+                                    <span class="scan-step" data-scan-step="competitors"><i class="fa-solid fa-users-viewfinder"></i> Finding competitors</span>
+                                    <span class="scan-step" data-scan-step="socials"><i class="fa-solid fa-hashtag"></i> Finding socials</span>
+                                    <span class="scan-step" data-scan-step="swot"><i class="fa-solid fa-chart-simple"></i> Developing SWOT</span>
+                                    <span class="scan-step" data-scan-step="finalize"><i class="fa-solid fa-check"></i> Finalizing</span>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- STEP 2: Description & Audience -->
@@ -292,13 +309,16 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="biz-desc" style="display:flex; justify-content:space-between; align-items:center;">
+                                <label for="biz-desc" class="field-label-with-actions">
                                     <span>Business Description & Core Offer</span>
                                     <span id="scan-status" class="text-secondary" style="font-size:0.75rem; text-transform:none; font-weight:normal; display:none;">
                                         <i class="fa-solid fa-spinner fa-spin text-purple"></i> Scanning website...
                                     </span>
+                                    <button type="button" class="field-expand-btn" onclick="App.openLongTextModal('biz-desc', 'Business Description & Core Offer')" title="Open larger editor">
+                                        <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                                    </button>
                                 </label>
-                                <textarea id="biz-desc" rows="4" placeholder="Describe what your business does, the value proposition, and the main product or service you sell." required>A modern real estate platform that automates transaction coordination, helping agents manage files, compliance, and communication to get deals closed faster with zero mistakes.</textarea>
+                                <textarea id="biz-desc" rows="8" class="setup-long-textarea" placeholder="Describe what your business does, the value proposition, and the main product or service you sell." required>A modern real estate platform that automates transaction coordination, helping agents manage files, compliance, and communication to get deals closed faster with zero mistakes.</textarea>
                             </div>
 
                             <div class="form-group">
@@ -354,8 +374,13 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="biz-swot">Business Analysis</label>
-                                <textarea id="biz-swot" rows="9" placeholder="Run the website scan to generate a detailed SWOT profile. You can edit this before launching autopilot."></textarea>
+                                <label for="biz-swot" class="field-label-with-actions">
+                                    <span>Business Analysis</span>
+                                    <button type="button" class="field-expand-btn" onclick="App.openLongTextModal('biz-swot', 'SWOT Business Analysis')" title="Open larger editor">
+                                        <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                                    </button>
+                                </label>
+                                <textarea id="biz-swot" rows="13" class="setup-long-textarea setup-swot-textarea" placeholder="Run the website scan to generate a detailed SWOT profile. You can edit this before launching autopilot."></textarea>
                             </div>
                         </div>
 
@@ -933,6 +958,24 @@
                         <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
                             <button class="btn btn-outline" id="btn-cancel-schedule">Cancel</button>
                             <button class="btn btn-primary" id="btn-confirm-schedule">Schedule Post</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-overlay" id="long-text-modal" style="display:none;">
+                    <div class="modal-card long-text-modal-card">
+                        <div class="modal-header">
+                            <h3 id="long-text-modal-title"><i class="fa-solid fa-up-right-and-down-left-from-center text-accent"></i> Expanded Editor</h3>
+                            <button class="modal-close" id="btn-close-long-text-modal">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <textarea id="long-text-modal-input" class="long-text-modal-input"></textarea>
+                        </div>
+                        <div class="modal-footer long-text-modal-footer">
+                            <button class="btn btn-outline" id="btn-cancel-long-text-modal">Cancel</button>
+                            <button class="btn btn-primary" id="btn-save-long-text-modal">
+                                <i class="fa-solid fa-check"></i> Save
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -89,6 +89,8 @@ class AutopilotApp {
         };
 
         this.editingPostId = null;
+        this.scanProgressTimer = null;
+        this.longTextModalSourceId = null;
 
         // DOM elements
         this.dom = {};
@@ -158,6 +160,11 @@ class AutopilotApp {
         this.dom.competitorAddInput = document.getElementById("competitor-add-input");
         this.dom.competitorList = document.getElementById("competitor-list");
         this.dom.scanStatus = document.getElementById("scan-status");
+        this.dom.scanProgressPanel = document.getElementById("scan-progress-panel");
+        this.dom.scanProgressTitle = document.getElementById("scan-progress-title");
+        this.dom.scanProgressPercent = document.getElementById("scan-progress-percent");
+        this.dom.scanProgressBar = document.getElementById("scan-progress-bar");
+        this.dom.scanProgressSteps = document.querySelectorAll("[data-scan-step]");
         this.dom.bizSwotInput = document.getElementById("biz-swot");
         this.dom.dealValueInput = document.getElementById("deal-value");
         this.dom.conversionRateInput = document.getElementById("conversion-rate");
@@ -194,6 +201,12 @@ class AutopilotApp {
         this.dom.btnCancelSchedule = document.getElementById("btn-cancel-schedule");
         this.dom.btnCloseModal = document.getElementById("btn-close-modal");
         this.dom.scheduleDatetimeInput = document.getElementById("schedule-datetime");
+        this.dom.longTextModal = document.getElementById("long-text-modal");
+        this.dom.longTextModalTitle = document.getElementById("long-text-modal-title");
+        this.dom.longTextModalInput = document.getElementById("long-text-modal-input");
+        this.dom.btnCloseLongTextModal = document.getElementById("btn-close-long-text-modal");
+        this.dom.btnCancelLongTextModal = document.getElementById("btn-cancel-long-text-modal");
+        this.dom.btnSaveLongTextModal = document.getElementById("btn-save-long-text-modal");
         
         // CRM Sub-navigation & Panels
         this.dom.crmTabs = document.querySelectorAll(".crm-tab");
@@ -502,6 +515,12 @@ class AutopilotApp {
         // Modal close / cancel handlers
         this.dom.btnCloseModal.addEventListener("click", () => this.hideScheduleModal());
         this.dom.btnCancelSchedule.addEventListener("click", () => this.hideScheduleModal());
+        this.dom.btnCloseLongTextModal.addEventListener("click", () => this.closeLongTextModal());
+        this.dom.btnCancelLongTextModal.addEventListener("click", () => this.closeLongTextModal());
+        this.dom.btnSaveLongTextModal.addEventListener("click", () => this.saveLongTextModal());
+        this.dom.longTextModal.addEventListener("click", (event) => {
+            if (event.target === this.dom.longTextModal) this.closeLongTextModal();
+        });
         
         // Confirm schedule click
         this.dom.btnConfirmSchedule.addEventListener("click", () => this.confirmSchedulePost());
@@ -1121,6 +1140,110 @@ class AutopilotApp {
         }
     }
 
+    getScanProgressStages() {
+        return [
+            { step: "crawl", percent: 10, seconds: 0, title: "Reading website pages and public copy..." },
+            { step: "business", percent: 25, seconds: 8, title: "Researching the company, offer, and value..." },
+            { step: "competitors", percent: 43, seconds: 22, title: "Finding direct competitors and positioning..." },
+            { step: "socials", percent: 60, seconds: 40, title: "Checking competitor and company social profiles..." },
+            { step: "swot", percent: 78, seconds: 62, title: "Developing SWOT and strategic business analysis..." },
+            { step: "finalize", percent: 90, seconds: 84, title: "Finalizing onboarding fields and report..." }
+        ];
+    }
+
+    startScanProgress() {
+        if (!this.dom.scanProgressPanel) return;
+        if (this.scanProgressTimer) clearInterval(this.scanProgressTimer);
+
+        this.scanProgressStartedAt = Date.now();
+        this.dom.scanProgressPanel.style.display = "flex";
+        this.setScanProgressStage(0);
+
+        this.scanProgressTimer = setInterval(() => {
+            const elapsedSeconds = (Date.now() - this.scanProgressStartedAt) / 1000;
+            const stages = this.getScanProgressStages();
+            let nextIndex = 0;
+            stages.forEach((stage, index) => {
+                if (elapsedSeconds >= stage.seconds) nextIndex = index;
+            });
+            this.setScanProgressStage(nextIndex);
+        }, 1200);
+    }
+
+    setScanProgressStage(activeIndex) {
+        const stages = this.getScanProgressStages();
+        const activeStage = stages[activeIndex] || stages[0];
+        if (this.dom.scanProgressTitle) {
+            this.dom.scanProgressTitle.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-purple"></i> ${activeStage.title}`;
+        }
+        if (this.dom.scanProgressPercent) this.dom.scanProgressPercent.innerText = `${activeStage.percent}%`;
+        if (this.dom.scanProgressBar) this.dom.scanProgressBar.style.width = `${activeStage.percent}%`;
+
+        this.dom.scanProgressSteps.forEach((item, index) => {
+            item.classList.toggle("complete", index < activeIndex);
+            item.classList.toggle("active", index === activeIndex);
+            item.classList.remove("error");
+        });
+    }
+
+    completeScanProgress() {
+        if (this.scanProgressTimer) clearInterval(this.scanProgressTimer);
+        this.scanProgressTimer = null;
+        if (this.dom.scanProgressPanel) this.dom.scanProgressPanel.style.display = "flex";
+        if (this.dom.scanProgressTitle) {
+            this.dom.scanProgressTitle.innerHTML = `<i class="fa-solid fa-circle-check text-success"></i> Research complete. Onboarding fields updated.`;
+        }
+        if (this.dom.scanProgressPercent) this.dom.scanProgressPercent.innerText = "100%";
+        if (this.dom.scanProgressBar) this.dom.scanProgressBar.style.width = "100%";
+        this.dom.scanProgressSteps.forEach(item => {
+            item.classList.add("complete");
+            item.classList.remove("active", "error");
+        });
+    }
+
+    failScanProgress(message) {
+        if (this.scanProgressTimer) clearInterval(this.scanProgressTimer);
+        this.scanProgressTimer = null;
+        if (this.dom.scanProgressPanel) this.dom.scanProgressPanel.style.display = "flex";
+        if (this.dom.scanProgressTitle) {
+            this.dom.scanProgressTitle.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-pink"></i> Scan stopped: ${this.escapeHtml(message || "Please try again.")}`;
+        }
+        this.dom.scanProgressSteps.forEach(item => {
+            if (item.classList.contains("active")) item.classList.add("error");
+        });
+    }
+
+    openLongTextModal(sourceId, title) {
+        const source = document.getElementById(sourceId);
+        if (!source || !this.dom.longTextModal) return;
+
+        this.longTextModalSourceId = sourceId;
+        this.dom.longTextModalTitle.innerHTML = `<i class="fa-solid fa-up-right-and-down-left-from-center text-accent"></i> ${this.escapeHtml(title || "Expanded Editor")}`;
+        this.dom.longTextModalInput.value = source.value || "";
+        this.dom.longTextModal.style.display = "flex";
+        setTimeout(() => this.dom.longTextModalInput.focus(), 50);
+    }
+
+    closeLongTextModal() {
+        if (this.dom.longTextModal) this.dom.longTextModal.style.display = "none";
+        this.longTextModalSourceId = null;
+    }
+
+    saveLongTextModal() {
+        if (!this.longTextModalSourceId) return this.closeLongTextModal();
+        const source = document.getElementById(this.longTextModalSourceId);
+        if (!source) return this.closeLongTextModal();
+
+        source.value = this.dom.longTextModalInput.value;
+        if (this.longTextModalSourceId === "biz-desc") {
+            this.state.bizDesc = source.value;
+        } else if (this.longTextModalSourceId === "biz-swot") {
+            this.state.bizSwot = source.value;
+        }
+        this.saveState();
+        this.closeLongTextModal();
+    }
+
     // Web Scraper Controller
     async handleWebsiteScan() {
         const url = document.getElementById("biz-website").value.trim();
@@ -1132,6 +1255,7 @@ class AutopilotApp {
         this.dom.scanStatus.style.display = "inline-block";
         this.dom.btnScanWebsite.disabled = true;
         this.dom.btnScanWebsite.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Scanning...`;
+        this.startScanProgress();
 
         try {
             const response = await fetch('/api/scrape', {
@@ -1177,11 +1301,13 @@ class AutopilotApp {
             this.state.bizDesc = document.getElementById("biz-desc").value;
             this.state.bizAudience = document.getElementById("biz-audience").value;
             this.saveState();
+            this.completeScanProgress();
             
             this.appendConsoleLine('system', `Deep onboarding research complete for: ${url}. AI built the company profile, audience, competitors, social links, and SWOT profile.`);
             
         } catch (error) {
             console.error("Website scan failed:", error);
+            this.failScanProgress(error.message);
             alert(`Scanning failed: ${error.message}`);
         } finally {
             this.dom.scanStatus.style.display = "none";

@@ -695,6 +695,47 @@ body {
     background: rgba(0, 0, 0, 0.3);
 }
 
+.setup-long-textarea {
+    min-height: 190px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.setup-swot-textarea {
+    min-height: 300px;
+}
+
+.field-label-with-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.field-label-with-actions > span:first-child {
+    flex: 1;
+}
+
+.field-expand-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.field-expand-btn:hover {
+    color: var(--accent);
+    border-color: rgba(0, 229, 255, 0.35);
+    background: rgba(0, 229, 255, 0.08);
+}
+
 .section-label {
     margin-bottom: 12px;
 }
@@ -748,6 +789,84 @@ body {
     color: var(--text-secondary);
     line-height: 1.5;
     margin: 0;
+}
+
+.scan-progress-panel {
+    border: 1px solid rgba(0, 229, 255, 0.22);
+    background: rgba(0, 229, 255, 0.055);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.scan-progress-topline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+#scan-progress-percent {
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+}
+
+.scan-progress-track {
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.scan-progress-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--purple), var(--accent));
+    transition: width 0.45s ease;
+}
+
+.scan-progress-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.scan-step {
+    min-height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.16);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 9px;
+    font-size: 0.74rem;
+    font-weight: 650;
+    transition: all 0.25s ease;
+}
+
+.scan-step.active {
+    color: var(--text-primary);
+    border-color: rgba(0, 229, 255, 0.45);
+    background: rgba(0, 229, 255, 0.09);
+}
+
+.scan-step.complete {
+    color: var(--green);
+    border-color: rgba(0, 230, 118, 0.25);
+}
+
+.scan-step.error {
+    color: var(--pink);
+    border-color: rgba(255, 71, 133, 0.35);
 }
 
 /* Competitor Manager */
@@ -1705,6 +1824,7 @@ body {
 .text-orange { color: var(--orange); }
 .text-blue { color: #1877f2; }
 .text-red { color: #ff0000; }
+.text-pink { color: var(--pink); }
 
 /* Responsive adjustments */
 @media (max-width: 1200px) {
@@ -1713,6 +1833,26 @@ body {
     }
     .crm-layout, .support-layout {
         grid-template-columns: 240px 1fr;
+    }
+}
+
+@media (max-width: 760px) {
+    .scan-progress-steps {
+        grid-template-columns: 1fr;
+    }
+
+    .field-label-with-actions {
+        align-items: flex-start;
+    }
+
+    .long-text-modal-card {
+        width: 96vw;
+        max-height: 92vh;
+        padding: 18px;
+    }
+
+    .long-text-modal-input {
+        min-height: 58vh;
     }
 }
 
@@ -1814,6 +1954,48 @@ body {
 
 .modal-close:hover {
     color: var(--text-primary);
+}
+
+.long-text-modal-card {
+    max-width: min(980px, 94vw);
+    width: 94vw;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.long-text-modal-card .modal-body {
+    min-height: 0;
+    flex: 1;
+}
+
+.long-text-modal-input {
+    width: 100%;
+    min-height: 56vh;
+    max-height: 62vh;
+    resize: vertical;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    line-height: 1.55;
+    padding: 16px;
+}
+
+.long-text-modal-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.long-text-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
 }
 
 @keyframes slideUp {
@@ -2080,4 +2262,3 @@ body {
     color: #f43f5e;
     font-weight: bold;
 }
-
