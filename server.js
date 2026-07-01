@@ -1002,28 +1002,214 @@ function parseCsvRows(csvText) {
 function parseEmailListFromCsvValue(value) {
     const raw = String(value || '');
     const matches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
-    return [...new Set(matches.map(email => email.toLowerCase()))];
+    return [...new Set(matches
+        .map(email => email.toLowerCase().replace(/[.,;:!?)]$/, ''))
+        .filter(email => isUsefulLeadEmail(email)))];
 }
 
-function normalizeMapsCsvRow(row, discoveryQuery) {
-    const pick = (...keys) => {
-        for (const key of keys) {
-            if (row[key] !== undefined && String(row[key]).trim()) return String(row[key]).trim();
-        }
-        return '';
-    };
+function isUsefulLeadEmail(email) {
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!isLikelyEmail(normalized) || normalized.length > 254) return false;
 
-    const emails = parseEmailListFromCsvValue(pick('emails', 'email'));
+    const [local, domain] = normalized.split('@');
+    if (!local || !domain) return false;
+    if (domain.includes('example.') || domain === 'domain.com' || domain === 'email.com') return false;
+    if (/\.(png|jpe?g|gif|webp|svg|css|js|ico|woff2?|ttf|eot)$/i.test(domain)) return false;
+    return true;
+}
+
+function getMapsRowValue(row, ...keys) {
+    for (const key of keys) {
+        if (row[key] !== undefined && String(row[key]).trim()) return String(row[key]).trim();
+    }
+    return '';
+}
+
+function formatMapsAddress(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    if (raw.startsWith('{')) {
+        try {
+            const parsed = JSON.parse(raw);
+            const cityStateZip = [
+                parsed.city,
+                [parsed.state, parsed.postal_code].filter(Boolean).join(' ')
+            ].filter(Boolean).join(', ');
+            const parts = [parsed.street, cityStateZip, parsed.country]
+                .map(part => String(part || '').trim())
+                .filter(Boolean);
+            return parts.join(', ');
+        } catch (error) {
+            return raw;
+        }
+    }
+
+    return raw;
+}
+
+function extractPublicEmailsFromHtml(html) {
+    const $ = cheerio.load(String(html || ''));
+    const emailText = [];
+
+    $('a[href^="mailto:"]').each((i, el) => {
+        const href = $(el).attr('href') || '';
+        const emailValue = href.replace(/^mailto:/i, '').split('?')[0];
+        try {
+            emailText.push(decodeURIComponent(emailValue));
+        } catch (error) {
+            emailText.push(emailValue);
+        }
+    });
+
+    $('[itemprop="email"], [property="email"], [name="email"]').each((i, el) => {
+        emailText.push($(el).attr('content') || $(el).text());
+    });
+
+    emailText.push($.root().text());
+    emailText.push(String(html || ''));
+
+    return parseEmailListFromCsvValue(emailText.join('\n'));
+}
+
+function isUsefulLeadContactLink(urlObj) {
+    const pathName = urlObj.pathname.toLowerCase();
+    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mov|avi|css|js|ico)$/i.test(pathName)) return false;
+    return [
+        'contact',
+        'about',
+        'team',
+        'staff',
+        'agent',
+        'realtor',
+        'broker',
+        'office',
+        'location',
+        'connect'
+    ].some(keyword => pathName.includes(keyword));
+}
+
+function collectLeadContactLinks(html, pageUrl, baseHost, maxLinks = 4) {
+    const $ = cheerio.load(String(html || ''));
+    const links = [];
+
+    $('a[href]').each((i, el) => {
+        const rawHref = $(el).attr('href');
+        if (!rawHref || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:') || rawHref.startsWith('#')) return;
+        try {
+            const absolute = new URL(rawHref, pageUrl);
+            if (!['http:', 'https:'].includes(absolute.protocol)) return;
+            const host = absolute.hostname.replace(/^www\./i, '').toLowerCase();
+            if (host !== baseHost || !isUsefulLeadContactLink(absolute)) return;
+            absolute.hash = '';
+            const cleanUrl = absolute.href.replace(/\/+$/, '');
+            if (!links.includes(cleanUrl)) links.push(cleanUrl);
+        } catch (error) {
+            // Ignore malformed links.
+        }
+    });
+
+    return links.slice(0, maxLinks);
+}
+
+async function fetchLeadContactHtml(pageUrl) {
+    const timeout = Math.min(Math.max(parseInt(process.env.LEAD_WEBSITE_TIMEOUT_MS, 10) || 10000, 3000), 30000);
+    const response = await axios.get(pageUrl, {
+        headers: SCRAPER_HEADERS,
+        timeout,
+        maxRedirects: 5,
+        maxContentLength: 2 * 1024 * 1024,
+        validateStatus: status => status >= 200 && status < 400
+    });
+
+    const contentType = String(response.headers['content-type'] || '').toLowerCase();
+    if (contentType && !contentType.includes('html') && !contentType.includes('text/plain')) {
+        throw new Error(`Unsupported content type ${contentType}`);
+    }
+
+    return {
+        html: String(response.data || ''),
+        finalUrl: response.request?.res?.responseUrl || pageUrl
+    };
+}
+
+async function findPublicEmailsOnWebsite(website) {
+    if (!website) return [];
+
+    const startUrl = normalizeWebsiteUrl(website);
+    const baseHost = normalizeDomain(startUrl);
+    const found = new Set();
+
+    try {
+        const homepage = await fetchLeadContactHtml(startUrl);
+        extractPublicEmailsFromHtml(homepage.html).forEach(email => found.add(email));
+
+        if (found.size > 0) {
+            return [...found];
+        }
+
+        const contactLinks = collectLeadContactLinks(homepage.html, homepage.finalUrl, baseHost);
+        const pageResults = await Promise.allSettled(contactLinks.map(link => fetchLeadContactHtml(link)));
+        for (const result of pageResults) {
+            if (result.status === 'fulfilled') {
+                extractPublicEmailsFromHtml(result.value.html).forEach(email => found.add(email));
+            }
+        }
+    } catch (error) {
+        console.warn(`[Lead Enrichment] Website email lookup failed for ${website}: ${error.message}`);
+    }
+
+    return [...found];
+}
+
+function normalizeMapsCsvRow(row, discoveryQuery, extraEmails = []) {
+    const emails = [
+        ...parseEmailListFromCsvValue(getMapsRowValue(row, 'emails', 'email')),
+        ...extraEmails
+    ];
+
+    const uniqueEmails = [...new Set(emails.filter(isUsefulLeadEmail))];
 
     return normalizeLeadCandidate({
-        name: pick('title', 'name', 'business name', 'business_name'),
-        company: pick('title', 'name', 'business name', 'business_name'),
-        emails,
-        phone: pick('phone', 'telephone'),
-        website: pick('website', 'web_site', 'web site'),
-        address: pick('address', 'complete_address', 'complete address'),
-        sourceUrl: pick('link', 'google maps link', 'source_url')
-    }, discoveryQuery, pick('link'));
+        name: getMapsRowValue(row, 'title', 'name', 'business name', 'business_name'),
+        company: getMapsRowValue(row, 'title', 'name', 'business name', 'business_name'),
+        emails: uniqueEmails,
+        phone: getMapsRowValue(row, 'phone', 'telephone'),
+        website: getMapsRowValue(row, 'website', 'web_site', 'web site'),
+        address: formatMapsAddress(getMapsRowValue(row, 'address', 'complete_address', 'complete address')),
+        sourceUrl: getMapsRowValue(row, 'link', 'google maps link', 'source_url')
+    }, discoveryQuery, getMapsRowValue(row, 'link'));
+}
+
+async function normalizeMapsCsvRowWithWebsiteEnrichment(row, discoveryQuery) {
+    const candidates = normalizeMapsCsvRow(row, discoveryQuery);
+    if (candidates.length > 0) return candidates;
+
+    const website = getMapsRowValue(row, 'website', 'web_site', 'web site');
+    if (!website) return candidates;
+
+    const websiteEmails = await findPublicEmailsOnWebsite(website);
+    if (websiteEmails.length > 0) {
+        const name = getMapsRowValue(row, 'title', 'name', 'business name', 'business_name') || website;
+        console.log(`[Lead Enrichment] Found ${websiteEmails.length} public email(s) on ${website} for ${name}.`);
+    }
+
+    return normalizeMapsCsvRow(row, discoveryQuery, websiteEmails);
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+    const results = new Array(items.length);
+    let nextIndex = 0;
+
+    async function worker() {
+        while (nextIndex < items.length) {
+            const index = nextIndex++;
+            results[index] = await mapper(items[index], index);
+        }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
 }
 
 async function scrapeLeadCandidatesWithMapsSidecar(niche, count) {
@@ -1074,8 +1260,14 @@ async function scrapeLeadCandidatesWithMapsSidecar(niche, count) {
         transformResponse: [data => data]
     });
 
-    const candidates = parseCsvRows(csvRes.data)
-        .flatMap(row => normalizeMapsCsvRow(row, niche));
+    const rows = parseCsvRows(csvRes.data);
+    const rowsToEnrich = rows.slice(0, Math.min(rows.length, Math.max(count, 50)));
+    const rowCandidates = await mapWithConcurrency(
+        rowsToEnrich,
+        4,
+        row => normalizeMapsCsvRowWithWebsiteEnrichment(row, niche)
+    );
+    const candidates = rowCandidates.flat();
 
     return candidates.slice(0, count);
 }

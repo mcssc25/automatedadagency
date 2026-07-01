@@ -3853,8 +3853,16 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             });
 
             if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.error || "Lead scraping failed");
+                const contentType = response.headers.get("content-type") || "";
+                let errData = {};
+                if (contentType.includes("application/json")) {
+                    errData = await response.json().catch(() => ({}));
+                } else {
+                    const rawError = await response.text().catch(() => "");
+                    errData.error = rawError.trim().slice(0, 400);
+                }
+                const details = errData.details ? ` Details: ${errData.details}` : "";
+                throw new Error(`${errData.error || "Lead scraping failed"}${details}`);
             }
             const data = await response.json();
             
