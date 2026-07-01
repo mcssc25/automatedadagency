@@ -54,6 +54,27 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Cleaned up the CRM selected-lead detail header after the Maps source URL made the view look broken:
+  - Contact/company/email/phone/address details now render as compact wrapping chips.
+  - Long website/source URLs now render as `Website` and `Maps Source` action links.
+  - Empty Maps `complete_address` JSON blobs are hidden in the UI for older rows.
+  - Asset versions changed to `20260701-crm-lead-header` for `index.css` and `app.js`.
+- Local verification completed:
+  - `node --check app.js`
+  - `node --check server.js`
+  - `git diff --check`
+  - Local Docker rebuild with `docker compose up -d --build ad-agency-autopilot`.
+  - Browser verification on local `http://127.0.0.1:3100/#crm`: selected lead showed chips for company/email/phone and action links for Website/Maps Source, with no raw long URL or empty JSON address chip.
+- Git commit pushed: `4b79a0d` Clean up CRM lead detail header.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T194149Z-crm-lead-header`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public `/api/app-config` returned `geminiConfigured: true`.
+  - Public HTML loads `index.css?v=20260701-crm-lead-header` and `app.js?v=20260701-crm-lead-header`.
+  - Live files contain `selected-lead-title-row` and `lead-detail-link`.
+
+## Previous Update
+
 - Fixed the lead scrape failure where Maps found a business website but the sidecar returned an empty `emails` column:
   - `server.js` now keeps the `gosom/google-maps-scraper` sidecar for Maps discovery.
   - If a Maps CSV row has a website but no usable email, the app directly fetches the business homepage and up to a few contact/about/team-style internal pages.
@@ -83,7 +104,7 @@ Last updated: 2026-07-01
   - Production `/api/scrape-leads` for `kelly davis realtor in gulf shore alabama` inserted `Dave and Kelly Davis - Big Beach AL Team` with `info@bigbeachal.com` as a `Scraped` lead.
   - Public `/api/crm-state` showed stage counts `Hot Lead: 1` and `Scraped: 1` after the smoke test.
 
-## Previous Update
+## Earlier Update
 
 - Added optional human strategy inputs to onboarding:
   - New optional fields inside the SWOT/strategy step: agency goal, core message, and extra details not captured by research.

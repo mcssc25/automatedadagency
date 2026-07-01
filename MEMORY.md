@@ -27,6 +27,7 @@ Last updated: 2026-07-01
 - Inbound Mailgun replies post to `/api/webhooks/inbound-email` and should appear in the CRM conversation after polling refresh.
 - Lead scraping prefers the `gosom/google-maps-scraper` sidecar via `LEAD_SCRAPER_URL=http://lead-scraper:8080`; when Maps returns a website but no email, the app now directly crawls the business homepage/contact-style pages for public emails before falling back to Gemini. It never creates fake contacts and imports only leads with both name and valid email.
 - Lead records now support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
+- CRM selected-lead details render contact fields as compact chips and hide long source URLs behind Website/Maps Source links.
 - The Gemini API key UI is a read-only server-config status field, not a password input, to avoid Chrome password-save prompts.
 - Sales asset settings persist in CRM settings: booking/calendar link, sales page URL, default demo YouTube video, and YouTube page/channel.
 - Campaign generation, outbound placeholder replacement, and inbound AI replies can use saved sales assets through `[CTA Link]`, `[Booking Link]`, `[Demo Link]`, `[YouTube Link]`, `[Sales Page]`, and `[Website]`.
