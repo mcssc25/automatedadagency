@@ -64,7 +64,14 @@ Last updated: 2026-07-01
   - `node --check app.js`
   - `node --check server.js`
   - `git diff --check`
-- Deployment status: pending for this entry.
+- Git commit pushed: `e5cf391` Add optional onboarding strategy inputs.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T185147Z-optional-strategy-inputs`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public HTML contains `Optional Strategy Inputs`, `agency-goal`, `core-message`, and `extra-details`.
+  - Public HTML loads `app.js?v=20260701-strategy-inputs`.
+  - Public `app.js` includes optional goal context and sends `strategicContext` to `/api/generate-campaign`.
+  - Live `server.js` includes the additional strategic context in the campaign prompt.
 
 ## Previous Update
 
