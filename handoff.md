@@ -10,6 +10,7 @@ Last updated: 2026-07-01
 - Production app is hosted at `https://agents.realestatecrmpro.com`.
 - VPS app path: `/opt/ad-agency-autopilot`.
 - Runtime is separate from ClaimPilot even though it uses the same VPS.
+- VPS deployment is currently file-copy based, not a Git checkout.
 - Do not modify `fluffysbait.com`; it is a real production site.
 
 ## Production Setup
@@ -53,31 +54,46 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
-- Added root `AGENTS.md` with project operating rules.
-- Added compact `MEMORY.md` for durable future-session context.
-- Rewrote this handoff to remove stale setup steps and focus on current state.
-- New rule: after every meaningful update, refresh both `MEMORY.md` and `handoff.md`.
+- Added and deployed the low-cost lead scraper integration.
+- Git commits pushed:
+  - `c1e42b5` Add maps-based lead scraper sidecar
+  - `a835c62` Avoid VPS scraper port conflict
+- `docker-compose.yml` now includes a `gosom/google-maps-scraper` sidecar service exposed on VPS loopback at `127.0.0.1:18080`; the Node app talks to it over Docker DNS at `http://lead-scraper:8080`.
+- `/api/scrape-leads` now tries the maps scraper first, falls back to Gemini search only when needed, never inserts fake contacts, and imports only candidates with both name and valid email.
+- Lead storage and CRM display now include optional `address`, `sourceUrl`, and `discoveryQuery` metadata.
 
-## Known Working Tree Item
+## Deployment Notes
 
-- There is an uncommitted lead-scraper integration in progress across `.dockerignore`, `docker-compose.yml`, `server.js`, `db.js`, and `app.js`.
-- The diff appears to add a `gosom/google-maps-scraper` service, `LEAD_SCRAPER_*` app env vars, lead metadata fields (`address`, `sourceUrl`, `discoveryQuery`), scraper CSV/JSON parsing, and CRM UI display of source details.
-- The memory/handoff documentation update did not create or commit those code/config changes. Review them before deciding whether to commit, deploy, or discard them.
+- Runtime files copied to `/opt/ad-agency-autopilot` by `scp` because the VPS app directory is not a Git checkout.
+- Pre-deploy backup of replaced runtime files: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T084016`.
+- Initial production restart hit a loopback port conflict on `127.0.0.1:8080`; fixed by moving the optional scraper host binding to `127.0.0.1:18080`.
 
 ## Verification
 
-- Before the GitHub backup commit, these passed:
+- Local code checks passed:
   - `node --check server.js`
   - `node --check app.js`
   - `node --check db.js`
+- Local SQLite migration check passed via `db.initDb()`; existing lead rows now expose `address`, `sourceUrl`, and `discoveryQuery`.
+- `docker compose config` passed.
+- Local Docker verification passed:
+  - `lead-scraper` started successfully.
+  - App container rebuilt and became healthy.
+  - Local `http://127.0.0.1:3100/api/app-config` returned `{"geminiConfigured":true}`.
+  - Sidecar accepted a smoke-test REST job payload and returned a job id.
+- VPS verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot`, `ad-agency-lead-scraper`, and the Cloudflare tunnel running.
+  - Public `https://agents.realestatecrmpro.com/api/app-config` returned `{"geminiConfigured":true}`.
+  - App container has `LEAD_SCRAPER_URL=http://lead-scraper:8080`.
+  - App container resolves Docker DNS name `lead-scraper`.
+  - VPS loopback `http://127.0.0.1:18080/` returned HTTP 200.
 - Staged secret-pattern scan passed before pushing the initial backup.
 - Git ignored local secrets/runtime data before the backup push.
 
 ## Next Steps
 
-- Review the separate lead-scraper working-tree change and decide whether it belongs in the next code update.
+- Run a small real scrape from the UI and inspect inserted lead quality.
 - Continue database/scraper hardening as needed:
   - Add automated tests for duplicate lead insertion.
   - Add tests for unsubscribe/DNC permanence.
   - Add tests for outbound-send DNC blocking.
-- After future production code changes, deploy to `/opt/ad-agency-autopilot` and verify `https://agents.realestatecrmpro.com/api/app-config`.
