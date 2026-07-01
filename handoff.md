@@ -54,6 +54,13 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
+- Fixed Chrome password-save prompts caused by the non-login Gemini API key field being interpreted as a credential form.
+- The API key input now uses `autocomplete="new-password"` plus password-manager ignore hints, and its visibility toggle is explicitly a button.
+- Git commit pushed: `6e56568` Suppress password manager prompt for API key field.
+- Deployed to the VPS and verified the live HTML contains the password-manager ignore hints.
+
+## Previous Update
+
 - Added and deployed the low-cost lead scraper integration.
 - Git commits pushed:
   - `c1e42b5` Add maps-based lead scraper sidecar
@@ -84,6 +91,7 @@ Last updated: 2026-07-01
 - VPS verification passed:
   - `docker compose ps` shows `ad-agency-autopilot`, `ad-agency-lead-scraper`, and the Cloudflare tunnel running.
   - Public `https://agents.realestatecrmpro.com/api/app-config` returned `{"geminiConfigured":true}`.
+  - Public HTML contains the API-key password-manager ignore hints.
   - App container has `LEAD_SCRAPER_URL=http://lead-scraper:8080`.
   - App container resolves Docker DNS name `lead-scraper`.
   - VPS loopback `http://127.0.0.1:18080/` returned HTTP 200.
