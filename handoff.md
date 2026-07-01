@@ -54,32 +54,17 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
-- Removed active demo/simulation behavior so the UI only reports real connected activity.
+- Fixed the misleading dashboard startup log after onboarding is already saved.
 - Code changes:
-  - Deleted `agent-simulation.js` and removed it from `index.html`.
-  - Dashboard copy now shows real empty states instead of fake agent-online status, fake KPI deltas, or simulated log lines.
-  - Support Hub now presents itself as a website chat inbox waiting for a real sales-page chat widget.
-  - Hidden/disabled legacy placeholder fallback controls and forced simulated unsubscribe behavior off.
-  - Browser-side CRM drip/reply simulation was replaced with a no-op; real campaign follow-ups remain the backend pipeline worker's job.
-  - Ad/social generation now fails visibly if Gemini is unavailable instead of producing canned fallback copy.
-  - Trend research returns real results, empty results, or an error; it no longer falls back to example trends.
-  - Publishing now fails if no Make.com/publisher webhook is configured and no longer creates fake engagement metrics after forwarding a post.
-  - Mailgun send now fails if Mailgun is not configured instead of logging a mock sent email.
-  - Asset version changed to `app.js?v=20260701-no-demo-activity`.
+  - `app.js` now appends a context-aware startup status line after `loadState()`.
+  - If onboarding has a saved business name or website, the dashboard says `Workspace ready for <client>. Onboarding profile loaded.`
+  - If no client exists, the original `Add a client in Agency Onboarding` prompt still appears.
+  - Asset version changed to `app.js?v=20260701-startup-client-status`.
 - Local verification completed:
   - `node --check app.js`
-  - `node --check server.js`
   - `git diff --check` (only normal Windows CRLF warnings)
-  - Local Docker rebuild with `docker compose up -d --build ad-agency-autopilot`.
-  - Local `http://127.0.0.1:3100/api/app-config` returned `geminiConfigured: true`.
-  - Local HTML no longer references `agent-simulation.js`, does reference `app.js?v=20260701-no-demo-activity`, contains `Real Activity Log`, and no longer contains `4 Agents Online`.
-- Git commit pushed: `e1c75dd` Remove demo activity paths.
-- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T202318Z-no-demo-activity`.
-- Live verification passed:
-  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
-  - `agent-simulation.js` was removed from the live app directory.
-  - Public `/api/app-config` returned `geminiConfigured: true`.
-  - Public HTML no longer references `agent-simulation.js`, does reference `app.js?v=20260701-no-demo-activity`, contains `Real Activity Log`, and no longer contains `4 Agents Online`.
+- Git/repo status: update is intended to be committed on `main` and pushed to `origin/main`; final response should report the exact commit hash.
+- Deployment status: pending at the time of this handoff edit.
 
 ## Previous Product Review
 

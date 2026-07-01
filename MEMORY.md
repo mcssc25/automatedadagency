@@ -24,6 +24,7 @@ Last updated: 2026-07-01
 - Content priorities: research the most viral topic-level posts, not only competitor pages; draft posts should include matching generated images/videos by default; add an AI recommendation path for today's post without requiring a manual topic.
 - Dashboard/support activity should clearly distinguish real records/jobs from demo simulation.
 - Demo data/activity should not be shown anymore: no fake leads, fake support chats, fake KPI movement, fake publishing success, fake email sends, or mock trend fallbacks.
+- Dashboard startup activity is context-aware: if onboarding has saved a business name or website, the log says the client profile is loaded instead of prompting to add a client.
 
 ## Current Safeguards
 

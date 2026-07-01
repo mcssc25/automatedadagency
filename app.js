@@ -130,7 +130,7 @@ class AutopilotApp {
         this.checkIntegrationStatuses();
         this.startCrmRefreshPolling();
         
-        this.appendConsoleLine('system', 'Workspace ready. Add a client in Agency Onboarding to begin.');
+        this.appendStartupStatusLine();
     }
 
     cacheDOM() {
@@ -933,6 +933,30 @@ class AutopilotApp {
         } catch (error) {
             console.warn("Could not load server config:", error.message);
         }
+    }
+
+    getConfiguredClientLabel() {
+        const businessName = String(this.state.bizName || '').trim();
+        if (businessName) return businessName;
+
+        const website = String(this.state.bizWebsite || '').trim();
+        if (!website) return '';
+
+        try {
+            return new URL(website).hostname;
+        } catch (error) {
+            return website;
+        }
+    }
+
+    appendStartupStatusLine() {
+        const clientLabel = this.getConfiguredClientLabel();
+        if (clientLabel) {
+            this.appendConsoleLine('system', `Workspace ready for ${clientLabel}. Onboarding profile loaded.`);
+            return;
+        }
+
+        this.appendConsoleLine('system', 'Workspace ready. Add a client in Agency Onboarding to begin.');
     }
 
     async fetchLeadsFromServer() {
