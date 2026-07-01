@@ -1028,9 +1028,11 @@
                                         <option value="All">All Stages</option>
                                         <option value="Scraped">Scraped</option>
                                         <option value="Emailed">Emailed</option>
+                                        <option value="Two-Way Conversation">Two-Way Conversation</option>
                                         <option value="Hot Lead">Hot Lead</option>
                                         <option value="Demo Scheduled">Demo Scheduled</option>
-                                        <option value="Requires Handoff">Requires Handoff</option>
+                                        <option value="Needs Human Action">Needs Human Action</option>
+                                        <option value="Quarantined">Quarantined</option>
                                         <option value="Opted Out">Opted Out</option>
                                         <option value="DNC">Blacklisted (DNC)</option>
                                     </select>
@@ -1168,6 +1170,12 @@
                                     </div>
 
                                     <div class="form-group">
+                                        <label for="crm-daily-scrape-query">Daily Scrape Search</label>
+                                        <input type="text" id="crm-daily-scrape-query" placeholder="e.g. plumbers in Austin TX" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                        <p class="step-helper" style="margin-top:4px;">When daily scraping is enabled, the backend runs this search once per day and adds name + email leads to Scraped.</p>
+                                    </div>
+
+                                    <div class="form-group">
                                         <label for="crm-first-campaign">Default First Drip Campaign</label>
                                         <select id="crm-first-campaign" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
                                             <option value="">-- No Active Campaign --</option>
@@ -1196,6 +1204,27 @@
 
                                     <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
                                         <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+                                            <span style="font-size:0.85rem; color:var(--text-primary);">Daily Scrape New Leads</span>
+                                            <label class="toggle-switch" style="width:36px; height:20px;">
+                                                <input type="checkbox" id="crm-daily-scrape-enabled">
+                                                <span class="toggle-slider" style="border-radius:20px;"></span>
+                                            </label>
+                                        </label>
+                                        <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+                                            <span style="font-size:0.85rem; color:var(--text-primary);">Auto-Enroll Scraped Leads into Campaign 1</span>
+                                            <label class="toggle-switch" style="width:36px; height:20px;">
+                                                <input type="checkbox" id="crm-auto-enroll-scraped">
+                                                <span class="toggle-slider" style="border-radius:20px;"></span>
+                                            </label>
+                                        </label>
+                                        <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+                                            <span style="font-size:0.85rem; color:var(--text-primary);">Auto-Send Due Follow-Up Steps</span>
+                                            <label class="toggle-switch" style="width:36px; height:20px;">
+                                                <input type="checkbox" id="crm-auto-advance-campaigns">
+                                                <span class="toggle-slider" style="border-radius:20px;"></span>
+                                            </label>
+                                        </label>
+                                        <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
                                             <span style="font-size:0.85rem; color:var(--text-primary);">Auto-Pause Drip on Lead Reply</span>
                                             <label class="toggle-switch" style="width:36px; height:20px;">
                                                 <input type="checkbox" id="crm-auto-pause" checked>
@@ -1209,6 +1238,7 @@
                                                 <span class="toggle-slider" style="border-radius:20px;"></span>
                                             </label>
                                         </label>
+                                        <button class="btn btn-primary" id="btn-run-crm-pipeline" style="width:100%; margin-top:6px;"><i class="fa-solid fa-play"></i> Run Pipeline Now</button>
                                     </div>
                                 </div>
                             </div>

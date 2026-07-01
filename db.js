@@ -114,6 +114,7 @@ function initDb() {
             history TEXT NOT NULL DEFAULT '[]',
             currentCampaignId INTEGER,
             currentCampaignStep INTEGER,
+            lastStepTime INTEGER,
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
@@ -121,6 +122,7 @@ function initDb() {
     ensureColumn('leads', 'address', 'TEXT');
     ensureColumn('leads', 'sourceUrl', 'TEXT');
     ensureColumn('leads', 'discoveryQuery', 'TEXT');
+    ensureColumn('leads', 'lastStepTime', 'INTEGER');
 
     // 2. DNC List Table
     db.exec(`
@@ -145,6 +147,25 @@ function initDb() {
         )
     `);
 
+    // 4. Campaign Enrollment Ledger
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS campaign_enrollments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            leadId INTEGER NOT NULL,
+            campaignId INTEGER NOT NULL,
+            campaignOrder INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'Active',
+            currentStep INTEGER NOT NULL DEFAULT 0,
+            nextActionAt TEXT,
+            lastSentAt TEXT,
+            completedAt TEXT,
+            createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (leadId) REFERENCES leads(id),
+            FOREIGN KEY (campaignId) REFERENCES campaigns(id)
+        )
+    `);
+
     migrateExistingData();
 
     db.exec(`
@@ -156,6 +177,12 @@ function initDb() {
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_dnc_email_nocase
         ON dnc_list(LOWER(email));
+
+        CREATE INDEX IF NOT EXISTS idx_campaign_enrollments_lead_status
+        ON campaign_enrollments(leadId, status);
+
+        CREATE INDEX IF NOT EXISTS idx_campaign_enrollments_next_action
+        ON campaign_enrollments(status, nextActionAt);
     `);
     
     console.log('[Database] SQLite (node:sqlite) initialized successfully.');
@@ -265,12 +292,12 @@ function updateLead(lead) {
     const emailClean = normalizeEmail(lead.email);
     if (!emailClean) throw new Error('Lead email is required');
 
-    const isDnc = isEmailDnc(emailClean) || lead.stage === 'DNC' || lead.stage === 'Opted Out';
-    const finalStage = isDnc ? (lead.stage === 'Opted Out' ? 'Opted Out' : 'DNC') : lead.stage;
+    const isDnc = isEmailDnc(emailClean) || ['DNC', 'Opted Out', 'Quarantined'].includes(lead.stage);
+    const finalStage = isDnc ? 'Quarantined' : lead.stage;
     const historyStr = JSON.stringify(lead.history || []);
     const stmt = db.prepare(
         `UPDATE leads SET name = ?, company = ?, email = ?, phone = ?, website = ?, address = ?, sourceUrl = ?, discoveryQuery = ?, stage = ?, 
-         history = ?, currentCampaignId = ?, currentCampaignStep = ? WHERE id = ?`
+         history = ?, currentCampaignId = ?, currentCampaignStep = ?, lastStepTime = ? WHERE id = ?`
     );
     const result = stmt.run(
         normalizeText(lead.name), 
@@ -285,6 +312,7 @@ function updateLead(lead) {
         historyStr,
         isDnc ? null : (lead.currentCampaignId || null),
         isDnc ? null : (lead.currentCampaignStep || null),
+        isDnc ? null : (lead.lastStepTime || null),
         lead.id
     );
     return result.changes;
@@ -305,8 +333,9 @@ function addEmailToDnc(email, reason = 'Manual request') {
     dncStmt.run(emailClean, reason);
     
     // 2. Update all matching active leads to DNC stage
-    const updateStmt = db.prepare("UPDATE leads SET stage = 'DNC', currentCampaignId = NULL, currentCampaignStep = NULL WHERE LOWER(email) = ?");
+    const updateStmt = db.prepare("UPDATE leads SET stage = 'Quarantined', currentCampaignId = NULL, currentCampaignStep = NULL, lastStepTime = NULL WHERE LOWER(email) = ?");
     updateStmt.run(emailClean);
+    pauseLeadEnrollmentsByEmail(emailClean, 'Quarantined');
 }
 
 function getDncList() {
@@ -372,6 +401,85 @@ function deleteCampaign(id) {
     return result.changes;
 }
 
+function getActiveEnrollmentForLead(leadId) {
+    const stmt = db.prepare(`
+        SELECT e.*, c.name AS campaignName
+        FROM campaign_enrollments e
+        LEFT JOIN campaigns c ON c.id = e.campaignId
+        WHERE e.leadId = ? AND e.status IN ('Active', 'Paused')
+        ORDER BY e.id DESC
+        LIMIT 1
+    `);
+    return stmt.get(leadId) || null;
+}
+
+function getEnrollmentsForLead(leadId) {
+    const stmt = db.prepare(`
+        SELECT e.*, c.name AS campaignName
+        FROM campaign_enrollments e
+        LEFT JOIN campaigns c ON c.id = e.campaignId
+        WHERE e.leadId = ?
+        ORDER BY e.id DESC
+    `);
+    return stmt.all(leadId);
+}
+
+function getDueEnrollments(nowIso = new Date().toISOString(), limit = 100) {
+    const stmt = db.prepare(`
+        SELECT e.*, c.name AS campaignName
+        FROM campaign_enrollments e
+        JOIN campaigns c ON c.id = e.campaignId
+        WHERE e.status = 'Active'
+          AND (e.nextActionAt IS NULL OR e.nextActionAt <= ?)
+        ORDER BY COALESCE(e.nextActionAt, e.createdAt) ASC
+        LIMIT ?
+    `);
+    return stmt.all(nowIso, limit);
+}
+
+function insertEnrollment({ leadId, campaignId, campaignOrder = 1, status = 'Active', currentStep = 0, nextActionAt = null }) {
+    const existing = db.prepare(`
+        SELECT id FROM campaign_enrollments
+        WHERE leadId = ? AND campaignId = ? AND status IN ('Active', 'Paused')
+        LIMIT 1
+    `).get(leadId, campaignId);
+    if (existing) return existing.id;
+
+    const stmt = db.prepare(`
+        INSERT INTO campaign_enrollments (leadId, campaignId, campaignOrder, status, currentStep, nextActionAt)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(leadId, campaignId, campaignOrder, status, currentStep, nextActionAt);
+    return result.lastInsertRowid;
+}
+
+function updateEnrollment(id, changes = {}) {
+    const allowed = ['status', 'currentStep', 'nextActionAt', 'lastSentAt', 'completedAt', 'campaignOrder'];
+    const keys = allowed.filter(key => Object.prototype.hasOwnProperty.call(changes, key));
+    if (keys.length === 0) return 0;
+
+    const assignments = keys.map(key => `${key} = ?`).join(', ');
+    const values = keys.map(key => changes[key]);
+    values.push(new Date().toISOString(), id);
+    const stmt = db.prepare(`UPDATE campaign_enrollments SET ${assignments}, updatedAt = ? WHERE id = ?`);
+    return stmt.run(...values).changes;
+}
+
+function pauseLeadEnrollments(leadId, status = 'Paused') {
+    const stmt = db.prepare(`
+        UPDATE campaign_enrollments
+        SET status = ?, updatedAt = ?
+        WHERE leadId = ? AND status = 'Active'
+    `);
+    return stmt.run(status, new Date().toISOString(), leadId).changes;
+}
+
+function pauseLeadEnrollmentsByEmail(email, status = 'Paused') {
+    const lead = getLeadByEmail(email);
+    if (!lead) return 0;
+    return pauseLeadEnrollments(lead.id, status);
+}
+
 module.exports = {
     initDb,
     getLeads,
@@ -390,5 +498,11 @@ module.exports = {
     insertCampaign,
     updateCampaign,
     updateCampaignStatus,
-    deleteCampaign
+    deleteCampaign,
+    getActiveEnrollmentForLead,
+    getEnrollmentsForLead,
+    getDueEnrollments,
+    insertEnrollment,
+    updateEnrollment,
+    pauseLeadEnrollments
 };

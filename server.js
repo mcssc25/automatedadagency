@@ -20,6 +20,8 @@ const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const DATA_DIR = path.join(__dirname, 'data');
 const CRM_STATE_FILE = path.join(DATA_DIR, 'crm-state.json');
+const CRM_SETTINGS_FILE = path.join(DATA_DIR, 'crm-settings.json');
+let pipelineWorkerRunning = false;
 
 function ensureDataDir() {
     if (!fs.existsSync(DATA_DIR)) {
@@ -55,6 +57,11 @@ function defaultCrmState() {
             firstCampaignId: null,
             secondCampaignId: null,
             thirdCampaignId: null,
+            dailyScrapeEnabled: false,
+            dailyScrapeQuery: '',
+            autoEnrollScrapedLeads: false,
+            autoAdvanceCampaigns: false,
+            lastDailyScrapeDate: null,
             autoPauseOnReply: true,
             simulateUnsubscribes: true,
             bypassEmailVerification: false,
@@ -62,6 +69,38 @@ function defaultCrmState() {
         },
         updatedAt: null
     };
+}
+
+function defaultCrmSettings() {
+    return {
+        enabled: false,
+        dailyLeadTarget: 100,
+        firstCampaignId: null,
+        secondCampaignId: null,
+        thirdCampaignId: null,
+        dailyScrapeEnabled: false,
+        dailyScrapeQuery: '',
+        autoEnrollScrapedLeads: false,
+        autoAdvanceCampaigns: false,
+        lastDailyScrapeDate: null,
+        autoPauseOnReply: true,
+        simulateUnsubscribes: false,
+        bypassEmailVerification: false
+    };
+}
+
+function readCrmSettings() {
+    return {
+        ...defaultCrmSettings(),
+        ...readJsonFile(CRM_SETTINGS_FILE, defaultCrmSettings())
+    };
+}
+
+function writeCrmSettings(settings) {
+    writeJsonFile(CRM_SETTINGS_FILE, {
+        ...defaultCrmSettings(),
+        ...settings
+    });
 }
 
 function normalizeCrmState(input = {}) {
@@ -83,6 +122,14 @@ function normalizeCrmState(input = {}) {
     return state;
 }
 
+function attachEnrollmentSummaries(leads = []) {
+    return leads.map(lead => ({
+        ...lead,
+        activeEnrollment: db.getActiveEnrollmentForLead(lead.id),
+        enrollments: db.getEnrollmentsForLead(lead.id)
+    }));
+}
+
 
 // Middleware
 app.use(cors());
@@ -98,16 +145,7 @@ app.get('/api/app-config', (req, res) => {
 
 app.get('/api/crm-state', (req, res) => {
     try {
-        const settings = readJsonFile(path.join(DATA_DIR, 'crm-settings.json'), {
-            enabled: false,
-            dailyLeadTarget: 100,
-            firstCampaignId: null,
-            secondCampaignId: null,
-            thirdCampaignId: null,
-            autoPauseOnReply: true,
-            simulateUnsubscribes: false,
-            bypassEmailVerification: false
-        });
+        const settings = readCrmSettings();
         
         const targetLeadsCount = db.getLeadsCount({ stage: 'Scraped' });
         const leadStageCounts = db.getLeadStageCounts();
@@ -121,10 +159,11 @@ app.get('/api/crm-state', (req, res) => {
         // Return first 50 leads to avoid UI lag.
         // Frontend will fetch paginated list via /api/leads
         const leads = db.getLeads({ limit: 50 });
+        const leadsWithEnrollments = attachEnrollmentSummaries(leads);
         const dncRows = db.getDncList();
         
         res.json({
-            leads,
+            leads: leadsWithEnrollments,
             campaignsList,
             verificationQueue,
             leadStageCounts,
@@ -149,11 +188,16 @@ app.put('/api/crm-state', (req, res) => {
                 firstCampaignId: crmAutopilot.firstCampaignId ? parseInt(crmAutopilot.firstCampaignId) : null,
                 secondCampaignId: crmAutopilot.secondCampaignId ? parseInt(crmAutopilot.secondCampaignId) : null,
                 thirdCampaignId: crmAutopilot.thirdCampaignId ? parseInt(crmAutopilot.thirdCampaignId) : null,
+                dailyScrapeEnabled: crmAutopilot.dailyScrapeEnabled ?? false,
+                dailyScrapeQuery: String(crmAutopilot.dailyScrapeQuery || '').trim(),
+                autoEnrollScrapedLeads: crmAutopilot.autoEnrollScrapedLeads ?? false,
+                autoAdvanceCampaigns: crmAutopilot.autoAdvanceCampaigns ?? false,
+                lastDailyScrapeDate: crmAutopilot.lastDailyScrapeDate || null,
                 autoPauseOnReply: crmAutopilot.autoPauseOnReply ?? true,
                 simulateUnsubscribes: crmAutopilot.simulateUnsubscribes ?? false,
                 bypassEmailVerification: crmAutopilot.bypassEmailVerification ?? false
             };
-            writeJsonFile(path.join(DATA_DIR, 'crm-settings.json'), settings);
+            writeCrmSettings(settings);
         }
         res.json({ success: true, updatedAt: new Date().toISOString() });
     } catch (err) {
@@ -171,7 +215,7 @@ app.get('/api/leads', (req, res) => {
         const limit = parseInt(req.query.limit) || 50;
         const offset = (page - 1) * limit;
         
-        const leads = db.getLeads({ stage, search, limit, offset });
+        const leads = attachEnrollmentSummaries(db.getLeads({ stage, search, limit, offset }));
         const total = db.getLeadsCount({ stage, search });
         const pages = Math.ceil(total / limit);
         
@@ -194,7 +238,7 @@ app.put('/api/leads/:id', (req, res) => {
             ...req.body,
             id: parseInt(id)
         };
-        if (updated.stage === 'DNC' || updated.stage === 'Opted Out') {
+        if (['DNC', 'Opted Out', 'Quarantined'].includes(updated.stage)) {
             db.addEmailToDnc(updated.email, `Lead marked ${updated.stage} from CRM`);
         }
         db.updateLead(updated);
@@ -1448,6 +1492,236 @@ async function sendMailgunEmail({ to, subject, text }) {
     return response.data;
 }
 
+function getConfiguredCampaignChain(settings = readCrmSettings()) {
+    return [
+        settings.firstCampaignId,
+        settings.secondCampaignId,
+        settings.thirdCampaignId
+    ].filter(Boolean);
+}
+
+function getCampaignOrder(campaignId, settings = readCrmSettings()) {
+    const index = getConfiguredCampaignChain(settings).findIndex(id => String(id) === String(campaignId));
+    return index >= 0 ? index + 1 : 1;
+}
+
+function getNextCampaignId(currentCampaignId, settings = readCrmSettings()) {
+    const chain = getConfiguredCampaignChain(settings);
+    const index = chain.findIndex(id => String(id) === String(currentCampaignId));
+    return index >= 0 ? chain[index + 1] || null : null;
+}
+
+function parseCampaignDelayMs(delayText, fallbackMs = 24 * 60 * 60 * 1000) {
+    const text = String(delayText || '').toLowerCase();
+    if (text.includes('immediate')) return 0;
+    const value = parseInt(text, 10);
+    if (!value) return fallbackMs;
+    if (text.includes('hour')) return value * 60 * 60 * 1000;
+    if (text.includes('minute')) return value * 60 * 1000;
+    return value * 24 * 60 * 60 * 1000;
+}
+
+function personalizeCampaignBody(template, lead, campaign, bizName, bizWebsite) {
+    return String(template || '')
+        .replace(/\[Lead Name\]/g, (lead.name || '').split(' ')[0] || lead.name || 'there')
+        .replace(/\[Agent Name\]/g, (lead.name || '').split(' ')[0] || lead.name || 'there')
+        .replace(/\[Your Name\]/g, bizName || 'our team')
+        .replace(/\[CTA Link\]/g, campaign.videoAsset || bizWebsite || '');
+}
+
+function getNextStepDueAt(campaign, currentStep) {
+    const nextStep = campaign.steps[currentStep];
+    if (!nextStep) return null;
+    return new Date(Date.now() + parseCampaignDelayMs(nextStep.delay)).toISOString();
+}
+
+async function sendCampaignStepToLead({ lead, campaign, enrollment, bizName = 'our team', bizWebsite = '' }) {
+    const nextStepNumber = (enrollment.currentStep || 0) + 1;
+    const step = campaign.steps[nextStepNumber - 1];
+    if (!step) {
+        db.updateEnrollment(enrollment.id, {
+            status: 'Completed',
+            completedAt: new Date().toISOString(),
+            nextActionAt: null
+        });
+        return { sent: false, completed: true };
+    }
+
+    const customizedBody = personalizeCampaignBody(step.body, lead, campaign, bizName, bizWebsite);
+    await sendMailgunEmail({
+        to: lead.email,
+        subject: step.subject,
+        text: customizedBody
+    });
+
+    const nowIso = new Date().toISOString();
+    const nextActionAt = nextStepNumber < campaign.steps.length
+        ? getNextStepDueAt(campaign, nextStepNumber)
+        : getNextStepDueAt(campaign, nextStepNumber - 1);
+
+    lead.stage = 'Emailed';
+    lead.currentCampaignId = campaign.id;
+    lead.currentCampaignStep = nextStepNumber;
+    lead.lastStepTime = Date.now();
+    if (!lead.history) lead.history = [];
+    lead.history.push({
+        sender: 'agent',
+        time: new Date().toLocaleTimeString(),
+        text: `[OUTBOUND EMAIL - CAMPAIGN ${enrollment.campaignOrder} STEP ${step.step || nextStepNumber}]\nSubject: ${step.subject}\n\n${customizedBody}`
+    });
+    db.updateLead(lead);
+
+    db.updateEnrollment(enrollment.id, {
+        currentStep: nextStepNumber,
+        lastSentAt: nowIso,
+        nextActionAt
+    });
+
+    return { sent: true, completed: false, stepNumber: nextStepNumber };
+}
+
+function enrollLeadInCampaign(lead, campaignId, campaignOrder, nextActionAt = null) {
+    const enrollmentId = db.insertEnrollment({
+        leadId: lead.id,
+        campaignId,
+        campaignOrder,
+        status: 'Active',
+        currentStep: 0,
+        nextActionAt
+    });
+    if (!lead.history) lead.history = [];
+    lead.history.push({
+        sender: 'agent-action',
+        time: 'Just Now',
+        text: `Enrolled in Campaign ${campaignOrder}.`
+    });
+    db.updateLead(lead);
+    return db.getActiveEnrollmentForLead(lead.id) || { id: enrollmentId, leadId: lead.id, campaignId, campaignOrder, status: 'Active', currentStep: 0, nextActionAt };
+}
+
+async function enrollAndSendScrapedLeads({ campaignId, limit = 1000, bizName, bizWebsite, settings = readCrmSettings() }) {
+    const campaign = db.getCampaignById(campaignId);
+    if (!campaign) throw new Error('Campaign not found');
+
+    const targetLeads = db.getLeads({ stage: 'Scraped', limit });
+    const campaignOrder = getCampaignOrder(campaignId, settings);
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const lead of targetLeads) {
+        try {
+            const enrollment = enrollLeadInCampaign(lead, campaignId, campaignOrder, new Date().toISOString());
+            await sendCampaignStepToLead({ lead, campaign, enrollment, bizName, bizWebsite });
+            sentCount++;
+        } catch (err) {
+            failedCount++;
+            console.error(`[Campaign Send] Failed for ${lead.email}:`, err.message);
+        }
+    }
+
+    return { targetLeadsCount: targetLeads.length, sentCount, failedCount };
+}
+
+async function processDueCampaignEnrollments({ limit = 50, bizName = 'our team', bizWebsite = '' } = {}) {
+    const settings = readCrmSettings();
+    if (!settings.autoAdvanceCampaigns) return { processed: 0, sent: 0, transitioned: 0, skipped: 0 };
+
+    const dueEnrollments = db.getDueEnrollments(new Date().toISOString(), limit);
+    let processed = 0;
+    let sent = 0;
+    let transitioned = 0;
+    let skipped = 0;
+
+    for (const enrollment of dueEnrollments) {
+        processed++;
+        const lead = db.getLeadById(enrollment.leadId);
+        const campaign = db.getCampaignById(enrollment.campaignId);
+        if (!lead || !campaign) {
+            db.updateEnrollment(enrollment.id, { status: 'Paused', nextActionAt: null });
+            skipped++;
+            continue;
+        }
+
+        if (['Two-Way Conversation', 'Needs Human Action', 'Quarantined', 'DNC', 'Opted Out'].includes(lead.stage)) {
+            db.updateEnrollment(enrollment.id, { status: 'Paused', nextActionAt: null });
+            skipped++;
+            continue;
+        }
+
+        if ((enrollment.currentStep || 0) >= campaign.steps.length) {
+            db.updateEnrollment(enrollment.id, {
+                status: 'Completed',
+                completedAt: new Date().toISOString(),
+                nextActionAt: null
+            });
+            const nextCampaignId = getNextCampaignId(campaign.id, settings);
+            if (nextCampaignId) {
+                const nextOrder = getCampaignOrder(nextCampaignId, settings);
+                enrollLeadInCampaign(lead, nextCampaignId, nextOrder, new Date().toISOString());
+                transitioned++;
+            }
+            continue;
+        }
+
+        try {
+            const result = await sendCampaignStepToLead({ lead, campaign, enrollment, bizName, bizWebsite });
+            if (result.sent) sent++;
+        } catch (err) {
+            skipped++;
+            console.error(`[Campaign Worker] Failed for enrollment ${enrollment.id}:`, err.message);
+        }
+    }
+
+    return { processed, sent, transitioned, skipped };
+}
+
+async function runCrmPipelineAutomation(trigger = 'manual') {
+    if (pipelineWorkerRunning) {
+        return { skipped: true, reason: 'Pipeline worker already running' };
+    }
+
+    pipelineWorkerRunning = true;
+    const summary = { trigger, scraped: 0, enrolled: 0, sent: 0, transitioned: 0, skipped: 0, warnings: [] };
+
+    try {
+        const settings = readCrmSettings();
+        const today = new Date().toISOString().slice(0, 10);
+
+        if (settings.dailyScrapeEnabled && settings.dailyScrapeQuery && settings.lastDailyScrapeDate !== today) {
+            try {
+                const count = Math.min(Math.max(parseInt(settings.dailyLeadTarget, 10) || 25, 1), 100);
+                const candidates = await scrapeLeadCandidatesWithMapsSidecar(settings.dailyScrapeQuery, count);
+                const { insertedLeads } = insertLeadCandidates(candidates.slice(0, count), settings.dailyScrapeQuery);
+                summary.scraped = insertedLeads.length;
+                writeCrmSettings({ ...settings, lastDailyScrapeDate: today });
+            } catch (err) {
+                summary.warnings.push(`daily-scrape: ${err.message}`);
+            }
+        }
+
+        const latestSettings = readCrmSettings();
+        if (latestSettings.autoEnrollScrapedLeads && latestSettings.firstCampaignId) {
+            const result = await enrollAndSendScrapedLeads({
+                campaignId: latestSettings.firstCampaignId,
+                limit: latestSettings.dailyLeadTarget || 100,
+                settings: latestSettings
+            });
+            summary.enrolled = result.targetLeadsCount;
+            summary.sent += result.sentCount;
+            summary.skipped += result.failedCount;
+        }
+
+        const dueResult = await processDueCampaignEnrollments();
+        summary.sent += dueResult.sent || 0;
+        summary.transitioned += dueResult.transitioned || 0;
+        summary.skipped += dueResult.skipped || 0;
+
+        return summary;
+    } finally {
+        pipelineWorkerRunning = false;
+    }
+}
+
 // Unsubscribe Endpoint
 app.get('/api/unsubscribe', (req, res) => {
     const email = req.query.email;
@@ -1496,12 +1770,14 @@ app.post('/api/webhooks/inbound-email', async (req, res) => {
             text: bodyText.trim()
         });
         
-        lead.stage = "Hot Lead";
+        lead.stage = "Two-Way Conversation";
         
-        const settings = readJsonFile(path.join(DATA_DIR, 'crm-settings.json'), { autoPauseOnReply: true });
+        const settings = readCrmSettings();
         if (settings.autoPauseOnReply) {
             lead.currentCampaignId = null;
             lead.currentCampaignStep = null;
+            lead.lastStepTime = null;
+            db.pauseLeadEnrollments(lead.id, 'Paused');
             lead.history.push({
                 sender: "agent-action",
                 time: "Just Now",
@@ -1515,7 +1791,7 @@ app.post('/api/webhooks/inbound-email', async (req, res) => {
         const isUnsub = unsubKeywords.some(keyword => lowerBody.includes(keyword));
         
         if (isUnsub) {
-            lead.stage = "Opted Out";
+            lead.stage = "Quarantined";
             db.addEmailToDnc(lead.email, `Auto-detected unsubscribe in email: "${bodyText.substring(0, 100)}..."`);
             lead.history.push({
                 sender: "agent-action",
@@ -1563,7 +1839,7 @@ Otherwise, set "requiresHandoff" to false. Ensure the response is valid JSON onl
         }
         
         if (replyJson.requiresHandoff) {
-            lead.stage = "Requires Handoff";
+            lead.stage = "Needs Human Action";
             lead.history.push({
                 sender: "agent-action",
                 time: "Just Now",
@@ -1658,9 +1934,8 @@ app.post('/api/campaigns/:id/approve', async (req, res) => {
         
         if (Array.isArray(steps)) campaign.steps = steps;
         
-        // Get target leads (stage is 'Scraped')
-        const targetLeads = db.getLeads({ stage: 'Scraped', limit: 1000 });
-        if (targetLeads.length === 0) {
+        const targetLeadsCount = db.getLeadsCount({ stage: 'Scraped' });
+        if (targetLeadsCount === 0) {
             return res.status(400).json({ error: 'No scraped leads are currently available to launch this campaign.' });
         }
 
@@ -1674,47 +1949,26 @@ app.post('/api/campaigns/:id/approve', async (req, res) => {
             steps: campaign.steps
         });
 
-        const step1 = campaign.steps[0];
-        let sentCount = 0;
-        let failedCount = 0;
+        const { sentCount, failedCount } = await enrollAndSendScrapedLeads({
+            campaignId,
+            limit: 1000,
+            bizName,
+            bizWebsite
+        });
         
-        for (const lead of targetLeads) {
-            // Customize body
-            let customizedBody = step1.body
-                .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
-                .replace(/\[Agent Name\]/g, lead.name.split(" ")[0])
-                .replace(/\[Your Name\]/g, bizName || 'our team')
-                .replace(/\[CTA Link\]/g, campaign.videoAsset || bizWebsite || '');
-            
-            // Send email
-            try {
-                await sendMailgunEmail({
-                    to: lead.email,
-                    subject: step1.subject,
-                    text: customizedBody
-                });
-                
-                lead.stage = 'Emailed';
-                lead.currentCampaignId = campaignId;
-                lead.currentCampaignStep = 1;
-                if (!lead.history) lead.history = [];
-                lead.history.push({
-                    sender: 'agent',
-                    time: new Date().toLocaleTimeString(),
-                    text: `[OUTBOUND EMAIL]\nSubject: ${step1.subject}\n\n${customizedBody}`
-                });
-                
-                db.updateLead(lead);
-                sentCount++;
-            } catch (err) {
-                failedCount++;
-                console.error(`[Campaign Approve] Failed to send to ${lead.email}:`, err.message);
-            }
-        }
-        
-        res.json({ success: true, targetLeadsCount: targetLeads.length, sentCount, failedCount });
+        res.json({ success: true, targetLeadsCount, sentCount, failedCount });
     } catch (err) {
         console.error('[Campaign Approve Error]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/crm-pipeline/run', async (req, res) => {
+    try {
+        const result = await runCrmPipelineAutomation(req.body?.trigger || 'manual-api');
+        res.json({ success: true, result });
+    } catch (err) {
+        console.error('[CRM Pipeline Run Error]', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -1802,38 +2056,7 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
         
         // If bypass is active, launch immediately
         if (settings.bypassEmailVerification) {
-            const targetLeads = db.getLeads({ stage: 'Scraped', limit: 1000 });
-            const step1 = steps[0];
-            
-            for (const lead of targetLeads) {
-                let customizedBody = step1.body
-                    .replace(/\[Lead Name\]/g, lead.name.split(" ")[0])
-                    .replace(/\[Agent Name\]/g, lead.name.split(" ")[0])
-                    .replace(/\[Your Name\]/g, bizName || 'our team')
-                    .replace(/\[CTA Link\]/g, videoAsset || bizWebsite || '');
-                
-                try {
-                    await sendMailgunEmail({
-                        to: lead.email,
-                        subject: step1.subject,
-                        text: customizedBody
-                    });
-                    
-                    lead.stage = 'Emailed';
-                    lead.currentCampaignId = campaignId;
-                    lead.currentCampaignStep = 1;
-                    if (!lead.history) lead.history = [];
-                    lead.history.push({
-                        sender: 'agent',
-                        time: new Date().toLocaleTimeString(),
-                        text: `[OUTBOUND EMAIL]\nSubject: ${step1.subject}\n\n${customizedBody}`
-                    });
-                    
-                    db.updateLead(lead);
-                } catch (err) {
-                    console.error(`[Campaign Auto-Launch] Failed for ${lead.email}:`, err.message);
-                }
-            }
+            await enrollAndSendScrapedLeads({ campaignId, limit: 1000, bizName, bizWebsite, settings });
         }
         
         res.json({ success: true, campaign });
@@ -2183,6 +2406,21 @@ app.post('/api/publish-post', async (req, res) => {
 
     res.json(results);
 });
+
+setInterval(() => {
+    const settings = readCrmSettings();
+    if (!settings.dailyScrapeEnabled && !settings.autoEnrollScrapedLeads && !settings.autoAdvanceCampaigns) {
+        return;
+    }
+
+    runCrmPipelineAutomation('interval').then(result => {
+        if (!result.skipped) {
+            console.log(`[CRM Pipeline] ${JSON.stringify(result)}`);
+        }
+    }).catch(err => {
+        console.error('[CRM Pipeline Interval Error]', err.message);
+    });
+}, 5 * 60 * 1000);
 
 app.listen(PORT, () => {
     console.log(`==================================================`);

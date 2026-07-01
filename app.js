@@ -36,6 +36,11 @@ class AutopilotApp {
                 firstCampaignId: null,
                 secondCampaignId: null,
                 thirdCampaignId: null,
+                dailyScrapeEnabled: false,
+                dailyScrapeQuery: '',
+                autoEnrollScrapedLeads: false,
+                autoAdvanceCampaigns: false,
+                lastDailyScrapeDate: null,
                 autoPauseOnReply: true,
                 simulateUnsubscribes: true,
                 bypassEmailVerification: false,
@@ -214,6 +219,11 @@ class AutopilotApp {
         this.dom.contentPublishMode = document.getElementById("content-autopilot-publish-mode");
         this.dom.contentAutopilotMedia = document.getElementById("content-autopilot-media");
         this.dom.crmLeadLimit = document.getElementById("crm-lead-limit");
+        this.dom.crmDailyScrapeQuery = document.getElementById("crm-daily-scrape-query");
+        this.dom.crmDailyScrapeEnabled = document.getElementById("crm-daily-scrape-enabled");
+        this.dom.crmAutoEnrollScraped = document.getElementById("crm-auto-enroll-scraped");
+        this.dom.crmAutoAdvanceCampaigns = document.getElementById("crm-auto-advance-campaigns");
+        this.dom.btnRunCrmPipeline = document.getElementById("btn-run-crm-pipeline");
         this.dom.crmFirstCampaign = document.getElementById("crm-first-campaign");
         this.dom.crmSecondCampaign = document.getElementById("crm-second-campaign");
         this.dom.crmThirdCampaign = document.getElementById("crm-third-campaign");
@@ -546,6 +556,27 @@ class AutopilotApp {
         this.dom.crmLeadLimit.addEventListener("input", () => {
             this.state.crmAutopilot.dailyLeadTarget = parseInt(this.dom.crmLeadLimit.value) || 100;
             this.saveState();
+            this.renderCampaignWorkflowSummary();
+        });
+        this.dom.crmDailyScrapeQuery.addEventListener("input", () => {
+            this.state.crmAutopilot.dailyScrapeQuery = this.dom.crmDailyScrapeQuery.value.trim();
+            this.saveState();
+            this.renderCampaignWorkflowSummary();
+        });
+        this.dom.crmDailyScrapeEnabled.addEventListener("change", () => {
+            this.state.crmAutopilot.dailyScrapeEnabled = this.dom.crmDailyScrapeEnabled.checked;
+            this.saveState();
+            this.renderCampaignWorkflowSummary();
+        });
+        this.dom.crmAutoEnrollScraped.addEventListener("change", () => {
+            this.state.crmAutopilot.autoEnrollScrapedLeads = this.dom.crmAutoEnrollScraped.checked;
+            this.saveState();
+            this.renderCampaignWorkflowSummary();
+        });
+        this.dom.crmAutoAdvanceCampaigns.addEventListener("change", () => {
+            this.state.crmAutopilot.autoAdvanceCampaigns = this.dom.crmAutoAdvanceCampaigns.checked;
+            this.saveState();
+            this.renderCampaignWorkflowSummary();
         });
         this.dom.crmFirstCampaign.addEventListener("change", () => {
             this.state.crmAutopilot.firstCampaignId = this.dom.crmFirstCampaign.value ? parseInt(this.dom.crmFirstCampaign.value) : null;
@@ -571,6 +602,7 @@ class AutopilotApp {
             this.state.crmAutopilot.simulateUnsubscribes = this.dom.crmSimulateUnsubs.checked;
             this.saveState();
         });
+        this.dom.btnRunCrmPipeline.addEventListener("click", () => this.runCrmPipelineNow());
 
         // Add DNC button
         this.dom.btnCrmDncAdd.addEventListener("click", () => this.addDncFromInput());
@@ -701,6 +733,11 @@ class AutopilotApp {
                 firstCampaignId: null,
                 secondCampaignId: null,
                 thirdCampaignId: null,
+                dailyScrapeEnabled: false,
+                dailyScrapeQuery: '',
+                autoEnrollScrapedLeads: false,
+                autoAdvanceCampaigns: false,
+                lastDailyScrapeDate: null,
                 autoPauseOnReply: true,
                 simulateUnsubscribes: true,
                 bypassEmailVerification: false,
@@ -713,6 +750,11 @@ class AutopilotApp {
             firstCampaignId: null,
             secondCampaignId: null,
             thirdCampaignId: null,
+            dailyScrapeEnabled: false,
+            dailyScrapeQuery: '',
+            autoEnrollScrapedLeads: false,
+            autoAdvanceCampaigns: false,
+            lastDailyScrapeDate: null,
             autoPauseOnReply: true,
             simulateUnsubscribes: true,
             bypassEmailVerification: false,
@@ -751,6 +793,10 @@ class AutopilotApp {
         });
 
         this.dom.crmLeadLimit.value = this.state.crmAutopilot.dailyLeadTarget || 100;
+        this.dom.crmDailyScrapeQuery.value = this.state.crmAutopilot.dailyScrapeQuery || '';
+        this.dom.crmDailyScrapeEnabled.checked = this.state.crmAutopilot.dailyScrapeEnabled === true;
+        this.dom.crmAutoEnrollScraped.checked = this.state.crmAutopilot.autoEnrollScrapedLeads === true;
+        this.dom.crmAutoAdvanceCampaigns.checked = this.state.crmAutopilot.autoAdvanceCampaigns === true;
         this.dom.crmAutoPause.checked = this.state.crmAutopilot.autoPauseOnReply !== false;
         this.dom.crmSimulateUnsubs.checked = this.state.crmAutopilot.simulateUnsubscribes !== false;
 
@@ -1375,6 +1421,9 @@ class AutopilotApp {
         const counts = this.state.leadStageCounts || {};
         const scraped = counts.Scraped || 0;
         const emailed = counts.Emailed || 0;
+        const conversations = counts['Two-Way Conversation'] || 0;
+        const needsHuman = counts['Needs Human Action'] || 0;
+        const quarantined = counts.Quarantined || 0;
         const hot = counts['Hot Lead'] || 0;
         const firstName = this.getCampaignNameById(this.state.crmAutopilot.firstCampaignId);
         const secondName = this.getCampaignNameById(this.state.crmAutopilot.secondCampaignId);
@@ -1390,7 +1439,7 @@ class AutopilotApp {
             </div>
             <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
                 <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Current Pipeline</div>
-                <div style="font-size:0.85rem; color:var(--text-primary); margin-top:8px;">${emailed} Emailed · ${hot} Hot Lead</div>
+                <div style="font-size:0.85rem; color:var(--text-primary); margin-top:8px;">${emailed} Emailed · ${conversations} Two-Way · ${needsHuman} Human · ${quarantined} Quarantined</div>
                 <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">Only Scraped leads are selected for a new campaign launch.</div>
             </div>
             <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
@@ -1403,10 +1452,16 @@ class AutopilotApp {
                 <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Launch Rule</div>
                 <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:8px;">${verificationMode}</div>
                 <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">${pauseMode}</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">Auto-enroll: ${this.state.crmAutopilot.autoEnrollScrapedLeads ? 'On' : 'Off'} · Auto-follow-up: ${this.state.crmAutopilot.autoAdvanceCampaigns ? 'On' : 'Off'}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
+                <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Daily Scrape</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:8px;">${this.state.crmAutopilot.dailyScrapeEnabled ? 'On' : 'Off'}${this.state.crmAutopilot.dailyScrapeQuery ? ` · ${this.state.crmAutopilot.dailyScrapeQuery}` : ''}</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">Last run: ${this.state.crmAutopilot.lastDailyScrapeDate || 'not yet'}</div>
             </div>
             <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
                 <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Tracking Rule</div>
-                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:8px;">Replies are tracked through the inbound Mailgun webhook.</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:8px;">Replies/unsubscribes are tracked through Mailgun webhooks.</div>
                 <div style="font-size:0.82rem; color:var(--orange); margin-top:6px;">Open/click/signup routing is not connected yet.</div>
             </div>
         `;
@@ -3196,9 +3251,10 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             <div class="lead-item ${this.state.selectedLeadIndex === i ? 'active' : ''}" data-index="${i}">
                 <div class="lead-header">
                     <span class="lead-name">${l.name}</span>
-                    <span class="lead-stage badge ${l.stage === 'Demo Scheduled' ? 'success-badge' : l.stage === 'Hot Lead' ? 'warning-badge' : ''}">${l.stage}</span>
+                    <span class="lead-stage badge ${l.stage === 'Demo Scheduled' ? 'success-badge' : ['Hot Lead', 'Two-Way Conversation'].includes(l.stage) ? 'warning-badge' : l.stage === 'Quarantined' ? 'danger-badge' : ''}">${l.stage}</span>
                 </div>
                 <div class="lead-email">${l.company} · ${l.email}</div>
+                ${l.activeEnrollment ? `<div class="lead-email">Campaign ${l.activeEnrollment.campaignOrder}: ${l.activeEnrollment.campaignName || 'Unknown'} · Step ${l.activeEnrollment.currentStep}</div>` : ''}
             </div>
         `).join("");
 
@@ -3236,11 +3292,15 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         const sourceLine = lead.sourceUrl
             ? `<p class="text-muted" style="font-size:0.75rem;">Source: ${lead.sourceUrl}</p>`
             : '';
+        const enrollmentLine = lead.activeEnrollment
+            ? `<p class="text-muted" style="font-size:0.75rem;">Campaign ${lead.activeEnrollment.campaignOrder}: ${lead.activeEnrollment.campaignName || 'Unknown'} · Step ${lead.activeEnrollment.currentStep} · ${lead.activeEnrollment.status}</p>`
+            : '';
 
         this.dom.selectedLeadHeader.innerHTML = `
             <h3>Outbound Negotiation Log: ${lead.name}</h3>
             <p class="text-muted">${details}</p>
             ${sourceLine}
+            ${enrollmentLine}
         `;
 
         if (!lead.history || lead.history.length === 0) {
@@ -3267,6 +3327,37 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         
         // Auto scroll
         this.dom.crmChatMessages.scrollTop = this.dom.crmChatMessages.scrollHeight;
+    }
+
+    async runCrmPipelineNow() {
+        const btn = this.dom.btnRunCrmPipeline;
+        if (!btn) return;
+
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Running Pipeline...`;
+
+        try {
+            const response = await fetch('/api/crm-pipeline/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trigger: 'manual-ui' })
+            });
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || 'Pipeline run failed');
+            }
+            const data = await response.json();
+            await this.loadCrmStateFromServer();
+            this.renderVerificationQueue();
+            this.renderCampaignsList();
+            alert(`Pipeline run complete: ${JSON.stringify(data.result)}`);
+        } catch (error) {
+            console.error('CRM pipeline run failed:', error);
+            alert(`Pipeline run failed: ${error.message}`);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-play"></i> Run Pipeline Now`;
+        }
     }
 
     // CRM Lead Scraper Execution
