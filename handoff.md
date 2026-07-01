@@ -61,7 +61,11 @@ Last updated: 2026-07-01
   - SWOT population now accepts `swotProfile`, `swot`, `SWOT`, `businessAnalysis`, object-shaped SWOT, or a SWOT section inside `businessReport`.
   - Competitor domain normalization trims whitespace before deduping.
 - Gemini API calls now retry transient 429/5xx/network failures with backoff so onboarding does not fail on temporary Gemini 503s during JSON repair or grounded research.
-- Needs live deploy verification: Step 1 scan should populate SWOT and at least 5 competitors when possible; manual competitor add should enrich the card.
+- Git commits pushed: `7cf8df5` Enrich onboarding competitors and SWOT, `40c6fee` Retry transient Gemini onboarding failures, `ec533d6` Dedupe researched competitor domains.
+- Live deployment completed on `/opt/ad-agency-autopilot`; latest backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T162716Z-competitor-dedupe`.
+- Live verification passed:
+  - Production `/api/scrape` for `www.realestatecrmpro.com` returned 6 unique competitors, populated SWOT, business report, and 2 scanned pages.
+  - Production `/api/competitor-profile` for `lofty.com` returned summary, strengths, and social links for LinkedIn, Facebook, Instagram, YouTube, TikTok, and X.
 
 ## Previous Update
 
