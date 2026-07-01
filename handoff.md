@@ -61,8 +61,8 @@ Last updated: 2026-07-01
   - `https://agents.realestatecrmpro.com/api/app-config` returned `{"geminiConfigured":true}`.
   - Public HTML contains `SWOT Profile`, `Competitor Intelligence`, the deep research profile copy, Step 5 Budget, and Step 6 Autopilot Employees.
   - `docker compose ps` shows `ad-agency-autopilot` healthy, with `ad-agency-lead-scraper` and `ad-agency-autopilot-tunnel` still running.
-- Latest commit subject: `Deepen onboarding business intelligence`.
-- Repo status: committed locally; push to GitHub is in progress.
+- Latest code commit: `90e88af` Deepen onboarding business intelligence, pushed to `origin/main`.
+- Repo status: live deployment completed and GitHub updated.
 
 ## Previous Update
 
