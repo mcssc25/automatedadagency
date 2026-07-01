@@ -325,13 +325,13 @@ async function queryGemini(promptText) {
 }
 
 // Google Search Grounding wrapper for Gemini
-async function queryGeminiWithSearch(promptText) {
+async function queryGeminiWithSearch(promptText, options = {}) {
     if (!GEMINI_API_KEY) {
         throw new Error("Gemini API key is not configured in .env file.");
     }
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-    
-    const response = await axios.post(url, {
+
+    const payload = {
         contents: [{
             parts: [{
                 text: promptText
@@ -340,7 +340,15 @@ async function queryGeminiWithSearch(promptText) {
         tools: [{
             googleSearch: {}
         }]
-    }, {
+    };
+
+    if (options.json === true) {
+        payload.generationConfig = {
+            responseMimeType: "application/json"
+        };
+    }
+
+    const response = await axios.post(url, payload, {
         headers: { 'Content-Type': 'application/json' }
     });
 
@@ -419,6 +427,32 @@ function parseModelJson(rawText) {
             return JSON.parse(escapeControlCharactersInJsonStrings(cleaned));
         }
         throw error;
+    }
+}
+
+async function parseModelJsonWithRepair(rawText) {
+    try {
+        return parseModelJson(rawText);
+    } catch (parseError) {
+        console.warn(`[JSON Repair] Model returned invalid JSON. Asking Gemini to repair it: ${parseError.message}`);
+        const repairPrompt = `Repair the invalid JSON below so it becomes valid JSON.
+Rules:
+- Return ONLY the repaired JSON object.
+- Do not add markdown fences.
+- Preserve all fields and useful content.
+- Escape quotes, newlines, tabs, and other control characters inside string values.
+- Do not invent new facts.
+
+Parser error:
+${parseError.message}
+
+Invalid JSON:
+-----------------
+${cleanModelJson(rawText)}
+-----------------`;
+
+        const repaired = await queryGemini(repairPrompt);
+        return parseModelJson(repaired);
     }
 }
 
@@ -770,9 +804,8 @@ You MUST return a JSON object with this exact structure:
 }
 Return ONLY valid JSON. No markdown blocks, no formatting.`;
 
-    const rawResponse = await queryGeminiWithSearch(prompt);
-    const cleaned = rawResponse.replace(/```json|```/g, "").trim();
-    const data = JSON.parse(cleaned);
+    const rawResponse = await queryGeminiWithSearch(prompt, { json: true });
+    const data = await parseModelJsonWithRepair(rawResponse);
     return (data.leads || []).flatMap(lead => normalizeLeadCandidate(lead, niche));
 }
 
@@ -911,8 +944,8 @@ Return this exact JSON shape:
   "businessReport": "A detailed but compact report with company profile, market landscape, competitive advantages, improvement opportunities, content angles, ad hooks, and support/email guidance."
 }`;
 
-        const rawJsonResult = await queryGeminiWithSearch(prompt);
-        const result = parseModelJson(rawJsonResult);
+        const rawJsonResult = await queryGeminiWithSearch(prompt, { json: true });
+        const result = await parseModelJsonWithRepair(rawJsonResult);
         const competitorProfiles = Array.isArray(result.competitorProfiles) ? result.competitorProfiles : [];
         const competitorDomains = competitorProfiles
             .map(profile => normalizeDomain(profile.domain || profile.website || profile.name))
@@ -1005,8 +1038,8 @@ Return ONLY valid JSON in this shape:
 
     try {
         console.log(`[Competitors Agent] Querying Gemini for Competitor domains...`);
-        const rawResult = await queryGeminiWithSearch(prompt);
-        const data = parseModelJson(rawResult);
+        const rawResult = await queryGeminiWithSearch(prompt, { json: true });
+        const data = await parseModelJsonWithRepair(rawResult);
         const competitorProfiles = Array.isArray(data.competitorProfiles) ? data.competitorProfiles : [];
         res.json({
             competitors: data.competitors || competitorProfiles.map(profile => normalizeDomain(profile.domain)).filter(Boolean).join(', '),

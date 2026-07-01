@@ -54,10 +54,11 @@ Last updated: 2026-07-01
 
 ## Latest Update
 
-- Fixed onboarding scan failures caused by Gemini returning literal control characters/newlines inside JSON string values.
-- `parseModelJson()` now retries JSON parsing after escaping control characters only inside quoted JSON strings.
+- Fixed onboarding scan failures caused by Gemini returning invalid JSON in long report fields.
+- Search-grounded Gemini JSON calls now request `responseMimeType: "application/json"`.
+- `parseModelJson()` retries after escaping literal control characters inside quoted JSON strings, and `parseModelJsonWithRepair()` can ask Gemini to repair malformed JSON while preserving content.
 - Local checks passed: `node --check server.js`, `node --check app.js`, `git diff --check`, and a Node parser smoke test for a literal newline inside `businessReport`.
-- Needs live deploy verification: `/api/scrape` should no longer fail with "Bad control character in string literal" for Step 1 onboarding scans.
+- Needs live deploy verification: `/api/scrape` should no longer fail with JSON parse errors for Step 1 onboarding scans.
 
 ## Previous Update
 
