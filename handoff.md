@@ -61,8 +61,16 @@ Last updated: 2026-07-01
   - Added responsive scan-progress and expanded-editor styling in `index.css`.
 - Local verification completed:
   - `node --check app.js`
+  - `node --check server.js`
   - `git diff --check`
-- Deployment status: pending for this entry.
+- Git commit pushed: `d722aaa` Improve onboarding scan progress and editors.
+- Live deployment completed on `/opt/ad-agency-autopilot`; backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260701T175504Z-onboarding-progress-editors`.
+- Live verification passed:
+  - `docker compose ps` shows `ad-agency-autopilot` healthy; tunnel and lead scraper stayed running.
+  - Public HTML contains `scan-progress-panel` and `long-text-modal`.
+  - Public `app.js` contains `startScanProgress` and `openLongTextModal`.
+  - Public `index.css` contains scan progress and expanded editor styles.
+  - Public `/api/app-config` still returns configured Gemini model routing.
 
 ## Previous Update
 
