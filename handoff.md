@@ -13,6 +13,7 @@ Last updated: 2026-07-02
 - Added Docker runtime support for browser harvesting: `playwright-core`, system `chromium`, and `BROWSER_CHROMIUM_PATH=/usr/bin/chromium`.
 - `docker-compose.yml` enables the hourly worker with `LEAD_INTELLIGENCE_ENABLED=true`, one run per hour, 40 roster pages max, and 250 contacts max per roster cycle.
 - The worker keeps existing safeguards: public pages only, no login/CAPTCHA/private API bypass, strict useful-email and individual-agent filters.
+- Follow-up fix: brokerage seed upserts now create missing targets without blanking discovered `website`/`rosterUrl` values or downgrading existing statuses back to `Pending`; intelligence run updates can store `brokerageOfficeId` and `cityId`.
 
 ## Previous Update
 
@@ -40,6 +41,7 @@ Last updated: 2026-07-02
 - `git diff --check` passed.
 - Local DB smoke initialized the new tables, seeded a Birmingham market row, and returned a hidden intelligence status summary.
 - Browser harvesting has not yet been verified inside the rebuilt production container.
+- Production smoke after initial deploy seeded 20 cities and 280 brand/city offices; first two local brokerage cycles completed with 0 contacts, which is expected for roster pages without visible emails or blocked/missing pages. A targeted KW Birmingham roster smoke is pending after the seed-upsert fix.
 - `node --check server.js` passed.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.

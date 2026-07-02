@@ -755,11 +755,15 @@ function upsertBrokerageOffice(office = {}) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(brokerageName, city, state) DO UPDATE SET
             brokerageProfileId = COALESCE(excluded.brokerageProfileId, brokerage_offices.brokerageProfileId),
-            searchQuery = COALESCE(excluded.searchQuery, brokerage_offices.searchQuery),
-            website = COALESCE(excluded.website, brokerage_offices.website),
-            rosterUrl = COALESCE(excluded.rosterUrl, brokerage_offices.rosterUrl),
-            sourceUrl = COALESCE(excluded.sourceUrl, brokerage_offices.sourceUrl),
-            status = CASE WHEN brokerage_offices.status = 'Harvested' THEN brokerage_offices.status ELSE COALESCE(excluded.status, brokerage_offices.status) END,
+            searchQuery = COALESCE(NULLIF(excluded.searchQuery, ''), brokerage_offices.searchQuery),
+            website = COALESCE(NULLIF(excluded.website, ''), brokerage_offices.website),
+            rosterUrl = COALESCE(NULLIF(excluded.rosterUrl, ''), brokerage_offices.rosterUrl),
+            sourceUrl = COALESCE(NULLIF(excluded.sourceUrl, ''), brokerage_offices.sourceUrl),
+            status = CASE
+                WHEN excluded.status = 'Pending' THEN brokerage_offices.status
+                WHEN brokerage_offices.status = 'Harvested' THEN brokerage_offices.status
+                ELSE COALESCE(NULLIF(excluded.status, ''), brokerage_offices.status)
+            END,
             updatedAt = CURRENT_TIMESTAMP
     `);
 
@@ -865,7 +869,7 @@ function insertIntelligenceRun(run = {}) {
 }
 
 function updateIntelligenceRun(id, changes = {}) {
-    const allowed = ['status', 'finishedAt', 'message', 'statsJson', 'error'];
+    const allowed = ['status', 'brokerageOfficeId', 'cityId', 'finishedAt', 'message', 'statsJson', 'error'];
     const normalized = { ...changes };
     if (Object.prototype.hasOwnProperty.call(normalized, 'stats')) {
         normalized.statsJson = JSON.stringify(normalized.stats || {});
