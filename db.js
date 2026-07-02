@@ -908,6 +908,18 @@ function getLeadIntelligenceStatus() {
     };
 }
 
+function markInterruptedIntelligenceRuns(reason = 'Server restarted before the run completed.') {
+    const stmt = db.prepare(`
+        UPDATE intelligence_runs
+        SET status = 'Interrupted',
+            finishedAt = CURRENT_TIMESTAMP,
+            error = ?,
+            message = COALESCE(NULLIF(message, ''), ?)
+        WHERE status = 'Running'
+    `);
+    return stmt.run(normalizeText(reason), normalizeText(reason)).changes;
+}
+
 module.exports = {
     initDb,
     getLeads,
@@ -946,5 +958,6 @@ module.exports = {
     upsertRosterContact,
     insertIntelligenceRun,
     updateIntelligenceRun,
-    getLeadIntelligenceStatus
+    getLeadIntelligenceStatus,
+    markInterruptedIntelligenceRuns
 };

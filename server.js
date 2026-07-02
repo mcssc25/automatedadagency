@@ -16,6 +16,7 @@ const db = require('./db');
 
 // Initialize database
 db.initDb();
+db.markInterruptedIntelligenceRuns('Server restarted before the lead intelligence run completed.');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
