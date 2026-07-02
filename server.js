@@ -31,6 +31,16 @@ const CRM_STATE_FILE = path.join(DATA_DIR, 'crm-state.json');
 const CRM_SETTINGS_FILE = path.join(DATA_DIR, 'crm-settings.json');
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const PUBLIC_APP_URL = String(process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const OPENROUTER_ENABLED = process.env.OPENROUTER_ENABLED === 'true' && !!OPENROUTER_API_KEY;
+const OPENROUTER_DEFAULT_MODEL = process.env.OPENROUTER_DEFAULT_MODEL || 'openrouter/free';
+const OPENROUTER_RESEARCH_MODEL = process.env.OPENROUTER_RESEARCH_MODEL || 'openai/gpt-oss-120b:free';
+const OPENROUTER_WEB_SEARCH_ENABLED = process.env.OPENROUTER_WEB_SEARCH_ENABLED === 'true';
+const OPENROUTER_WEB_SEARCH_MAX_RESULTS = Math.min(Math.max(parseInt(process.env.OPENROUTER_WEB_SEARCH_MAX_RESULTS, 10) || 5, 1), 10);
+const OPENROUTER_DAILY_REQUEST_LIMIT = Math.min(Math.max(parseInt(process.env.OPENROUTER_DAILY_REQUEST_LIMIT, 10) || 200, 1), 5000);
+const OPENROUTER_SITE_URL = String(process.env.OPENROUTER_SITE_URL || PUBLIC_APP_URL || 'https://agents.realestatecrmpro.com').replace(/\/+$/, '');
+const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || 'Real Estate CRM Pro Lead Intelligence';
+const LEAD_INTELLIGENCE_RESEARCH_PROVIDER = String(process.env.LEAD_INTELLIGENCE_RESEARCH_PROVIDER || (OPENROUTER_ENABLED ? 'openrouter' : 'gemini')).toLowerCase();
 const ADMIN_AUTH_ENABLED = process.env.ADMIN_AUTH_ENABLED === 'true' || (NODE_ENV === 'production' && process.env.ADMIN_AUTH_ENABLED !== 'false');
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -79,6 +89,7 @@ let pipelineWorkerRunning = false;
 let leadIntelligenceWorkerRunning = false;
 const leadScrapeJobs = new Map();
 const webhookReplayTokens = new Map();
+const openRouterUsageState = { date: '', requests: 0 };
 const mailgunUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -220,6 +231,25 @@ function shouldRetryGeminiError(error) {
     return ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code) || [429, 500, 502, 503, 504].includes(status);
 }
 
+function refreshOpenRouterDailyWindow() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (openRouterUsageState.date !== today) {
+        openRouterUsageState.date = today;
+        openRouterUsageState.requests = 0;
+    }
+}
+
+function canUseOpenRouter() {
+    if (!OPENROUTER_ENABLED) return false;
+    refreshOpenRouterDailyWindow();
+    return openRouterUsageState.requests < OPENROUTER_DAILY_REQUEST_LIMIT;
+}
+
+function recordOpenRouterRequest() {
+    refreshOpenRouterDailyWindow();
+    openRouterUsageState.requests += 1;
+}
+
 async function postGeminiWithRetry(url, payload, label, timeoutMs = 120000) {
     let lastError;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -235,6 +265,43 @@ async function postGeminiWithRetry(url, payload, label, timeoutMs = 120000) {
             if (attempt < 3 && shouldRetryGeminiError(error)) {
                 const status = error.response && error.response.status;
                 console.warn(`[${label}] Gemini request failed (${status || error.code || error.message}); retrying attempt ${attempt + 1}/3.`);
+                await sleep(1000 * attempt);
+                continue;
+            }
+            throw error;
+        }
+    }
+    throw lastError;
+}
+
+async function postOpenRouterWithRetry(payload, label, timeoutMs = 120000) {
+    if (!canUseOpenRouter()) {
+        throw new Error(OPENROUTER_ENABLED
+            ? `OpenRouter daily request cap reached (${OPENROUTER_DAILY_REQUEST_LIMIT}).`
+            : 'OpenRouter API key is not configured or OPENROUTER_ENABLED is not true.');
+    }
+
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            recordOpenRouterRequest();
+            return await axios.post('https://openrouter.ai/api/v1/chat/completions', payload, {
+                headers: {
+                    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': OPENROUTER_SITE_URL,
+                    'X-OpenRouter-Title': OPENROUTER_APP_NAME
+                },
+                timeout: timeoutMs,
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity
+            });
+        } catch (error) {
+            lastError = error;
+            const status = error.response && error.response.status;
+            const retryable = ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code) || [408, 409, 429, 500, 502, 503, 504].includes(status);
+            if (attempt < 3 && retryable) {
+                console.warn(`[${label}] OpenRouter request failed (${status || error.code || error.message}); retrying attempt ${attempt + 1}/3.`);
                 await sleep(1000 * attempt);
                 continue;
             }
@@ -373,6 +440,13 @@ app.get('/api/app-config', (req, res) => {
             research: GEMINI_RESEARCH_MODEL,
             image: GEMINI_IMAGE_MODEL,
             video: GEMINI_VIDEO_MODEL
+        },
+        openRouterConfigured: OPENROUTER_ENABLED,
+        openRouterModels: {
+            default: OPENROUTER_DEFAULT_MODEL,
+            research: OPENROUTER_RESEARCH_MODEL,
+            webSearchEnabled: OPENROUTER_WEB_SEARCH_ENABLED,
+            dailyRequestLimit: OPENROUTER_DAILY_REQUEST_LIMIT
         }
     });
 });
@@ -631,6 +705,90 @@ async function queryGeminiWithSearch(promptText, options = {}) {
     } else {
         throw new Error("Invalid response format received from Gemini API");
     }
+}
+
+async function queryOpenRouter(promptText, options = {}) {
+    const model = options.model || OPENROUTER_DEFAULT_MODEL;
+    const payload = {
+        model,
+        messages: [{
+            role: 'user',
+            content: promptText
+        }],
+        temperature: options.temperature ?? 0.2
+    };
+
+    if (options.json === true) {
+        payload.response_format = { type: 'json_object' };
+    }
+
+    if (options.maxTokens) {
+        payload.max_tokens = options.maxTokens;
+    }
+
+    if (options.webSearch === true) {
+        payload.plugins = [{
+            id: 'web',
+            max_results: OPENROUTER_WEB_SEARCH_MAX_RESULTS
+        }];
+    }
+
+    let response;
+    try {
+        response = await postOpenRouterWithRetry(payload, `OpenRouter:${model}`, options.timeoutMs || 120000);
+    } catch (error) {
+        if (options.json === true && error.response && error.response.status === 400) {
+            console.warn(`[OpenRouter:${model}] JSON response_format rejected; retrying without enforced JSON mode.`);
+            delete payload.response_format;
+            response = await postOpenRouterWithRetry(payload, `OpenRouter:${model}`, options.timeoutMs || 120000);
+        } else {
+            throw error;
+        }
+    }
+
+    const message = response.data && response.data.choices && response.data.choices[0] && response.data.choices[0].message;
+    const content = message && message.content;
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+        return content.map(part => part.text || part.content || '').join('\n').trim();
+    }
+    throw new Error('Invalid response format received from OpenRouter API');
+}
+
+async function queryLeadIntelligenceResearch(promptText, options = {}) {
+    if (LEAD_INTELLIGENCE_RESEARCH_PROVIDER === 'openrouter' && OPENROUTER_ENABLED) {
+        try {
+            return await queryOpenRouter(promptText, {
+                json: options.json,
+                model: options.openRouterModel || OPENROUTER_RESEARCH_MODEL,
+                webSearch: OPENROUTER_WEB_SEARCH_ENABLED,
+                timeoutMs: options.timeoutMs || 120000
+            });
+        } catch (error) {
+            console.warn(`[Lead Intelligence] OpenRouter research failed; falling back to Gemini grounding: ${error.message}`);
+        }
+    }
+
+    return queryGeminiWithSearch(promptText, {
+        ...options,
+        model: options.model || GEMINI_RESEARCH_MODEL
+    });
+}
+
+async function queryJsonRepairModel(promptText) {
+    if (OPENROUTER_ENABLED && canUseOpenRouter()) {
+        try {
+            return await queryOpenRouter(promptText, {
+                json: true,
+                model: OPENROUTER_DEFAULT_MODEL,
+                maxTokens: 4096,
+                timeoutMs: 90000
+            });
+        } catch (error) {
+            console.warn(`[JSON Repair] OpenRouter repair failed; falling back to Gemini: ${error.message}`);
+        }
+    }
+    return queryGemini(promptText);
 }
 
 async function createGeminiInteraction({ model, input, responseFormat, generationConfig, label = 'Gemini Interaction', timeoutMs = 120000 }) {
@@ -969,7 +1127,7 @@ Invalid JSON:
 ${cleanModelJson(rawText)}
 -----------------`;
 
-        const repaired = await queryGemini(repairPrompt);
+        const repaired = await queryJsonRepairModel(repairPrompt);
         return parseModelJson(repaired);
     }
 }
@@ -2390,7 +2548,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-    const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+    const raw = await queryLeadIntelligenceResearch(prompt, { json: true });
     const data = await parseModelJsonWithRepair(raw);
     const brokerages = Array.isArray(data.brokerages) ? data.brokerages : [];
     const seen = new Set();
@@ -2432,7 +2590,7 @@ Return ONLY valid JSON:
   "sourceUrl": "https://official-office-site.example/our-agents"
 }`;
 
-    const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+    const raw = await queryLeadIntelligenceResearch(prompt, { json: true });
     const data = await parseModelJsonWithRepair(raw);
     const normalized = normalizeBrokerageDiscoveryResult({
         name: data.name || office.brokerageName,
@@ -2485,7 +2643,7 @@ Return ONLY valid JSON:
 }`;
 
     try {
-        const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+        const raw = await queryLeadIntelligenceResearch(prompt, { json: true });
         const data = await parseModelJsonWithRepair(raw);
         return db.upsertBrokerageProfile({
             name: profile.name,
@@ -5001,6 +5159,15 @@ app.get('/api/lead-intelligence/status', (req, res) => {
         running: leadIntelligenceWorkerRunning,
         intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
         browserMode: true,
+        researchProvider: LEAD_INTELLIGENCE_RESEARCH_PROVIDER,
+        openRouter: {
+            configured: OPENROUTER_ENABLED,
+            defaultModel: OPENROUTER_DEFAULT_MODEL,
+            researchModel: OPENROUTER_RESEARCH_MODEL,
+            webSearchEnabled: OPENROUTER_WEB_SEARCH_ENABLED,
+            dailyRequestLimit: OPENROUTER_DAILY_REQUEST_LIMIT,
+            dailyRequestsUsed: openRouterUsageState.requests
+        },
         status: db.getLeadIntelligenceStatus()
     });
 });

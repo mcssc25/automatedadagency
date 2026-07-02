@@ -4,6 +4,15 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Wired OpenRouter as an optional low-cost LLM provider for hidden lead-intelligence research.
+- Added OpenRouter config knobs: `OPENROUTER_ENABLED`, `OPENROUTER_API_KEY`, `OPENROUTER_DEFAULT_MODEL`, `OPENROUTER_RESEARCH_MODEL`, `OPENROUTER_WEB_SEARCH_ENABLED`, `OPENROUTER_WEB_SEARCH_MAX_RESULTS`, `OPENROUTER_DAILY_REQUEST_LIMIT`, `OPENROUTER_APP_NAME`, and `LEAD_INTELLIGENCE_RESEARCH_PROVIDER`.
+- Brokerage discovery, specific brokerage roster URL lookup, and brokerage tech-stack research now prefer OpenRouter when enabled and fall back to Gemini grounding if OpenRouter is unavailable, capped, or errors.
+- JSON repair can use OpenRouter first when available, then falls back to Gemini.
+- `/api/app-config` and `/api/lead-intelligence/status` now expose OpenRouter configuration status, selected models, web-search setting, daily cap, and in-process daily requests used.
+- Important limitation: OpenRouter text models can help structure and reason over scraped/retrieved content, and OpenRouter web search can help find current brokerage pages, but it does not bypass Cloudflare/CAPTCHA-protected roster pages. KW-style blocked rosters still need Firecrawl/managed browser fallback or should remain marked `Blocked`.
+
+## Previous Update
+
 - Clarified Research & Trends card metrics after the user saw orange lines that looked like notifications.
 - Root cause: grounded search fallback may return qualitative source-backed trend rationale when public view/like/comment counts are not visible. The UI was still labeling that text as `Viral engagement`, which made it look like engagement metrics.
 - UI now displays `Engagement` in orange only when a numeric views/likes/comments/shares/reposts/replies metric is present.
@@ -44,6 +53,8 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- `node --check server.js` passed after the OpenRouter provider wiring.
+- `git diff --check` passed with normal Windows CRLF warnings only.
 - `node --check server.js` passed after the lead-intelligence worker.
 - `node --check db.js` passed.
 - `node --check app.js` passed.
@@ -70,6 +81,9 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
+- Files changed for OpenRouter lead-intelligence provider wiring: `server.js`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
+- Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
+- OpenRouter wiring is verified locally and pending commit/deploy in the current turn.
 - Files changed for lead-intelligence work: `Dockerfile`, `db.js`, `docker-compose.yml`, `package.json`, `package-lock.json`, `server.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
 - Lead-intelligence code is pushed and deployed. Main commits: `a91eb02` (`Add brokerage lead intelligence engine`), `66340d0` (`Seed brokerage brand city searches`), `c7434e6` (`Preserve discovered brokerage targets`), `fb0284b` (`Keep seeded offices queue position`), `6fb7bd3` (`Detect blocked roster browser pages`), `caea108` (`Mark interrupted intelligence runs`).
