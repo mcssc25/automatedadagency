@@ -4,6 +4,17 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Built the first backend-only lead intelligence engine for nationwide realtor database building.
+- Added hidden SQLite tables for `market_cities`, `brokerage_profiles`, `brokerage_offices`, `roster_contacts`, and `intelligence_runs`.
+- Seeded the first 20 mid-market/mid-income cities for discovery, starting with Birmingham, Huntsville, Knoxville, Chattanooga, Greenville, Columbia, Pensacola, Lakeland, Tulsa, Omaha, and others.
+- Added a one-cycle worker that discovers local/regional/100% commission/flat-fee brokerage offices for a city, researches brokerage tech offerings, finds official office/roster URLs, browser-harvests public roster pages with Playwright/Chromium, paginates where possible, and stores contacts in hidden `roster_contacts` instead of the visible CRM pipeline.
+- Added backend controls: `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/seed`, and `POST /api/lead-intelligence/run-once`.
+- Added Docker runtime support for browser harvesting: `playwright-core`, system `chromium`, and `BROWSER_CHROMIUM_PATH=/usr/bin/chromium`.
+- `docker-compose.yml` enables the hourly worker with `LEAD_INTELLIGENCE_ENABLED=true`, one run per hour, 40 roster pages max, and 250 contacts max per roster cycle.
+- The worker keeps existing safeguards: public pages only, no login/CAPTCHA/private API bypass, strict useful-email and individual-agent filters.
+
+## Previous Update
+
 - Follow-up fix after production testing: trend cards could disappear when a later refresh returned zero parsed posts.
 - Root cause: the VPS cannot run the Windows `py` launcher or the local Windows last30days plugin path, so the first trend parser always returned no posts in production. The grounded Gemini fallback sometimes returned valid cards, but when a later fallback response contained malformed JSON, `/api/trends` returned zero trends and the browser saved that empty result over the previously visible cards.
 - Backend now skips the unavailable last30days script cleanly, uses JSON repair for keyword/trend grounded responses, and caches the last successful trend set for a business context.
@@ -22,6 +33,12 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- `node --check server.js` passed after the lead-intelligence worker.
+- `node --check db.js` passed.
+- `node --check app.js` passed.
+- `git diff --check` passed.
+- Local DB smoke initialized the new tables, seeded a Birmingham market row, and returned a hidden intelligence status summary.
+- Browser harvesting has not yet been verified inside the rebuilt production container.
 - `node --check server.js` passed.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
@@ -38,10 +55,10 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
-- Files changed: `server.js`, `app.js`, `MEMORY.md`, `handoff.md`.
+- Files changed for lead-intelligence work: `Dockerfile`, `db.js`, `docker-compose.yml`, `package.json`, `package-lock.json`, `server.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
-- Last completed code commit pushed to `main`: `a89a729` (`Improve trend keyword research`).
-- Pending follow-up repo/deploy step: commit, push, and deploy the refresh-preservation fix.
+- Lead-intelligence code is local and pending commit/deployment.
+- Last completed code commit pushed to `main`: `8eb10bd` (`Preserve trend cards on empty refresh`).
 - Deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
 - Deployment copied only `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.

@@ -68,7 +68,14 @@ const BROKERAGE_ROSTER_KEYWORDS = [
     'find an agent',
     'getagent'
 ];
+const LEAD_INTELLIGENCE_ENABLED = process.env.LEAD_INTELLIGENCE_ENABLED === 'true';
+const LEAD_INTELLIGENCE_INTERVAL_MS = Math.min(Math.max(parseInt(process.env.LEAD_INTELLIGENCE_INTERVAL_MS, 10) || 60 * 60 * 1000, 10 * 60 * 1000), 24 * 60 * 60 * 1000);
+const LEAD_INTELLIGENCE_START_DELAY_MS = Math.min(Math.max(parseInt(process.env.LEAD_INTELLIGENCE_START_DELAY_MS, 10) || 2 * 60 * 1000, 30 * 1000), 30 * 60 * 1000);
+const ROSTER_BROWSER_MAX_PAGES = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_MAX_PAGES, 10) || 40, 1), 100);
+const ROSTER_BROWSER_MAX_CONTACTS = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_MAX_CONTACTS, 10) || 250, 10), 1000);
+const ROSTER_BROWSER_TIMEOUT_MS = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_TIMEOUT_MS, 10) || 45000, 10000), 120000);
 let pipelineWorkerRunning = false;
+let leadIntelligenceWorkerRunning = false;
 const leadScrapeJobs = new Map();
 const webhookReplayTokens = new Map();
 const mailgunUpload = multer({
@@ -2289,6 +2296,535 @@ async function runLeadScrape(niche, count, onProgress = () => {}) {
     };
 }
 
+const LEAD_INTELLIGENCE_SEED_CITIES = [
+    { city: 'Birmingham', state: 'AL', metro: 'Birmingham-Hoover', incomeBand: 'mid', priority: 95 },
+    { city: 'Huntsville', state: 'AL', metro: 'Huntsville', incomeBand: 'mid', priority: 92 },
+    { city: 'Knoxville', state: 'TN', metro: 'Knoxville', incomeBand: 'mid', priority: 90 },
+    { city: 'Chattanooga', state: 'TN', metro: 'Chattanooga', incomeBand: 'mid', priority: 88 },
+    { city: 'Greenville', state: 'SC', metro: 'Greenville-Anderson', incomeBand: 'mid', priority: 88 },
+    { city: 'Columbia', state: 'SC', metro: 'Columbia', incomeBand: 'mid', priority: 86 },
+    { city: 'Augusta', state: 'GA', metro: 'Augusta-Richmond County', incomeBand: 'mid', priority: 84 },
+    { city: 'Macon', state: 'GA', metro: 'Macon-Bibb County', incomeBand: 'mid', priority: 82 },
+    { city: 'Pensacola', state: 'FL', metro: 'Pensacola-Ferry Pass-Brent', incomeBand: 'mid', priority: 82 },
+    { city: 'Lakeland', state: 'FL', metro: 'Lakeland-Winter Haven', incomeBand: 'mid', priority: 80 },
+    { city: 'Ocala', state: 'FL', metro: 'Ocala', incomeBand: 'mid', priority: 79 },
+    { city: 'Fort Wayne', state: 'IN', metro: 'Fort Wayne', incomeBand: 'mid', priority: 78 },
+    { city: 'Toledo', state: 'OH', metro: 'Toledo', incomeBand: 'mid', priority: 76 },
+    { city: 'Dayton', state: 'OH', metro: 'Dayton-Kettering', incomeBand: 'mid', priority: 76 },
+    { city: 'Wichita', state: 'KS', metro: 'Wichita', incomeBand: 'mid', priority: 75 },
+    { city: 'Tulsa', state: 'OK', metro: 'Tulsa', incomeBand: 'mid', priority: 75 },
+    { city: 'Omaha', state: 'NE', metro: 'Omaha-Council Bluffs', incomeBand: 'mid', priority: 73 },
+    { city: 'Des Moines', state: 'IA', metro: 'Des Moines-West Des Moines', incomeBand: 'mid', priority: 72 },
+    { city: 'Lexington', state: 'KY', metro: 'Lexington-Fayette', incomeBand: 'mid', priority: 71 },
+    { city: 'Louisville', state: 'KY', metro: 'Louisville/Jefferson County', incomeBand: 'mid', priority: 70 }
+];
+
+function seedLeadIntelligenceDefaults() {
+    return db.seedMarketCities(LEAD_INTELLIGENCE_SEED_CITIES);
+}
+
+function normalizeSocialLinks(links = []) {
+    const socials = {};
+    for (const href of links) {
+        const url = String(href || '').trim();
+        const platform = socialPlatformFromUrl(url);
+        if (platform && !socials[platform]) socials[platform] = url;
+    }
+    return socials;
+}
+
+async function discoverBrokerageOfficeTargetsForCity(cityRecord) {
+    const prompt = `Find 8 to 15 real estate brokerages or brokerage offices to prospect in ${cityRecord.city}, ${cityRecord.state}.
+
+Prioritize smaller local/regional brokerages, 100% commission brokerages, flat-fee brokerages, independent realty groups, and franchise offices that may not provide a deep agent tech stack.
+Include a few major franchise offices only when they have a public office roster page.
+For each brokerage, find the official brokerage/office website and a public roster/team/agent page if visible.
+Do not use Zillow, Realtor.com, Redfin, Homes.com, private APIs, login pages, CAPTCHA pages, or generic lead forms.
+
+Return ONLY valid JSON:
+{
+  "brokerages": [
+    {
+      "name": "Example Realty",
+      "category": "local independent | regional | 100 percent commission | franchise office | flat fee",
+      "website": "https://www.example.com",
+      "rosterUrl": "https://www.example.com/agents",
+      "sourceUrl": "https://www.example.com/agents",
+      "reason": "why this brokerage looks relevant"
+    }
+  ]
+}`;
+
+    const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+    const data = await parseModelJsonWithRepair(raw);
+    const brokerages = Array.isArray(data.brokerages) ? data.brokerages : [];
+    const seen = new Set();
+
+    return brokerages.flatMap(item => {
+        const normalized = normalizeBrokerageDiscoveryResult(item);
+        if (!normalized || !normalized.name) return [];
+        const key = `${normalized.name.toLowerCase()}|${cityRecord.city.toLowerCase()}|${cityRecord.state.toLowerCase()}`;
+        if (seen.has(key)) return [];
+        seen.add(key);
+        return [{
+            brokerageName: normalized.name,
+            category: cleanLeadText(item.category || ''),
+            city: cityRecord.city,
+            state: cityRecord.state,
+            searchQuery: `${normalized.name} ${cityRecord.city} ${cityRecord.state}`,
+            website: normalized.website,
+            rosterUrl: normalized.rosterUrl,
+            sourceUrl: normalized.sourceUrl,
+            status: normalized.rosterUrl ? 'Discovered' : 'Pending'
+        }];
+    });
+}
+
+async function discoverSpecificBrokerageOfficeUrl(office) {
+    if (office.website || office.rosterUrl) return office;
+
+    const query = office.searchQuery || `${office.brokerageName} ${office.city} ${office.state}`;
+    const prompt = `Find the official public website and agent roster page for this brokerage office search: "${query}".
+
+This should work like a human Google search: search the brokerage name plus city, open the official office site, then identify the "Our Agents", "Agents", "Team", "Associates", or "Find an Agent" page.
+Avoid Zillow, Realtor.com, Redfin, Homes.com, login pages, CAPTCHA pages, and generic directory profiles.
+
+Return ONLY valid JSON:
+{
+  "name": "${office.brokerageName}",
+  "website": "https://official-office-site.example",
+  "rosterUrl": "https://official-office-site.example/our-agents",
+  "sourceUrl": "https://official-office-site.example/our-agents"
+}`;
+
+    const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+    const data = await parseModelJsonWithRepair(raw);
+    const normalized = normalizeBrokerageDiscoveryResult({
+        name: data.name || office.brokerageName,
+        website: data.website,
+        rosterUrl: data.rosterUrl,
+        sourceUrl: data.sourceUrl
+    });
+
+    if (!normalized) return office;
+    return {
+        ...office,
+        website: normalized.website,
+        rosterUrl: normalized.rosterUrl,
+        sourceUrl: normalized.sourceUrl
+    };
+}
+
+async function researchBrokerageTechStack(profile) {
+    if (!profile || !profile.name || profile.researchStatus === 'Complete') return profile;
+
+    const prompt = `Research what the real estate brokerage "${profile.name}" appears to provide to agents.
+
+Find public evidence for:
+- CRM or lead management tools included for agents
+- E-signature/document signing included for agents
+- Lead pages, IDX pages, landing pages, or lead-generation tools
+- Video email/video marketing tools
+- Known platforms such as BoldTrail, kvCORE, Follow Up Boss, Lofty, Chime, Sierra Interactive, BoomTown, DocuSign, Dotloop, SkySlope, TransactionDesk
+
+Do not invent facts. Use "unknown" when not found.
+
+Return ONLY valid JSON:
+{
+  "name": "${profile.name}",
+  "category": "local independent | regional | franchise | 100 percent commission | flat fee | unknown",
+  "website": "https://example.com",
+  "nationalWebsite": "https://example.com",
+  "crmOffering": "unknown or description",
+  "esignOffering": "unknown or description",
+  "leadTools": "unknown or description",
+  "videoEmail": "unknown or description",
+  "techStack": {
+    "crm": "unknown",
+    "esign": "unknown",
+    "leadPages": "unknown",
+    "videoEmail": "unknown",
+    "knownTools": []
+  },
+  "notes": "brief sales angle based on missing or known tools"
+}`;
+
+    try {
+        const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+        const data = await parseModelJsonWithRepair(raw);
+        return db.upsertBrokerageProfile({
+            name: profile.name,
+            category: data.category,
+            website: data.website || profile.website,
+            nationalWebsite: data.nationalWebsite,
+            crmOffering: data.crmOffering || 'unknown',
+            esignOffering: data.esignOffering || 'unknown',
+            leadTools: data.leadTools || 'unknown',
+            videoEmail: data.videoEmail || 'unknown',
+            techStack: data.techStack || {},
+            notes: data.notes,
+            researchStatus: 'Complete',
+            researchedAt: new Date().toISOString()
+        });
+    } catch (error) {
+        console.warn(`[Lead Intelligence] Brokerage tech research failed for ${profile.name}: ${error.message}`);
+        db.upsertBrokerageProfile({
+            name: profile.name,
+            researchStatus: 'Needs Research',
+            notes: `Research failed: ${error.message}`
+        });
+        return profile;
+    }
+}
+
+function loadPlaywrightChromium() {
+    try {
+        return require('playwright-core').chromium;
+    } catch (error) {
+        throw new Error('playwright-core is not installed. Browser roster harvesting needs the Playwright runtime.');
+    }
+}
+
+async function extractRosterContactsFromBrowserPage(page, brokerageName, office) {
+    const pageUrl = page.url();
+    const rawContacts = await page.evaluate(() => {
+        const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+        const phoneRegex = /(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}(?:\s*(?:x|ext\.?)\s*\d+)?/i;
+        const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
+        const socialPattern = /(facebook|instagram|linkedin|youtube|twitter|x\.com|tiktok)\.com/i;
+
+        function scopeFor(el) {
+            let scope = el;
+            for (let i = 0; i < 7 && scope && scope !== document.body; i++) {
+                const text = clean(scope.innerText || scope.textContent || '');
+                if (text.includes('@') && text.length >= 20 && text.length <= 2500) return scope;
+                scope = scope.parentElement;
+            }
+            return el.closest('article,li,section,div') || document.body;
+        }
+
+        function nameFromScope(scope, email) {
+            const selectors = [
+                '[itemprop="name"]',
+                '[class*="agent-name" i]',
+                '[class*="associate-name" i]',
+                '[class*="member-name" i]',
+                '[class*="name" i]',
+                'h1', 'h2', 'h3', 'h4', 'strong'
+            ];
+            for (const selector of selectors) {
+                for (const node of scope.querySelectorAll(selector)) {
+                    const text = clean(node.innerText || node.textContent || '');
+                    if (text && !text.includes('@') && text.length >= 3 && text.length <= 90) return text;
+                }
+            }
+            const lines = clean(scope.innerText || scope.textContent || '')
+                .split(/(?:(?:\s{2,})|(?:\s-\s)|(?:\s\|\s)|(?:\n))/)
+                .map(clean)
+                .filter(Boolean);
+            return lines.find(line => line !== email && !line.includes('@') && line.length >= 3 && line.length <= 90) || '';
+        }
+
+        const contacts = [];
+        const seenEmails = new Set();
+        const emailElements = [
+            ...document.querySelectorAll('a[href^="mailto:"], [data-email], [data-contact-email]')
+        ];
+
+        for (const el of emailElements) {
+            const values = [
+                el.getAttribute('href') || '',
+                el.getAttribute('data-email') || '',
+                el.getAttribute('data-contact-email') || '',
+                el.getAttribute('aria-label') || '',
+                el.getAttribute('title') || '',
+                el.innerText || '',
+                el.textContent || ''
+            ].join(' ');
+            const emails = values.match(emailRegex) || [];
+            for (const email of emails) {
+                const normalizedEmail = email.toLowerCase();
+                if (seenEmails.has(normalizedEmail)) continue;
+                seenEmails.add(normalizedEmail);
+                const scope = scopeFor(el);
+                const text = clean(scope.innerText || scope.textContent || '');
+                contacts.push({
+                    name: nameFromScope(scope, normalizedEmail),
+                    email: normalizedEmail,
+                    phone: (text.match(phoneRegex) || [''])[0],
+                    sourceUrl: location.href,
+                    socials: [...scope.querySelectorAll('a[href]')]
+                        .map(anchor => anchor.href)
+                        .filter(href => socialPattern.test(href))
+                });
+            }
+        }
+
+        if (contacts.length === 0) {
+            const cards = [...document.querySelectorAll('article, li, section, .card, [class*="agent" i], [class*="team" i]')];
+            for (const card of cards) {
+                const text = clean(card.innerText || card.textContent || '');
+                const emails = text.match(emailRegex) || [];
+                for (const email of emails) {
+                    const normalizedEmail = email.toLowerCase();
+                    if (seenEmails.has(normalizedEmail)) continue;
+                    seenEmails.add(normalizedEmail);
+                    contacts.push({
+                        name: nameFromScope(card, normalizedEmail),
+                        email: normalizedEmail,
+                        phone: (text.match(phoneRegex) || [''])[0],
+                        sourceUrl: location.href,
+                        socials: [...card.querySelectorAll('a[href]')]
+                            .map(anchor => anchor.href)
+                            .filter(href => socialPattern.test(href))
+                    });
+                }
+            }
+        }
+
+        return contacts;
+    });
+
+    return rawContacts.flatMap(contact => normalizeLeadCandidate({
+        name: contact.name,
+        company: brokerageName,
+        email: contact.email,
+        phone: contact.phone,
+        website: office.website || pageUrl,
+        sourceUrl: contact.sourceUrl || pageUrl
+    }, `${brokerageName} ${office.city} ${office.state}`, pageUrl).map(candidate => ({
+        ...candidate,
+        socials: normalizeSocialLinks(contact.socials || [])
+    }))).filter(candidate => isUsefulLeadEmail(candidate.email) && isLikelyIndividualAgentLeadName(candidate.name));
+}
+
+async function findNextRosterPage(page) {
+    return page.evaluate(() => {
+        const candidates = [...document.querySelectorAll('a[href]')].map(anchor => {
+            const text = String(anchor.innerText || anchor.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const label = String(anchor.getAttribute('aria-label') || anchor.getAttribute('title') || '').toLowerCase();
+            const rel = String(anchor.getAttribute('rel') || '').toLowerCase();
+            const combined = `${text} ${label} ${rel}`;
+            let score = 0;
+            if (/\bnext\b/.test(combined)) score += 10;
+            if (combined.includes('›') || combined.includes('»') || combined.includes('>')) score += 6;
+            if (rel.includes('next')) score += 12;
+            if (!score) return null;
+            return { href: anchor.href, score };
+        }).filter(Boolean);
+        candidates.sort((a, b) => b.score - a.score);
+        return candidates[0] || null;
+    });
+}
+
+async function harvestRosterWithBrowser(office) {
+    const chromium = loadPlaywrightChromium();
+    const executablePath = process.env.BROWSER_CHROMIUM_PATH || process.env.CHROMIUM_PATH || '/usr/bin/chromium';
+    const browser = await chromium.launch({
+        headless: true,
+        executablePath,
+        args: ['--no-sandbox', '--disable-dev-shm-usage']
+    });
+
+    const contacts = [];
+    const visited = new Set();
+    let pagesScanned = 0;
+
+    try {
+        const context = await browser.newContext({
+            userAgent: SCRAPER_HEADERS['User-Agent'],
+            viewport: { width: 1365, height: 900 }
+        });
+        const page = await context.newPage();
+        page.setDefaultTimeout(ROSTER_BROWSER_TIMEOUT_MS);
+
+        let currentUrl = office.rosterUrl || office.website;
+        if (!currentUrl) throw new Error('No office website or roster URL available.');
+
+        while (currentUrl && pagesScanned < ROSTER_BROWSER_MAX_PAGES && contacts.length < ROSTER_BROWSER_MAX_CONTACTS) {
+            const normalizedCurrent = currentUrl.replace(/\/+$/, '');
+            if (visited.has(normalizedCurrent)) break;
+            visited.add(normalizedCurrent);
+
+            await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: ROSTER_BROWSER_TIMEOUT_MS });
+            await page.waitForTimeout(1500);
+
+            const pageContacts = await extractRosterContactsFromBrowserPage(page, office.brokerageName, office);
+            contacts.push(...pageContacts);
+            pagesScanned++;
+
+            if (contacts.length >= ROSTER_BROWSER_MAX_CONTACTS) break;
+            const next = await findNextRosterPage(page);
+            if (!next || !next.href || visited.has(next.href.replace(/\/+$/, ''))) break;
+            if (normalizeDomain(next.href) !== normalizeDomain(page.url())) break;
+            currentUrl = next.href;
+            await page.waitForTimeout(800);
+        }
+    } finally {
+        await browser.close();
+    }
+
+    return {
+        contacts: mergeLeadCandidatesByEmail(contacts).slice(0, ROSTER_BROWSER_MAX_CONTACTS),
+        pagesScanned
+    };
+}
+
+async function harvestBrokerageOfficeRoster(office) {
+    const discoveredOffice = await discoverSpecificBrokerageOfficeUrl(office);
+    if (discoveredOffice.website || discoveredOffice.rosterUrl) {
+        db.updateBrokerageOffice(office.id, {
+            website: discoveredOffice.website || office.website || '',
+            rosterUrl: discoveredOffice.rosterUrl || office.rosterUrl || '',
+            sourceUrl: discoveredOffice.sourceUrl || office.sourceUrl || '',
+            status: 'Discovered'
+        });
+    }
+
+    const harvestOffice = {
+        ...office,
+        ...discoveredOffice
+    };
+
+    try {
+        return await harvestRosterWithBrowser(harvestOffice);
+    } catch (browserError) {
+        console.warn(`[Lead Intelligence] Browser roster harvest failed for ${office.brokerageName}: ${browserError.message}. Falling back to HTTP parser.`);
+        const fallbackCandidates = await scrapeBrokerageRosterCandidatesFromWebsite(
+            harvestOffice.website,
+            harvestOffice.brokerageName,
+            `${harvestOffice.brokerageName} ${harvestOffice.city} ${harvestOffice.state}`,
+            [harvestOffice.rosterUrl, harvestOffice.sourceUrl].filter(Boolean)
+        );
+        return {
+            contacts: fallbackCandidates,
+            pagesScanned: 0,
+            warning: browserError.message
+        };
+    }
+}
+
+async function runLeadIntelligenceCycle(trigger = 'manual') {
+    if (leadIntelligenceWorkerRunning) {
+        return { skipped: true, reason: 'lead intelligence worker already running' };
+    }
+
+    leadIntelligenceWorkerRunning = true;
+    let runId;
+
+    try {
+        seedLeadIntelligenceDefaults();
+        runId = db.insertIntelligenceRun({ type: 'lead-intelligence', status: 'Running', message: `Started by ${trigger}` });
+
+        let office = db.getNextBrokerageOfficeForHarvest();
+        if (!office) {
+            const city = db.getNextMarketCityForDiscovery();
+            if (!city) {
+                db.updateIntelligenceRun(runId, {
+                    status: 'Complete',
+                    finishedAt: new Date().toISOString(),
+                    message: 'No market cities available for discovery.',
+                    stats: { discoveredOffices: 0, contacts: 0 }
+                });
+                return { skipped: true, reason: 'no cities available' };
+            }
+
+            db.updateIntelligenceRun(runId, { cityId: city.id, message: `Discovering brokerages in ${city.city}, ${city.state}` });
+            const offices = await discoverBrokerageOfficeTargetsForCity(city);
+            offices.forEach(item => db.upsertBrokerageOffice(item));
+            db.updateMarketCity(city.id, {
+                status: 'Discovered',
+                lastDiscoveryAt: new Date().toISOString()
+            });
+            office = db.getNextBrokerageOfficeForHarvest();
+        }
+
+        if (!office) {
+            db.updateIntelligenceRun(runId, {
+                status: 'Complete',
+                finishedAt: new Date().toISOString(),
+                message: 'Brokerage discovery completed but no offices were queued.',
+                stats: { contacts: 0 }
+            });
+            return { skipped: true, reason: 'no brokerage offices queued' };
+        }
+
+        db.updateIntelligenceRun(runId, {
+            brokerageOfficeId: office.id,
+            message: `Harvesting ${office.brokerageName} in ${office.city}, ${office.state}`
+        });
+
+        const profile = db.getBrokerageProfileByName(office.brokerageName);
+        if (profile && profile.researchStatus !== 'Complete') {
+            await researchBrokerageTechStack(profile);
+        }
+
+        const harvest = await harvestBrokerageOfficeRoster(office);
+        let insertedOrUpdated = 0;
+        for (const contact of harvest.contacts) {
+            const saved = db.upsertRosterContact({
+                brokerageOfficeId: office.id,
+                brokerageName: office.brokerageName,
+                city: office.city,
+                state: office.state,
+                name: contact.name,
+                email: contact.email,
+                phone: contact.phone,
+                website: contact.website,
+                sourceUrl: contact.sourceUrl,
+                socials: contact.socials || {}
+            });
+            if (saved) insertedOrUpdated++;
+        }
+
+        const status = insertedOrUpdated > 0 ? 'Harvested' : 'No Contacts';
+        db.updateBrokerageOffice(office.id, {
+            status,
+            lastHarvestAt: new Date().toISOString(),
+            lastError: harvest.warning || '',
+            rosterPageCount: harvest.pagesScanned || 0,
+            contactCount: insertedOrUpdated
+        });
+        db.updateIntelligenceRun(runId, {
+            status: 'Complete',
+            finishedAt: new Date().toISOString(),
+            message: `Harvested ${insertedOrUpdated} contact(s) from ${office.brokerageName}.`,
+            stats: {
+                brokerage: office.brokerageName,
+                city: office.city,
+                state: office.state,
+                contacts: insertedOrUpdated,
+                pagesScanned: harvest.pagesScanned || 0,
+                warning: harvest.warning || ''
+            }
+        });
+
+        return {
+            skipped: false,
+            brokerage: office.brokerageName,
+            city: office.city,
+            state: office.state,
+            contacts: insertedOrUpdated,
+            pagesScanned: harvest.pagesScanned || 0,
+            warning: harvest.warning || ''
+        };
+    } catch (error) {
+        const message = formatErrorMessage(error, 'Lead intelligence cycle failed.');
+        console.error('[Lead Intelligence] Cycle failed:', message);
+        if (runId) {
+            db.updateIntelligenceRun(runId, {
+                status: 'Failed',
+                finishedAt: new Date().toISOString(),
+                message,
+                error: message
+            });
+        }
+        return { skipped: false, error: message };
+    } finally {
+        leadIntelligenceWorkerRunning = false;
+    }
+}
+
 function serializeLeadScrapeJob(job) {
     return {
         id: job.id,
@@ -4410,6 +4946,26 @@ app.post('/api/scrape-leads', (req, res) => {
     res.status(202).json({ job: serializeLeadScrapeJob(job) });
 });
 
+app.get('/api/lead-intelligence/status', (req, res) => {
+    res.json({
+        enabled: LEAD_INTELLIGENCE_ENABLED,
+        running: leadIntelligenceWorkerRunning,
+        intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
+        browserMode: true,
+        status: db.getLeadIntelligenceStatus()
+    });
+});
+
+app.post('/api/lead-intelligence/seed', (req, res) => {
+    const seeded = seedLeadIntelligenceDefaults();
+    res.json({ success: true, seeded, status: db.getLeadIntelligenceStatus() });
+});
+
+app.post('/api/lead-intelligence/run-once', async (req, res) => {
+    const result = await runLeadIntelligenceCycle('manual-api');
+    res.json({ success: !result.error, result, status: db.getLeadIntelligenceStatus() });
+});
+
 // Approve and Launch Campaign Endpoint
 app.post('/api/campaigns/:id/approve', async (req, res) => {
     try {
@@ -5003,6 +5559,32 @@ setInterval(() => {
         console.error('[CRM Pipeline Interval Error]', err.message);
     });
 }, 5 * 60 * 1000);
+
+try {
+    const seeded = seedLeadIntelligenceDefaults();
+    if (seeded) console.log(`[Lead Intelligence] Seeded/updated ${seeded} market city row(s).`);
+} catch (error) {
+    console.error('[Lead Intelligence] Failed to seed market cities:', error.message);
+}
+
+if (LEAD_INTELLIGENCE_ENABLED) {
+    console.log(`[Lead Intelligence] Hourly worker enabled. First run in ${Math.round(LEAD_INTELLIGENCE_START_DELAY_MS / 1000)} seconds.`);
+    setTimeout(() => {
+        runLeadIntelligenceCycle('startup-delay').then(result => {
+            console.log(`[Lead Intelligence] Startup cycle result: ${JSON.stringify(result)}`);
+        }).catch(error => {
+            console.error('[Lead Intelligence] Startup cycle error:', error.message);
+        });
+    }, LEAD_INTELLIGENCE_START_DELAY_MS);
+
+    setInterval(() => {
+        runLeadIntelligenceCycle('interval').then(result => {
+            console.log(`[Lead Intelligence] Interval cycle result: ${JSON.stringify(result)}`);
+        }).catch(error => {
+            console.error('[Lead Intelligence] Interval cycle error:', error.message);
+        });
+    }, LEAD_INTELLIGENCE_INTERVAL_MS);
+}
 
 app.listen(PORT, () => {
     console.log(`==================================================`);

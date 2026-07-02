@@ -166,6 +166,98 @@ function initDb() {
         )
     `);
 
+    // 5. Hidden lead intelligence database
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS market_cities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            city TEXT NOT NULL,
+            state TEXT NOT NULL,
+            metro TEXT,
+            incomeBand TEXT,
+            priority INTEGER NOT NULL DEFAULT 50,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            lastDiscoveryAt TEXT,
+            createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(city, state)
+        );
+
+        CREATE TABLE IF NOT EXISTS brokerage_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            category TEXT,
+            website TEXT,
+            nationalWebsite TEXT,
+            crmOffering TEXT,
+            esignOffering TEXT,
+            leadTools TEXT,
+            videoEmail TEXT,
+            techStackJson TEXT NOT NULL DEFAULT '{}',
+            notes TEXT,
+            researchStatus TEXT NOT NULL DEFAULT 'Pending',
+            researchedAt TEXT,
+            createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS brokerage_offices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            brokerageProfileId INTEGER,
+            brokerageName TEXT NOT NULL,
+            city TEXT NOT NULL,
+            state TEXT NOT NULL,
+            searchQuery TEXT,
+            website TEXT,
+            rosterUrl TEXT,
+            sourceUrl TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            lastHarvestAt TEXT,
+            nextHarvestAt TEXT,
+            lastError TEXT,
+            rosterPageCount INTEGER NOT NULL DEFAULT 0,
+            contactCount INTEGER NOT NULL DEFAULT 0,
+            createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(brokerageName, city, state),
+            FOREIGN KEY (brokerageProfileId) REFERENCES brokerage_profiles(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS roster_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            brokerageOfficeId INTEGER,
+            brokerageName TEXT NOT NULL,
+            city TEXT,
+            state TEXT,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            phone TEXT,
+            website TEXT,
+            sourceUrl TEXT,
+            socialsJson TEXT NOT NULL DEFAULT '{}',
+            productionBand TEXT,
+            teamSizeHint TEXT,
+            status TEXT NOT NULL DEFAULT 'Raw',
+            createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (brokerageOfficeId) REFERENCES brokerage_offices(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS intelligence_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Running',
+            brokerageOfficeId INTEGER,
+            cityId INTEGER,
+            startedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            finishedAt TEXT,
+            message TEXT,
+            statsJson TEXT NOT NULL DEFAULT '{}',
+            error TEXT,
+            FOREIGN KEY (brokerageOfficeId) REFERENCES brokerage_offices(id),
+            FOREIGN KEY (cityId) REFERENCES market_cities(id)
+        );
+    `);
+
     migrateExistingData();
 
     db.exec(`
@@ -183,6 +275,21 @@ function initDb() {
 
         CREATE INDEX IF NOT EXISTS idx_campaign_enrollments_next_action
         ON campaign_enrollments(status, nextActionAt);
+
+        CREATE INDEX IF NOT EXISTS idx_market_cities_status_priority
+        ON market_cities(status, priority DESC, lastDiscoveryAt);
+
+        CREATE INDEX IF NOT EXISTS idx_brokerage_profiles_status
+        ON brokerage_profiles(researchStatus, updatedAt);
+
+        CREATE INDEX IF NOT EXISTS idx_brokerage_offices_status_next
+        ON brokerage_offices(status, nextHarvestAt, updatedAt);
+
+        CREATE INDEX IF NOT EXISTS idx_roster_contacts_brokerage
+        ON roster_contacts(brokerageName, city, state);
+
+        CREATE INDEX IF NOT EXISTS idx_intelligence_runs_started
+        ON intelligence_runs(startedAt DESC);
     `);
     
     console.log('[Database] SQLite (node:sqlite) initialized successfully.');
@@ -495,6 +602,301 @@ function pauseLeadEnrollmentsByEmail(email, status = 'Paused') {
     return pauseLeadEnrollments(lead.id, status);
 }
 
+function safeJsonParse(value, fallback = {}) {
+    try {
+        return JSON.parse(value || JSON.stringify(fallback));
+    } catch {
+        return fallback;
+    }
+}
+
+function prepareBrokerageProfile(row) {
+    if (!row) return null;
+    return {
+        ...row,
+        techStack: safeJsonParse(row.techStackJson, {})
+    };
+}
+
+function prepareRosterContact(row) {
+    if (!row) return null;
+    return {
+        ...row,
+        socials: safeJsonParse(row.socialsJson, {})
+    };
+}
+
+function seedMarketCities(cities = []) {
+    const stmt = db.prepare(`
+        INSERT INTO market_cities (city, state, metro, incomeBand, priority)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(city, state) DO UPDATE SET
+            metro = COALESCE(excluded.metro, market_cities.metro),
+            incomeBand = COALESCE(excluded.incomeBand, market_cities.incomeBand),
+            priority = MAX(market_cities.priority, excluded.priority),
+            updatedAt = CURRENT_TIMESTAMP
+    `);
+
+    let count = 0;
+    for (const city of cities) {
+        if (!city || !city.city || !city.state) continue;
+        const result = stmt.run(
+            normalizeText(city.city),
+            normalizeText(city.state),
+            normalizeText(city.metro),
+            normalizeText(city.incomeBand),
+            parseInt(city.priority, 10) || 50
+        );
+        count += result.changes || 0;
+    }
+    return count;
+}
+
+function getNextMarketCityForDiscovery() {
+    const stmt = db.prepare(`
+        SELECT *
+        FROM market_cities
+        WHERE status IN ('Pending', 'Ready', 'Discovered')
+        ORDER BY
+            CASE WHEN lastDiscoveryAt IS NULL THEN 0 ELSE 1 END,
+            priority DESC,
+            COALESCE(lastDiscoveryAt, createdAt) ASC
+        LIMIT 1
+    `);
+    return stmt.get();
+}
+
+function updateMarketCity(id, changes = {}) {
+    const allowed = ['status', 'lastDiscoveryAt', 'priority'];
+    const keys = allowed.filter(key => Object.prototype.hasOwnProperty.call(changes, key));
+    if (!id || keys.length === 0) return 0;
+
+    const assignments = keys.map(key => `${key} = ?`).join(', ');
+    const values = keys.map(key => changes[key]);
+    values.push(id);
+    return db.prepare(`UPDATE market_cities SET ${assignments}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`).run(...values).changes;
+}
+
+function upsertBrokerageProfile(profile = {}) {
+    const name = normalizeText(profile.name);
+    if (!name) return null;
+
+    const stmt = db.prepare(`
+        INSERT INTO brokerage_profiles (
+            name, category, website, nationalWebsite, crmOffering, esignOffering,
+            leadTools, videoEmail, techStackJson, notes, researchStatus, researchedAt
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(name) DO UPDATE SET
+            category = COALESCE(excluded.category, brokerage_profiles.category),
+            website = COALESCE(excluded.website, brokerage_profiles.website),
+            nationalWebsite = COALESCE(excluded.nationalWebsite, brokerage_profiles.nationalWebsite),
+            crmOffering = COALESCE(excluded.crmOffering, brokerage_profiles.crmOffering),
+            esignOffering = COALESCE(excluded.esignOffering, brokerage_profiles.esignOffering),
+            leadTools = COALESCE(excluded.leadTools, brokerage_profiles.leadTools),
+            videoEmail = COALESCE(excluded.videoEmail, brokerage_profiles.videoEmail),
+            techStackJson = CASE WHEN excluded.techStackJson <> '{}' THEN excluded.techStackJson ELSE brokerage_profiles.techStackJson END,
+            notes = COALESCE(excluded.notes, brokerage_profiles.notes),
+            researchStatus = COALESCE(excluded.researchStatus, brokerage_profiles.researchStatus),
+            researchedAt = COALESCE(excluded.researchedAt, brokerage_profiles.researchedAt),
+            updatedAt = CURRENT_TIMESTAMP
+    `);
+
+    stmt.run(
+        name,
+        normalizeText(profile.category),
+        normalizeText(profile.website),
+        normalizeText(profile.nationalWebsite),
+        normalizeText(profile.crmOffering),
+        normalizeText(profile.esignOffering),
+        normalizeText(profile.leadTools),
+        normalizeText(profile.videoEmail),
+        JSON.stringify(profile.techStack || profile.techStackJson || {}),
+        normalizeText(profile.notes),
+        normalizeText(profile.researchStatus || 'Pending'),
+        profile.researchedAt || null
+    );
+
+    return getBrokerageProfileByName(name);
+}
+
+function getBrokerageProfileByName(name) {
+    const row = db.prepare('SELECT * FROM brokerage_profiles WHERE LOWER(name) = LOWER(?)').get(normalizeText(name));
+    return prepareBrokerageProfile(row);
+}
+
+function getNextBrokerageProfileForResearch() {
+    const row = db.prepare(`
+        SELECT *
+        FROM brokerage_profiles
+        WHERE researchStatus IN ('Pending', 'Needs Research')
+        ORDER BY updatedAt ASC
+        LIMIT 1
+    `).get();
+    return prepareBrokerageProfile(row);
+}
+
+function upsertBrokerageOffice(office = {}) {
+    const brokerageName = normalizeText(office.brokerageName || office.name);
+    const city = normalizeText(office.city);
+    const state = normalizeText(office.state);
+    if (!brokerageName || !city || !state) return null;
+
+    const profile = upsertBrokerageProfile({
+        name: brokerageName,
+        category: office.category,
+        website: office.nationalWebsite || office.website
+    });
+
+    const stmt = db.prepare(`
+        INSERT INTO brokerage_offices (
+            brokerageProfileId, brokerageName, city, state, searchQuery, website, rosterUrl, sourceUrl, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(brokerageName, city, state) DO UPDATE SET
+            brokerageProfileId = COALESCE(excluded.brokerageProfileId, brokerage_offices.brokerageProfileId),
+            searchQuery = COALESCE(excluded.searchQuery, brokerage_offices.searchQuery),
+            website = COALESCE(excluded.website, brokerage_offices.website),
+            rosterUrl = COALESCE(excluded.rosterUrl, brokerage_offices.rosterUrl),
+            sourceUrl = COALESCE(excluded.sourceUrl, brokerage_offices.sourceUrl),
+            status = CASE WHEN brokerage_offices.status = 'Harvested' THEN brokerage_offices.status ELSE COALESCE(excluded.status, brokerage_offices.status) END,
+            updatedAt = CURRENT_TIMESTAMP
+    `);
+
+    stmt.run(
+        profile && profile.id,
+        brokerageName,
+        city,
+        state,
+        normalizeText(office.searchQuery || `${brokerageName} ${city} ${state}`),
+        normalizeText(office.website),
+        normalizeText(office.rosterUrl),
+        normalizeText(office.sourceUrl),
+        normalizeText(office.status || 'Pending')
+    );
+
+    return db.prepare('SELECT * FROM brokerage_offices WHERE brokerageName = ? AND city = ? AND state = ?').get(brokerageName, city, state);
+}
+
+function getNextBrokerageOfficeForHarvest() {
+    return db.prepare(`
+        SELECT *
+        FROM brokerage_offices
+        WHERE status IN ('Pending', 'Discovered', 'Retry')
+          AND (nextHarvestAt IS NULL OR nextHarvestAt <= CURRENT_TIMESTAMP)
+        ORDER BY
+            CASE status WHEN 'Discovered' THEN 0 WHEN 'Pending' THEN 1 ELSE 2 END,
+            updatedAt ASC
+        LIMIT 1
+    `).get();
+}
+
+function updateBrokerageOffice(id, changes = {}) {
+    const allowed = ['website', 'rosterUrl', 'sourceUrl', 'status', 'lastHarvestAt', 'nextHarvestAt', 'lastError', 'rosterPageCount', 'contactCount'];
+    const keys = allowed.filter(key => Object.prototype.hasOwnProperty.call(changes, key));
+    if (!id || keys.length === 0) return 0;
+
+    const assignments = keys.map(key => `${key} = ?`).join(', ');
+    const values = keys.map(key => changes[key]);
+    values.push(id);
+    return db.prepare(`UPDATE brokerage_offices SET ${assignments}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`).run(...values).changes;
+}
+
+function upsertRosterContact(contact = {}) {
+    const email = normalizeEmail(contact.email);
+    const name = normalizeText(contact.name);
+    const brokerageName = normalizeText(contact.brokerageName);
+    if (!email || !name || !brokerageName) return null;
+
+    const stmt = db.prepare(`
+        INSERT INTO roster_contacts (
+            brokerageOfficeId, brokerageName, city, state, name, email, phone,
+            website, sourceUrl, socialsJson, productionBand, teamSizeHint, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(email) DO UPDATE SET
+            brokerageOfficeId = COALESCE(excluded.brokerageOfficeId, roster_contacts.brokerageOfficeId),
+            brokerageName = COALESCE(excluded.brokerageName, roster_contacts.brokerageName),
+            city = COALESCE(excluded.city, roster_contacts.city),
+            state = COALESCE(excluded.state, roster_contacts.state),
+            name = COALESCE(excluded.name, roster_contacts.name),
+            phone = COALESCE(excluded.phone, roster_contacts.phone),
+            website = COALESCE(excluded.website, roster_contacts.website),
+            sourceUrl = COALESCE(excluded.sourceUrl, roster_contacts.sourceUrl),
+            socialsJson = CASE WHEN excluded.socialsJson <> '{}' THEN excluded.socialsJson ELSE roster_contacts.socialsJson END,
+            updatedAt = CURRENT_TIMESTAMP
+    `);
+
+    stmt.run(
+        contact.brokerageOfficeId || null,
+        brokerageName,
+        normalizeText(contact.city),
+        normalizeText(contact.state),
+        name,
+        email,
+        normalizeText(contact.phone),
+        normalizeText(contact.website),
+        normalizeText(contact.sourceUrl),
+        JSON.stringify(contact.socials || {}),
+        normalizeText(contact.productionBand),
+        normalizeText(contact.teamSizeHint),
+        normalizeText(contact.status || 'Raw')
+    );
+
+    const row = db.prepare('SELECT * FROM roster_contacts WHERE LOWER(email) = ?').get(email);
+    return prepareRosterContact(row);
+}
+
+function insertIntelligenceRun(run = {}) {
+    const stmt = db.prepare(`
+        INSERT INTO intelligence_runs (type, status, brokerageOfficeId, cityId, message, statsJson, error)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+        normalizeText(run.type || 'harvest'),
+        normalizeText(run.status || 'Running'),
+        run.brokerageOfficeId || null,
+        run.cityId || null,
+        normalizeText(run.message),
+        JSON.stringify(run.stats || {}),
+        normalizeText(run.error)
+    );
+    return result.lastInsertRowid;
+}
+
+function updateIntelligenceRun(id, changes = {}) {
+    const allowed = ['status', 'finishedAt', 'message', 'statsJson', 'error'];
+    const normalized = { ...changes };
+    if (Object.prototype.hasOwnProperty.call(normalized, 'stats')) {
+        normalized.statsJson = JSON.stringify(normalized.stats || {});
+        delete normalized.stats;
+    }
+    const keys = allowed.filter(key => Object.prototype.hasOwnProperty.call(normalized, key));
+    if (!id || keys.length === 0) return 0;
+
+    const assignments = keys.map(key => `${key} = ?`).join(', ');
+    const values = keys.map(key => normalized[key]);
+    values.push(id);
+    return db.prepare(`UPDATE intelligence_runs SET ${assignments} WHERE id = ?`).run(...values).changes;
+}
+
+function getLeadIntelligenceStatus() {
+    const cityCounts = db.prepare('SELECT status, COUNT(*) AS count FROM market_cities GROUP BY status').all();
+    const officeCounts = db.prepare('SELECT status, COUNT(*) AS count FROM brokerage_offices GROUP BY status').all();
+    const profileCounts = db.prepare('SELECT researchStatus AS status, COUNT(*) AS count FROM brokerage_profiles GROUP BY researchStatus').all();
+    const contactCount = db.prepare('SELECT COUNT(*) AS count FROM roster_contacts').get().count;
+    const recentRuns = db.prepare('SELECT * FROM intelligence_runs ORDER BY id DESC LIMIT 10').all()
+        .map(row => ({ ...row, stats: safeJsonParse(row.statsJson, {}) }));
+
+    return {
+        cities: cityCounts,
+        offices: officeCounts,
+        profiles: profileCounts,
+        contacts: contactCount,
+        recentRuns
+    };
+}
+
 module.exports = {
     initDb,
     getLeads,
@@ -520,5 +922,18 @@ module.exports = {
     getDueEnrollments,
     insertEnrollment,
     updateEnrollment,
-    pauseLeadEnrollments
+    pauseLeadEnrollments,
+    seedMarketCities,
+    getNextMarketCityForDiscovery,
+    updateMarketCity,
+    upsertBrokerageProfile,
+    getBrokerageProfileByName,
+    getNextBrokerageProfileForResearch,
+    upsertBrokerageOffice,
+    getNextBrokerageOfficeForHarvest,
+    updateBrokerageOffice,
+    upsertRosterContact,
+    insertIntelligenceRun,
+    updateIntelligenceRun,
+    getLeadIntelligenceStatus
 };
