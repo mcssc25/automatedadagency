@@ -84,13 +84,17 @@ Last updated: 2026-07-02
 - Files changed for OpenRouter lead-intelligence provider wiring: `server.js`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
 - OpenRouter wiring commit pushed to `main`: `e484757` (`Add OpenRouter lead intelligence provider`).
-- OpenRouter wiring is pending production deploy in the current turn.
+- Docs/deploy-status commit pushed to `main`: `a1c9dd9` (`Document OpenRouter provider update`).
+- OpenRouter provider code is deployed live. Production `/api/app-config` reports `openRouterConfigured=false` because the production `.env` does not yet contain an enabled OpenRouter key.
 - Files changed for lead-intelligence work: `Dockerfile`, `db.js`, `docker-compose.yml`, `package.json`, `package-lock.json`, `server.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
 - Lead-intelligence code is pushed and deployed. Main commits: `a91eb02` (`Add brokerage lead intelligence engine`), `66340d0` (`Seed brokerage brand city searches`), `c7434e6` (`Preserve discovered brokerage targets`), `fb0284b` (`Keep seeded offices queue position`), `6fb7bd3` (`Detect blocked roster browser pages`), `caea108` (`Mark interrupted intelligence runs`).
 - Latest code commit pushed to `main`: `caea108` (`Mark interrupted intelligence runs`).
 - Refresh-preservation deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T202056Z-trend-refresh-preserve`.
 - Deployed `ad-agency-autopilot` container is healthy.
+- OpenRouter provider deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T212622Z-openrouter-lead-intelligence`.
+- OpenRouter provider deployment copied only `server.js`, `docker-compose.yml`, `.env.example`, `MEMORY.md`, and `handoff.md`, then rebuilt/restarted only `ad-agency-autopilot`.
+- Production verification after OpenRouter deploy: container healthy, `docker exec ad-agency-autopilot node --check /app/server.js`, `/app/db.js`, and `/app/app.js` passed; `/api/app-config` returned OpenRouter model settings with `openRouterConfigured=false`; authenticated `/api/lead-intelligence/status` returned `researchProvider: "gemini"` and OpenRouter disabled until the key/env flags are set.
 - Trend refresh preservation deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
 - Deployment copied only `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.
