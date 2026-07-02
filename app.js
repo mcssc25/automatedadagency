@@ -3245,9 +3245,7 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
                 <div class="post-media-preview" style="margin-top: 10px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); max-height: 140px; width: 100%;">
                     <img src="${this.escapeHtml(t.mediaUrl)}" style="width: 100%; height: 100%; object-fit: cover;" />
                 </div>` : ''}
-                <div style="font-size: 0.75rem; color: var(--orange); margin-top: 10px; font-weight:600;">
-                    <i class="fa-solid fa-fire"></i> Viral engagement: ${this.escapeHtml(t.engagement || 'High engagement signal')}
-                </div>
+                ${this.renderTrendMetricLine(t)}
                 ${sourceUrl ? `<a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; gap:6px; align-items:center; margin-top:8px; font-size:0.75rem; color:var(--accent); text-decoration:none;"><i class="fa-solid fa-arrow-up-right-from-square"></i> Source</a>` : ''}
                 <div class="card-actions-row">
                     <button class="card-action-btn btn-draft-trend" onclick="App.handleTrendRewrite(${Number(t.id) || 0})">
@@ -3256,6 +3254,24 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
                 </div>
             </div>
         `}).join("");
+    }
+
+    renderTrendMetricLine(trend) {
+        const numericPattern = /\b\d[\d,.]*(?:\.\d+)?\s*(?:k|m)?\s*(?:views?|likes?|comments?|shares?|reposts?|replies?)\b/i;
+        const metrics = String(trend.engagementMetrics || '').trim();
+        const engagement = String(trend.engagement || '').trim();
+        const signal = String(trend.trendSignal || '').trim();
+
+        if (metrics && numericPattern.test(metrics)) {
+            return `<div style="font-size: 0.75rem; color: var(--orange); margin-top: 10px; font-weight:600;"><i class="fa-solid fa-fire"></i> Engagement: ${this.escapeHtml(metrics)}</div>`;
+        }
+
+        if (engagement && numericPattern.test(engagement)) {
+            return `<div style="font-size: 0.75rem; color: var(--orange); margin-top: 10px; font-weight:600;"><i class="fa-solid fa-fire"></i> Engagement: ${this.escapeHtml(engagement)}</div>`;
+        }
+
+        const trendSignal = signal || engagement.replace(/^search-backed trend signal:\s*/i, '').trim() || 'Source-backed trend signal';
+        return `<div style="font-size: 0.75rem; color: var(--accent); margin-top: 10px; font-weight:600;"><i class="fa-solid fa-chart-line"></i> Trend signal: ${this.escapeHtml(trendSignal)}</div>`;
     }
 
     renderTrendKeywordSummary() {

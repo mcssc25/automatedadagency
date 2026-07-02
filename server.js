@@ -3593,7 +3593,9 @@ Return JSON only:
       "competitor": "creator/company/source name",
       "topic": "short topic",
       "body": "brief paraphrase of the real post/content angle",
-      "engagement": "public engagement if visible, otherwise Search-backed trend signal",
+      "engagementMetrics": "visible public metrics like 12K views, 530 likes, 42 comments; empty string if not visible",
+      "trendSignal": "why this is a relevant/high-performing angle when public metrics are not visible",
+      "engagement": "legacy fallback; use public metrics if visible, otherwise use the trend signal",
       "keyword": "keyword that found it",
       "sourceUrl": "public source URL if available"
     }
@@ -3613,7 +3615,9 @@ Only include items supported by search results. Do not invent exact likes/views/
             topic: String(trend.topic || trend.keyword || 'Market trend').trim().slice(0, 120),
             body: String(trend.body || trend.topic || '').trim(),
             mediaUrl: '',
-            engagement: String(trend.engagement || 'Search-backed trend signal').trim(),
+            engagementMetrics: String(trend.engagementMetrics || '').trim(),
+            trendSignal: String(trend.trendSignal || trend.engagement || 'Search-backed trend signal').trim(),
+            engagement: String(trend.engagementMetrics || trend.engagement || trend.trendSignal || 'Search-backed trend signal').trim(),
             searchKeyword: cleanTrendTerm(trend.keyword || trend.topic),
             sourceUrl: String(trend.sourceUrl || '').trim(),
             researchSource: 'grounded-search'

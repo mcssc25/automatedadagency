@@ -4,6 +4,14 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Clarified Research & Trends card metrics after the user saw orange lines that looked like notifications.
+- Root cause: grounded search fallback may return qualitative source-backed trend rationale when public view/like/comment counts are not visible. The UI was still labeling that text as `Viral engagement`, which made it look like engagement metrics.
+- UI now displays `Engagement` in orange only when a numeric views/likes/comments/shares/reposts/replies metric is present.
+- UI now displays qualitative fallback text as cyan `Trend signal`.
+- Grounded trend research now asks for `engagementMetrics` separately from `trendSignal` so future cards can distinguish public metrics from rationale cleanly.
+
+## Previous Update
+
 - Built the first backend-only lead intelligence engine for nationwide realtor database building.
 - Added hidden SQLite tables for `market_cities`, `brokerage_profiles`, `brokerage_offices`, `roster_contacts`, and `intelligence_runs`.
 - Seeded the first 20 mid-market/mid-income cities for discovery, starting with Birmingham, Huntsville, Knoxville, Chattanooga, Greenville, Columbia, Pensacola, Lakeland, Tulsa, Omaha, and others.
