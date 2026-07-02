@@ -46,6 +46,7 @@ Last updated: 2026-07-02
 - Trend research should not invent engagement numbers. If the trend parser lacks real engagement, it returns `Trend score N` or `High engagement signal`.
 - Verification for latest update: `node --check app.js`, `node --check server.js`, `git diff --check`, and a bounded local `/api/trends` smoke for Real Estate CRM Pro returned 12 trends, 12 keyword targets, and 4 searched queries.
 - Trend-keyword code commit `a89a729` (`Improve trend keyword research`) is pushed to `main`.
+- Follow-up fix: production cannot use the Windows `py` last30days plugin path, and a zero-result refresh could overwrite prior trend cards. Research & Trends now skips the unavailable local scraper cleanly, repairs malformed Gemini trend JSON, caches last successful API trend cards, and the UI preserves last good cards when a refresh returns no posts.
 - Trend-keyword deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`; deployed container syntax checks passed and app is healthy.
 - Previous deployed update fixed social post media card previews: video cards render in a portrait `9 / 16` frame with `object-fit: contain`, image cards stay `16 / 9`, and action buttons wrap inside cards.
 - Social video preview layout code commit `13ab621` (`Fix social video preview layout`) was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.

@@ -41,6 +41,9 @@ const SCRAPER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
 };
+const LAST30DAYS_SCRIPT_PATH = process.env.LAST30DAYS_SCRIPT_PATH || 'C:\\Users\\daved\\.gemini\\config\\plugins\\last30days-plugin\\skills\\last30days\\scripts\\last30days.py';
+const missingLast30DaysScriptsLogged = new Set();
+const trendResultCache = new Map();
 const REALTOR_DIRECTORY_DOMAINS = [
     'zillow.com',
     'realtor.com',
@@ -2838,7 +2841,7 @@ Rules:
 
     try {
         const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
-        const data = parseModelJson(raw);
+        const data = await parseModelJsonWithRepair(raw);
         const generatedTerms = dedupeStrings([
             ...(Array.isArray(data.primarySearchTerms) ? data.primarySearchTerms : []),
             ...(Array.isArray(data.viralKeywordHypotheses) ? data.viralKeywordHypotheses : []),
@@ -2976,6 +2979,18 @@ function summarizeKeywordPerformance(plan = {}, trends = []) {
         }));
 }
 
+function trendCacheKey(context = {}) {
+    return crypto.createHash('sha256')
+        .update(JSON.stringify({
+            bizName: context.bizName || '',
+            bizDesc: context.bizDesc || '',
+            bizAudience: context.bizAudience || '',
+            competitors: context.competitors || ''
+        }))
+        .digest('hex')
+        .slice(0, 24);
+}
+
 async function researchGroundedSocialTrends(context = {}, plan = {}, limit = 8) {
     const keywords = (Array.isArray(plan.keywords) ? plan.keywords : [])
         .map(item => item.term)
@@ -3008,7 +3023,7 @@ Only include items supported by search results. Do not invent exact likes/views/
 
     try {
         const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
-        const data = parseModelJson(raw);
+        const data = await parseModelJsonWithRepair(raw);
         const trends = Array.isArray(data.trends) ? data.trends : [];
         return trends.slice(0, limit).map((trend, index) => ({
             id: index + 1,
@@ -3031,9 +3046,21 @@ Only include items supported by search results. Do not invent exact likes/views/
 function runLast30DaysSearch(scriptPath, query, platformHint, keyword) {
     return new Promise((resolve) => {
         const safeQuery = String(query || '').replace(/["\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
-        console.log(`[Trends Scraper] Running ${platformHint} query: ${safeQuery}`);
+        if (!scriptPath || !fs.existsSync(scriptPath)) {
+            if (!missingLast30DaysScriptsLogged.has(String(scriptPath || 'missing'))) {
+                missingLast30DaysScriptsLogged.add(String(scriptPath || 'missing'));
+                console.warn(`[Trends Scraper] last30days script is not available at ${scriptPath || '(not configured)'}; using grounded search fallback.`);
+            }
+            return resolve([]);
+        }
 
-        execFile('py', ['-3.12', scriptPath, safeQuery, '--emit=compact', '--quick'], { timeout: 45000 }, (error, stdout) => {
+        console.log(`[Trends Scraper] Running ${platformHint} query: ${safeQuery}`);
+        const pythonCommand = process.platform === 'win32' ? 'py' : 'python3';
+        const pythonArgs = process.platform === 'win32'
+            ? ['-3.12', scriptPath, safeQuery, '--emit=compact', '--quick']
+            : [scriptPath, safeQuery, '--emit=compact', '--quick'];
+
+        execFile(pythonCommand, pythonArgs, { timeout: 45000 }, (error, stdout) => {
             if (error) {
                 console.error(`[Trends CLI Error:${platformHint}]`, error.message);
                 return resolve([]);
@@ -3086,6 +3113,7 @@ app.post('/api/trends', async (req, res) => {
         };
 
         console.log(`[Trends Agent] Building onboarding-aware keyword plan for research...`);
+        const cacheKey = trendCacheKey(context);
         const keywordPlan = await buildTrendKeywordPlan(context);
         const researchQueries = buildTrendResearchQueries(keywordPlan, context);
         console.log(`[Trends Agent] Research queries:`, researchQueries.map(item => item.query));
@@ -3124,12 +3152,31 @@ app.post('/api/trends', async (req, res) => {
                 acc[t.platform] = (acc[t.platform] || 0) + 1;
                 return acc;
             }, {});
+            trendResultCache.set(cacheKey, {
+                trends: finalTrends,
+                keywords,
+                searchedQueries: researchQueries.map(item => item.query),
+                keywordPlan,
+                cachedAt: new Date().toISOString()
+            });
             console.log(`[Trends Scraper] Returning ${finalTrends.length} trends. Mix:`, platformMix);
             return res.json({
                 trends: finalTrends,
                 keywords,
                 searchedQueries: researchQueries.map(item => item.query),
                 keywordPlan
+            });
+        }
+
+        const cached = trendResultCache.get(cacheKey);
+        if (cached && Array.isArray(cached.trends) && cached.trends.length > 0) {
+            console.warn(`[Trends Scraper] No new trends parsed; returning cached trend cards from ${cached.cachedAt}.`);
+            return res.json({
+                ...cached,
+                keywords,
+                searchedQueries: researchQueries.map(item => item.query),
+                stale: true,
+                warning: 'No new competitor posts were parsed, so the last successful trend cards were kept.'
             });
         }
 

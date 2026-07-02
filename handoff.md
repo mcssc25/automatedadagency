@@ -4,6 +4,13 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Follow-up fix after production testing: trend cards could disappear when a later refresh returned zero parsed posts.
+- Root cause: the VPS cannot run the Windows `py` launcher or the local Windows last30days plugin path, so the first trend parser always returned no posts in production. The grounded Gemini fallback sometimes returned valid cards, but when a later fallback response contained malformed JSON, `/api/trends` returned zero trends and the browser saved that empty result over the previously visible cards.
+- Backend now skips the unavailable last30days script cleanly, uses JSON repair for keyword/trend grounded responses, and caches the last successful trend set for a business context.
+- Frontend now ignores stale/out-of-order trend refresh responses and preserves the last good trend cards if a refresh returns no parsed posts, showing a warning note instead of wiping the grid.
+
+## Previous Update
+
 - Made Content Studio `Research & Trends` smarter and onboarding-aware.
 - Frontend now sends `/api/trends` the saved business description/offers, audience, SWOT, business report, agency goal, core message, competitor domains, and competitor profiles.
 - Backend now builds a keyword plan from onboarding context, grounded Gemini keyword research when available, deterministic business-category fallback terms, and competitor brand/category combinations.
@@ -18,6 +25,7 @@ Last updated: 2026-07-02
 - `node --check server.js` passed.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
+- Missing-script smoke with `LAST30DAYS_SCRIPT_PATH` pointed at a nonexistent file returned 12 trend cards, 12 keyword targets, and 4 searched queries, confirming the production fallback path works without `py`.
 - Bounded local smoke request to `/api/trends` for `Real Estate CRM Pro` with `TREND_RESEARCH_MAX_QUERIES=4` returned:
   - 12 trend cards
   - 12 keyword targets
@@ -32,7 +40,8 @@ Last updated: 2026-07-02
 
 - Files changed: `server.js`, `app.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
-- Code commit pushed to `main`: `a89a729` (`Improve trend keyword research`).
+- Last completed code commit pushed to `main`: `a89a729` (`Improve trend keyword research`).
+- Pending follow-up repo/deploy step: commit, push, and deploy the refresh-preservation fix.
 - Deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
 - Deployment copied only `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.

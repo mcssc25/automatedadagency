@@ -75,6 +75,7 @@ class AutopilotApp {
             competitorTrends: [],
             competitorTrendKeywords: [],
             trendSearchQueries: [],
+            trendRefreshWarning: "",
             leads: [],
             leadsPage: 1,
             leadsPagesCount: 1,
@@ -1143,6 +1144,7 @@ class AutopilotApp {
             competitorTrends: this.state.competitorTrends,
             competitorTrendKeywords: this.state.competitorTrendKeywords,
             trendSearchQueries: this.state.trendSearchQueries,
+            trendRefreshWarning: this.state.trendRefreshWarning,
             scheduledPosts: this.state.scheduledPosts,
             publishedPosts: this.state.publishedPosts,
             leads: this.state.leads,
@@ -3151,6 +3153,8 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
             return;
         }
 
+        const requestId = Date.now();
+        this.latestTrendRequestId = requestId;
         this.dom.trendsContainer.innerHTML = `
             <div style="padding: 40px; text-align: center; color: var(--text-secondary); width: 100%; grid-column: 1 / -1;">
                 <i class="fa-solid fa-spinner fa-spin text-purple" style="font-size: 2.5rem; margin-bottom: 15px;"></i>
@@ -3177,7 +3181,21 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
             if (!response.ok) throw new Error("Failed to load trends");
 
             const data = await response.json();
-            this.state.competitorTrends = Array.isArray(data) ? data : (Array.isArray(data.trends) ? data.trends : []);
+            if (this.latestTrendRequestId !== requestId) return;
+
+            const nextTrends = Array.isArray(data) ? data : (Array.isArray(data.trends) ? data.trends : []);
+            const hadExistingTrends = Array.isArray(this.state.competitorTrends) && this.state.competitorTrends.length > 0;
+            if (nextTrends.length > 0) {
+                this.state.competitorTrends = nextTrends;
+                this.state.trendRefreshWarning = data.stale
+                    ? (data.warning || "No new competitor posts were parsed, so the last successful trend cards were kept.")
+                    : "";
+            } else if (hadExistingTrends) {
+                this.state.trendRefreshWarning = "Refresh did not parse any new competitor posts, so the last successful trend cards are still shown.";
+            } else {
+                this.state.competitorTrends = [];
+                this.state.trendRefreshWarning = "";
+            }
             this.state.competitorTrendKeywords = Array.isArray(data.keywords) ? data.keywords : [];
             this.state.trendSearchQueries = Array.isArray(data.searchedQueries) ? data.searchedQueries : [];
             this.saveState();
@@ -3190,9 +3208,13 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
 
     renderCompetitorTrendsGrid() {
         const keywordSummaryHtml = this.renderTrendKeywordSummary();
+        const warningHtml = this.state.trendRefreshWarning
+            ? `<div class="social-post-card" style="grid-column:1 / -1; border-left:3px solid var(--orange);"><strong style="font-size:0.9rem; color:var(--orange);"><i class="fa-solid fa-triangle-exclamation"></i> Trend refresh note</strong><p style="margin:8px 0 0; color:var(--text-secondary); font-size:0.85rem;">${this.escapeHtml(this.state.trendRefreshWarning)}</p></div>`
+            : '';
         if (!this.state.competitorTrends || this.state.competitorTrends.length === 0) {
             this.dom.trendsContainer.innerHTML = `
                 ${keywordSummaryHtml}
+                ${warningHtml}
                 <div class="empty-state" style="padding: 40px; text-align: center; color: var(--text-secondary); width:100%; grid-column: 1 / -1;">
                     <i class="fa-solid fa-magnifying-glass" style="font-size: 2.5rem; color: var(--purple); margin-bottom: 15px;"></i>
                     <p>No competitor posts were parsed yet. The agent searched onboarding keywords${this.state.trendSearchQueries && this.state.trendSearchQueries.length ? ` like ${this.escapeHtml(this.state.trendSearchQueries.slice(0, 3).join(', '))}` : ''}; try Refresh Trends again or enrich Agency Onboarding with more offers, audience pains, and competitor profiles.</p>
@@ -3200,7 +3222,7 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
             return;
         }
 
-        this.dom.trendsContainer.innerHTML = keywordSummaryHtml + this.state.competitorTrends.map(t => {
+        this.dom.trendsContainer.innerHTML = keywordSummaryHtml + warningHtml + this.state.competitorTrends.map(t => {
             const platform = this.escapeHtml(t.platform || 'market');
             const platformClass = String(t.platform || 'market').replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'market';
             const keyword = this.escapeHtml(t.searchKeyword || t.keyword || '');
