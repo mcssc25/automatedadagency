@@ -96,7 +96,8 @@ Last updated: 2026-07-02
 
 - Files changed for OpenRouter Integrations UI/model rotation: `server.js`, `app.js`, `index.html`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
-- OpenRouter Integrations UI/model rotation is verified locally and pending commit/deploy in the current turn.
+- OpenRouter Integrations UI/model rotation commit pushed to `main`: `f562eee` (`Add OpenRouter integration settings`).
+- OpenRouter Integrations UI/model rotation is deployed live. Production currently reports OpenRouter not configured until the user saves a key from Integrations.
 - Files changed for OpenRouter lead-intelligence provider wiring: `server.js`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
 - OpenRouter wiring commit pushed to `main`: `e484757` (`Add OpenRouter lead intelligence provider`).
@@ -111,6 +112,9 @@ Last updated: 2026-07-02
 - OpenRouter provider deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T212622Z-openrouter-lead-intelligence`.
 - OpenRouter provider deployment copied only `server.js`, `docker-compose.yml`, `.env.example`, `MEMORY.md`, and `handoff.md`, then rebuilt/restarted only `ad-agency-autopilot`.
 - Production verification after OpenRouter deploy: container healthy, `docker exec ad-agency-autopilot node --check /app/server.js`, `/app/db.js`, and `/app/app.js` passed; `/api/app-config` returned OpenRouter model settings with `openRouterConfigured=false`; authenticated `/api/lead-intelligence/status` returned `researchProvider: "gemini"` and OpenRouter disabled until the key/env flags are set.
+- OpenRouter Integrations deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T214340Z-openrouter-integration-settings`.
+- OpenRouter Integrations deployment copied only `server.js`, `app.js`, `index.html`, `docker-compose.yml`, `.env.example`, `MEMORY.md`, and `handoff.md`, then rebuilt/restarted only `ad-agency-autopilot`.
+- Production verification after OpenRouter Integrations deploy: container healthy, deployed `server.js`, `app.js`, and `db.js` syntax checks passed; authenticated `/api/openrouter-settings` returned configured/enabled false, first model `openai/gpt-oss-120b:free`, and 15 free-model fallbacks; `/api/app-config` returned the same first model/count.
 - Trend refresh preservation deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
 - Deployment copied only `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.
