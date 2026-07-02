@@ -1614,10 +1614,11 @@ async function findPublicEmailsOnWebsite(website) {
     return [...found];
 }
 
-async function scrapeBrokerageRosterCandidatesFromWebsite(website, brokerageName, discoveryQuery) {
-    if (!website) return [];
+async function scrapeBrokerageRosterCandidatesFromWebsite(website, brokerageName, discoveryQuery, seedUrls = []) {
+    const firstSeedUrl = Array.isArray(seedUrls) && seedUrls.length ? seedUrls.find(Boolean) : '';
+    if (!website && !firstSeedUrl) return [];
 
-    const startUrl = normalizeWebsiteUrl(website);
+    const startUrl = normalizeWebsiteUrl(website || firstSeedUrl);
     const baseHost = normalizeDomain(startUrl);
     const maxRosterPages = Math.min(Math.max(parseInt(process.env.LEAD_ROSTER_MAX_PAGES_PER_SITE, 10) || 12, 3), 40);
     const foundCandidates = [];
@@ -1627,12 +1628,14 @@ async function scrapeBrokerageRosterCandidatesFromWebsite(website, brokerageName
     function addPage(url) {
         const cleanUrl = String(url || '').replace(/\/+$/, '');
         if (!cleanUrl || crawled.has(cleanUrl) || queued.includes(cleanUrl)) return;
+        if (normalizeDomain(cleanUrl) !== baseHost) return;
         queued.push(cleanUrl);
     }
 
     try {
         const homepage = await fetchLeadContactHtml(startUrl);
         addPage(homepage.finalUrl || startUrl);
+        (Array.isArray(seedUrls) ? seedUrls : []).forEach(addPage);
         collectBrokerageRosterLinks(homepage.html, homepage.finalUrl, baseHost, Math.min(maxRosterPages, 8)).forEach(addPage);
 
         while (queued.length && crawled.size < maxRosterPages) {
@@ -1908,6 +1911,109 @@ Return ONLY valid JSON. No markdown blocks, no formatting.`;
     return (data.leads || []).flatMap(lead => normalizeLeadCandidate(lead, niche));
 }
 
+function normalizeDiscoveredBrokerageUrl(rawUrl, baseUrl = '') {
+    const value = String(rawUrl || '').trim();
+    if (!value) return '';
+
+    try {
+        if (/^https?:\/\//i.test(value)) return value;
+        if (value.startsWith('/') && baseUrl) return new URL(value, baseUrl).href;
+        if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/:?#]|$)/i.test(value)) {
+            return normalizeWebsiteUrl(value);
+        }
+    } catch (error) {
+        // Ignore malformed discovery results.
+    }
+
+    return '';
+}
+
+function normalizeBrokerageDiscoveryResult(item = {}) {
+    const name = cleanLeadText(item.name || item.company || item.brokerage || item.title || '');
+    const website = String(item.website || item.url || item.site || '').trim();
+    const rosterUrl = String(item.rosterUrl || item.roster_url || item.agentsUrl || item.agents_url || item.teamUrl || item.team_url || '').trim();
+    const sourceUrl = String(item.sourceUrl || item.source_url || rosterUrl || website || '').trim();
+
+    if (!name && !website && !rosterUrl) return null;
+
+    const normalizedWebsite = normalizeDiscoveredBrokerageUrl(website);
+    const normalizedRosterUrl = normalizeDiscoveredBrokerageUrl(rosterUrl, normalizedWebsite);
+    const normalizedSourceUrl = normalizeDiscoveredBrokerageUrl(sourceUrl, normalizedWebsite) || normalizedRosterUrl || normalizedWebsite;
+    const crawlUrl = normalizedRosterUrl || normalizedWebsite;
+    if (!crawlUrl) return null;
+
+    const domain = normalizeDomain(crawlUrl);
+    if (REALTOR_DIRECTORY_DOMAINS.some(blocked => domain === blocked || domain.endsWith(`.${blocked}`))) return null;
+
+    return {
+        name: name || domain,
+        website: normalizedWebsite || crawlUrl,
+        rosterUrl: normalizedRosterUrl,
+        sourceUrl: normalizedSourceUrl || crawlUrl
+    };
+}
+
+async function discoverBrokerageRosterTargetsWithSearch(niche, count) {
+    const targetCount = Math.min(Math.max(count * 3, 8), 30);
+    const prompt = `Find up to ${targetCount} brokerage websites for this real estate market: "${niche}".
+
+Prioritize local brokerage, office, and franchise office websites that publish agent rosters, team pages, staff pages, "find an agent" pages, or individual agent profile pages.
+This is discovery only. Do not return agent contact records here.
+Do not use Zillow, Realtor.com, Redfin, Homes.com, lead forms, login-only pages, private APIs, or pages that require CAPTCHA.
+Prefer URLs on the brokerage's own site or franchise office site, such as /agents, /agent-search, /team, /associates, /our-agents, /find-an-agent, /getagent/list.php.
+
+Return ONLY valid JSON with this exact shape:
+{
+  "brokerages": [
+    {
+      "name": "Example Realty",
+      "website": "https://www.example-realty.com",
+      "rosterUrl": "https://www.example-realty.com/agents",
+      "sourceUrl": "https://www.example-realty.com/agents"
+    }
+  ]
+}`;
+
+    const rawResponse = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+    const data = await parseModelJsonWithRepair(rawResponse);
+    const rawBrokerages = Array.isArray(data.brokerages) ? data.brokerages : [];
+    const seen = new Set();
+    const brokerages = [];
+
+    for (const item of rawBrokerages) {
+        const brokerage = normalizeBrokerageDiscoveryResult(item);
+        if (!brokerage) continue;
+        const key = `${normalizeDomain(brokerage.rosterUrl || brokerage.website)}|${brokerage.rosterUrl || brokerage.website}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        brokerages.push(brokerage);
+    }
+
+    return brokerages;
+}
+
+async function scrapeRealtorBrokerageSearchLeadCandidates(niche, count) {
+    const maxBrokerages = Math.min(Math.max(parseInt(process.env.LEAD_BROKERAGE_SEARCH_MAX_BROKERAGES, 10) || 12, 1), 40);
+    const brokerages = (await discoverBrokerageRosterTargetsWithSearch(niche, count)).slice(0, maxBrokerages);
+    if (brokerages.length === 0) return { brokerages, candidates: [] };
+
+    const candidateGroups = await mapWithConcurrency(
+        brokerages,
+        2,
+        brokerage => scrapeBrokerageRosterCandidatesFromWebsite(
+            brokerage.website || brokerage.rosterUrl,
+            brokerage.name,
+            niche,
+            [brokerage.rosterUrl, brokerage.sourceUrl].filter(Boolean)
+        )
+    );
+
+    return {
+        brokerages,
+        candidates: mergeLeadCandidatesByEmail(candidateGroups.flat()).slice(0, count)
+    };
+}
+
 function insertLeadCandidates(candidates, discoveryQuery, options = {}) {
     const insertedLeads = [];
     const skipped = { dnc: 0, duplicate: 0, invalid: 0 };
@@ -1987,13 +2093,41 @@ async function runLeadScrape(niche, count, onProgress = () => {}) {
     const errors = [];
     const realtorQuery = isRealtorLeadQuery(niche);
 
-    try {
-        onProgress('maps-sidecar', 'Searching Google Maps and enriching public website emails...');
-        candidates = await scrapeLeadCandidatesWithMapsSidecar(niche, count);
-    } catch (error) {
-        const message = formatErrorMessage(error);
-        errors.push(`maps-sidecar: ${message}`);
-        console.warn(`[Maps Scraper Error] ${message}`);
+    if (realtorQuery) {
+        try {
+            source = 'brokerage-rosters';
+            const timeoutMs = Math.min(Math.max(parseInt(process.env.LEAD_BROKERAGE_SEARCH_TIMEOUT_MS, 10) || 120000, 30000), 300000);
+            onProgress('brokerage-discovery', 'Finding brokerage websites and public agent roster pages...');
+            const brokerageResult = await withTimeout(
+                scrapeRealtorBrokerageSearchLeadCandidates(niche, count),
+                timeoutMs,
+                'Brokerage roster discovery'
+            );
+            candidates = mergeLeadCandidatesByEmail(candidates, brokerageResult.candidates).slice(0, count);
+            onProgress('brokerage-rosters', `Checked ${brokerageResult.brokerages.length} brokerage roster target(s); found ${candidates.length} candidate lead(s).`);
+        } catch (error) {
+            const message = formatErrorMessage(error);
+            errors.push(`brokerage-rosters: ${message}`);
+            console.error(`[Brokerage Roster Search Error] ${message}`);
+        }
+    }
+
+    if ((!realtorQuery || candidates.length < count) && process.env.LEAD_MAPS_FALLBACK !== 'false') {
+        try {
+            const previousCount = candidates.length;
+            onProgress('maps-sidecar', realtorQuery
+                ? 'Brokerage roster discovery did not fill the request; checking Maps-discovered brokerage sites...'
+                : 'Searching Google Maps and enriching public website emails...');
+            const mapsCandidates = await scrapeLeadCandidatesWithMapsSidecar(niche, count);
+            candidates = mergeLeadCandidatesByEmail(candidates, mapsCandidates).slice(0, count);
+            if (candidates.length > previousCount) {
+                source = previousCount > 0 ? `${source}+maps-sidecar` : 'maps-sidecar';
+            }
+        } catch (error) {
+            const message = formatErrorMessage(error);
+            errors.push(`maps-sidecar: ${message}`);
+            console.warn(`[Maps Scraper Error] ${message}`);
+        }
     }
 
     if (realtorQuery && candidates.length < count && process.env.LEAD_REALTOR_DIRECTORY_FALLBACK !== 'false') {

@@ -14,6 +14,14 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Changed realtor lead scraping to prioritize brokerage roster discovery from grounded Google/Gemini search instead of starting with Google Maps place rows.
+- Realtor queries now first discover brokerage/office websites and likely public roster URLs, then crawl those roster/team/agent/profile pages for visible individual agent emails.
+- Maps enrichment is now a fallback when brokerage roster discovery does not fill the requested count; it can be disabled with `LEAD_MAPS_FALLBACK=false`.
+- New bounded knobs: `LEAD_BROKERAGE_SEARCH_TIMEOUT_MS` defaults to 120 seconds, and `LEAD_BROKERAGE_SEARCH_MAX_BROKERAGES` defaults to 12.
+- Discovery filters out Zillow/Realtor.com/Redfin/Homes.com as crawl targets and normalizes only real URL/domain-looking brokerage links before crawling.
+
+## Previous Update
+
 - Fixed a realtor scrape UX failure where a Gulf Shores scrape could keep spinning without an obvious completed/error result.
 - Production logs showed Maps found 20 places, stricter brokerage/business filters rejected the Maps business rows, several brokerage websites returned 403/500/timeouts, the directory fallback timed out after 120 seconds, and then generic Gemini fallback kept the job waiting.
 - Realtor scrape jobs now use a bounded `LEAD_REALTOR_DIRECTORY_TIMEOUT_MS` fallback timeout, default 45 seconds.
@@ -40,6 +48,8 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- `node --check server.js` passed after the brokerage-roster-first change.
+- `git diff --check` passed with normal Windows CRLF warnings only.
 - Production investigation showed no new rows inserted for the latest Gulf Shores scrape; lead count remained 2, with only the old scraped Dave/Kelly lead plus the hot test lead.
 - `docker logs ad-agency-autopilot` showed the scrape reached directory/Gemini fallback after roster/site failures, explaining the no-result/no-error perception.
 - `node --check server.js` and `node --check app.js` passed after the bounded-fallback/no-leads-warning fix.
@@ -65,6 +75,7 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
+- Brokerage-roster-first code is locally changed and pending commit/deployment.
 - Social video preview layout code commit pushed and deployed: `13ab621` (`Fix social video preview layout`).
 - Realtor roster quality code commit pushed and deployed: `43cc427` (`Prioritize realtor roster lead quality`).
 - Bounded realtor fallback code commit pushed and deployed: `b0c92e2` (`Bound realtor scrape fallback time`).
