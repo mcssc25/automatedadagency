@@ -50,6 +50,11 @@ Last updated: 2026-07-02
 
 - `node --check server.js` passed after the brokerage-roster-first change.
 - `git diff --check` passed with normal Windows CRLF warnings only.
+- VPS deployment verification after brokerage-roster-first update:
+  - `ad-agency-autopilot` rebuilt and restarted healthy on `127.0.0.1:3100->3000`.
+  - `docker exec ad-agency-autopilot node --check /app/server.js` passed.
+  - Deployed `/app/server.js` contains `discoverBrokerageRosterTargetsWithSearch`, `LEAD_BROKERAGE_SEARCH_TIMEOUT_MS`, and `LEAD_MAPS_FALLBACK`.
+  - Public URL returned `401`, expected because production/admin Basic auth is enabled.
 - Production investigation showed no new rows inserted for the latest Gulf Shores scrape; lead count remained 2, with only the old scraped Dave/Kelly lead plus the hot test lead.
 - `docker logs ad-agency-autopilot` showed the scrape reached directory/Gemini fallback after roster/site failures, explaining the no-result/no-error perception.
 - `node --check server.js` and `node --check app.js` passed after the bounded-fallback/no-leads-warning fix.
@@ -75,7 +80,7 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
-- Brokerage-roster-first code is locally changed and pending commit/deployment.
+- Brokerage-roster-first code commit pushed and deployed: `649b399` (`Prioritize brokerage roster discovery`).
 - Social video preview layout code commit pushed and deployed: `13ab621` (`Fix social video preview layout`).
 - Realtor roster quality code commit pushed and deployed: `43cc427` (`Prioritize realtor roster lead quality`).
 - Bounded realtor fallback code commit pushed and deployed: `b0c92e2` (`Bound realtor scrape fallback time`).
@@ -90,11 +95,13 @@ Last updated: 2026-07-02
   - `4946727` (`Add brokerage roster lead scraping`)
   - `43cc427` (`Prioritize realtor roster lead quality`)
   - `b0c92e2` (`Bound realtor scrape fallback time`)
+  - `649b399` (`Prioritize brokerage roster discovery`)
   - `2b33db0` (`Add CRM auto-approve campaign setting`)
 
 ## Deployment Notes
 
 - Latest deployment copied only `app.js`, `index.css`, `MEMORY.md`, and `handoff.md`.
+- Brokerage-roster-first deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T171906Z-brokerage-search-first`.
 - Backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
 - Realtor roster quality deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T115554Z-realtor-roster-quality`.
 - Bounded realtor fallback deployment copied `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T120757Z-bound-realtor-fallback`.
