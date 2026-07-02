@@ -1,6 +1,6 @@
 # Project Memory
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 ## Durable Facts
 
@@ -8,56 +8,42 @@ Last updated: 2026-07-01
 - GitHub repo: `https://github.com/mcssc25/automatedadagency.git`, branch `main`.
 - Production app URL: `https://agents.realestatecrmpro.com`.
 - VPS app path: `/opt/ad-agency-autopilot`.
-- Production Ad Agency Autopilot runs on the ClaimPilot/shared VPS at `178.156.178.56`; only touch `/opt/ad-agency-autopilot` there, never the separate ClaimPilot project.
-- VPS runtime is separate from ClaimPilot and uses Docker Compose.
-- Production deploys are currently file-copy based on the VPS, not `git pull` based.
-- Live deploy method: SSH/SCP as `root@178.156.178.56` using `$HOME/.ssh/id_ed25519`; backup changed runtime files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`; copy only this app's files; run `docker compose up -d --build ad-agency-autopilot`; verify public URL and `docker compose ps`.
+- Production runs on the ClaimPilot/shared VPS at `178.156.178.56`; only touch `/opt/ad-agency-autopilot` there, never the separate ClaimPilot project.
+- VPS deploys are file-copy based, not `git pull` based: backup changed runtime files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`, copy only this app's files, then `docker compose up -d --build ad-agency-autopilot`.
 - Cloudflare Tunnel routes the app hostname to the VPS. Do not alter `fluffysbait.com`.
 - Mailgun outreach sending domain: `outreach.realestatecrmpro.com`.
-- Mailgun account/domain should remain separate from the Real Estate CRM Pro product Mailgun account to protect product deliverability.
-- App secrets live outside git in local/VPS env files. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, logs, or `node_modules`.
+- App secrets live outside git in ignored env/runtime files. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, logs, or `node_modules`.
+- Gemini key rotations may use `C:\Users\daved\Desktop\Gemini Key for AI Ad Agency.txt`; keep the key itself only in ignored `.env` files and never in docs/git.
 
 ## Product Direction
 
-- Goal is a review-first AI marketing operator inspired by Polsia-style business agents, focused on marketing only: deep business research, competitor discovery, viral social research/adaptation, lead discovery, and email campaigns.
+- Goal is a review-first AI marketing operator: deep business research, competitor discovery, viral social research/adaptation, lead discovery, and email campaigns.
 - User wants to see each automation part work and approve outputs before turning on full autonomy.
-- Content priorities: research the most viral topic-level posts, not only competitor pages; draft posts should include matching generated images/videos by default; add an AI recommendation path for today's post without requiring a manual topic.
-- Content Studio includes a `Today's AI Recommendation` button that asks Gemini for a daily post topic from onboarding strategy, target audience, and any loaded trend cards, then drafts selected platforms.
-- Draft generation and content autopilot attach locally saved generated images via `/api/generate-image-prompt` + `/api/generate-image`; image API no longer reports external stock URLs as success.
-- Dashboard/support activity should clearly distinguish real records/jobs from demo simulation.
-- Demo data/activity should not be shown anymore: no fake leads, fake support chats, fake KPI movement, fake publishing success, fake email sends, or mock trend fallbacks.
-- Dashboard startup activity is context-aware: if onboarding has saved a business name or website, the log says the client profile is loaded instead of prompting to add a client.
+- Dashboard/support activity should distinguish real records/jobs from demo simulation; no fake leads, fake support chats, fake KPI movement, fake publishing success, fake email sends, or mock trend fallbacks.
+- Content Studio can recommend today's post, draft copy, and attach locally saved generated images through `/api/generate-image-prompt` + `/api/generate-image`.
+- Onboarding scan is intended to produce deep business intelligence: company crawl, Gemini grounded research, competitor profiles/social links, SWOT, and business report.
 
-## Current Safeguards
+## CRM / Email Safeguards
 
-- Lead emails are normalized before storage.
-- Scraping skips invalid emails, existing lead emails, and DNC emails.
-- DNC/unsubscribe entries are intended to be permanent.
-- Outbound email sending blocks DNC recipients.
+- Lead emails are normalized before storage; scraping skips invalid emails, existing lead emails, and DNC emails.
+- DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients.
 - DNC removal is disabled unless `ALLOW_DNC_REMOVAL=true` is intentionally set for admin recovery.
-- Inbound Mailgun replies post to `/api/webhooks/inbound-email` and should appear in the CRM conversation after polling refresh.
-- Lead scraping prefers the `gosom/google-maps-scraper` sidecar via `LEAD_SCRAPER_URL=http://lead-scraper:8080`; when Maps returns a website but no email, the app now directly crawls the business homepage/contact-style pages for public emails before falling back to Gemini. It never creates fake contacts and imports only leads with both name and valid email.
-- Lead records now support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
-- CRM selected-lead details render contact fields as compact chips and hide long source URLs behind Website/Maps Source links.
-- The Gemini API key UI is a read-only server-config status field, not a password input, to avoid Chrome password-save prompts.
+- Mailgun inbound replies post to `/api/webhooks/inbound-email`; CRM polls on `#crm`.
+- Lead scraping prefers `LEAD_SCRAPER_URL=http://lead-scraper:8080`; if Maps has a website but no email, the backend crawls homepage/contact-style pages for public emails before Gemini fallback.
+- Lead records support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
 - Sales asset settings persist in CRM settings: booking/calendar link, sales page URL, default demo YouTube video, and YouTube page/channel.
-- Campaign generation, outbound placeholder replacement, and inbound AI replies can use saved sales assets through `[CTA Link]`, `[Booking Link]`, `[Demo Link]`, `[YouTube Link]`, `[Sales Page]`, and `[Website]`.
-- Campaign approval targets only leads with stage `Scraped`, sends Step 1 immediately through Mailgun, and stores the campaign id/step on those leads.
-- CRM Campaigns now has a visible Campaign Enrollment Workflow panel showing current Scraped/Emailed/Hot Lead counts, Campaign 1/2/3 chain selections, launch rule, and tracking status.
-- Open/click/signup routing is not connected yet; only inbound replies are tracked through the Mailgun inbound webhook.
-- CRM now has a persistent `campaign_enrollments` ledger so campaign progress is separate from lead pipeline stage.
-- Backend pipeline automation exists behind explicit toggles: daily scrape, auto-enroll Scraped leads into Campaign 1, and auto-send due follow-up steps. Defaults are off.
-- Pipeline stages now include `Scraped`, `Emailed`, `Two-Way Conversation`, `Needs Human Action`, and `Quarantined`.
-- Onboarding scan is intended to be deep business intelligence: multi-page company crawl plus Gemini Search grounding for company profile, offers, audience, competitor profiles/socials, SWOT, and a compact business report.
-- Onboarding state includes `bizSwot`, `businessReport`, `companySocialLinks`, ranked `competitorUrls`, and `competitorProfiles`; ad, social, and support prompts reuse this strategic context.
-- Onboarding scan requests Gemini JSON mode and can repair invalid AI JSON before parsing, because long report fields can include unescaped newlines or malformed string content.
-- Onboarding scan should always populate SWOT: backend/frontend accept varied SWOT key shapes and fall back to a Gemini-derived or deterministic SWOT from verified company/competitor data when the primary response omits it.
-- Onboarding competitor discovery targets at least 5 competitors when possible; manually added competitors call `/api/competitor-profile` to enrich summaries, differentiators, and social links.
-- Setup box order is: 1 Business Identity, 2 Product & Audience, 3 Competitor Intelligence, 4 SWOT Profile, 5 Budget & Goals, 6 Autopilot Employees.
-- Onboarding UI has a staged scan progress panel plus auto-growing, expandable editors for long business profile/SWOT fields so deep research does not feel frozen or cramped.
-- Onboarding field sizing is enforced with versioned `index.css`/`app.js` URLs and inline minimum heights for the long profile/SWOT textareas to avoid browser/cache regressions.
-- Onboarding includes optional strategy inputs for agency goal, core message, and extra details; these are saved and prepended to shared strategic context for ads, social posts, support replies, and generated email campaigns.
-- Gemini model routing defaults: everyday text uses `GEMINI_DEFAULT_MODEL=gemini-2.5-flash`; deep onboarding/competitor grounded research uses `GEMINI_RESEARCH_MODEL=gemini-3.5-flash`; social image generation tries `GEMINI_IMAGE_MODEL=gemini-3.1-flash-lite-image` before Imagen/stock fallback; social video generation uses `GEMINI_VIDEO_MODEL=gemini-omni-flash-preview`.
+- Campaign copy can use `[CTA Link]`, `[Booking Link]`, `[Demo Link]`, `[YouTube Link]`, `[Sales Page]`, and `[Website]`.
+- Campaign approval targets only leads with stage `Scraped`, sends Step 1 immediately through Mailgun, and stores campaign id/step on those leads.
+- CRM has a persistent `campaign_enrollments` ledger so campaign progress is separate from lead pipeline stage.
+- Backend pipeline automation is behind explicit toggles: daily scrape, auto-enroll Scraped leads into Campaign 1, auto-approve new campaigns, and auto-send due follow-up steps. Defaults are off.
+- Auto-approved campaigns launch Step 1 immediately; delayed campaign steps are sent by the backend worker only when auto-follow-up is enabled.
+- Open/click/signup routing is not connected yet; only inbound replies are tracked through Mailgun inbound webhook.
+
+## Current Local Status
+
+- Local server on port 3000 was restarted on 2026-07-02 after CRM auto-approve changes.
+- `/api/crm-state` is SQLite-backed after restart and currently reports 1 Scraped lead, 2 DNC entries, 0 campaigns, and auto-approve/auto-follow-up off.
+- Latest local code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.
 
 ## Working Agreements
 

@@ -72,6 +72,7 @@ function defaultCrmState() {
             dailyScrapeEnabled: false,
             dailyScrapeQuery: '',
             autoEnrollScrapedLeads: false,
+            autoApproveCampaigns: false,
             autoAdvanceCampaigns: false,
             lastDailyScrapeDate: null,
             autoPauseOnReply: true,
@@ -97,6 +98,7 @@ function defaultCrmSettings() {
         dailyScrapeEnabled: false,
         dailyScrapeQuery: '',
         autoEnrollScrapedLeads: false,
+        autoApproveCampaigns: false,
         autoAdvanceCampaigns: false,
         lastDailyScrapeDate: null,
         autoPauseOnReply: true,
@@ -106,17 +108,27 @@ function defaultCrmSettings() {
 }
 
 function readCrmSettings() {
-    return {
+    const settings = {
         ...defaultCrmSettings(),
         ...readJsonFile(CRM_SETTINGS_FILE, defaultCrmSettings())
     };
+    settings.autoApproveCampaigns = settings.autoApproveCampaigns === true || settings.bypassEmailVerification === true;
+    settings.bypassEmailVerification = settings.autoApproveCampaigns;
+    return settings;
 }
 
 function writeCrmSettings(settings) {
+    const autoApproveCampaigns = settings.autoApproveCampaigns === true || settings.bypassEmailVerification === true;
     writeJsonFile(CRM_SETTINGS_FILE, {
         ...defaultCrmSettings(),
-        ...settings
+        ...settings,
+        autoApproveCampaigns,
+        bypassEmailVerification: autoApproveCampaigns
     });
+}
+
+function shouldAutoApproveCampaigns(settings = readCrmSettings()) {
+    return settings.autoApproveCampaigns === true || settings.bypassEmailVerification === true;
 }
 
 function normalizeCrmState(input = {}) {
@@ -258,11 +270,12 @@ app.put('/api/crm-state', (req, res) => {
                 dailyScrapeEnabled: crmAutopilot.dailyScrapeEnabled ?? false,
                 dailyScrapeQuery: String(crmAutopilot.dailyScrapeQuery || '').trim(),
                 autoEnrollScrapedLeads: crmAutopilot.autoEnrollScrapedLeads ?? false,
+                autoApproveCampaigns: crmAutopilot.autoApproveCampaigns ?? crmAutopilot.bypassEmailVerification ?? false,
                 autoAdvanceCampaigns: crmAutopilot.autoAdvanceCampaigns ?? false,
                 lastDailyScrapeDate: crmAutopilot.lastDailyScrapeDate || null,
                 autoPauseOnReply: crmAutopilot.autoPauseOnReply ?? true,
                 simulateUnsubscribes: crmAutopilot.simulateUnsubscribes ?? false,
-                bypassEmailVerification: crmAutopilot.bypassEmailVerification ?? false
+                bypassEmailVerification: crmAutopilot.autoApproveCampaigns ?? crmAutopilot.bypassEmailVerification ?? false
             };
             writeCrmSettings(settings);
         }
@@ -2940,6 +2953,7 @@ app.post('/api/generate-campaign', async (req, res) => {
     const { campaignName, campaignType, customInstructions, videoAsset, bizName, bizDesc, bizWebsite, strategicContext } = req.body;
     console.log(`[Campaign Agent] Generating 3-step drip campaign for: "${campaignName}"...`);
     const settings = readCrmSettings();
+    const autoApproveCampaigns = shouldAutoApproveCampaigns(settings);
     const selectedVideoAsset = String(videoAsset || '').trim() || selectDefaultCampaignCta(settings, bizWebsite);
     const salesAssetContext = [
         settings.bookingLink ? `Booking/calendar link: ${settings.bookingLink}` : 'Booking/calendar link: not configured',
@@ -2996,7 +3010,7 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
         const cleaned = rawResponse.replace(/```json|```/g, "").trim();
         const steps = JSON.parse(cleaned);
         
-        const status = settings.bypassEmailVerification ? 'Active' : 'Awaiting Launch';
+        const status = autoApproveCampaigns ? 'Active' : 'Awaiting Launch';
         
         const campaignId = db.insertCampaign({
             name: campaignName,
@@ -3019,12 +3033,12 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
             targetLeadsCount: db.getLeadsCount({ stage: 'Scraped' })
         };
         
-        // If bypass is active, launch immediately
-        if (settings.bypassEmailVerification) {
-            await enrollAndSendScrapedLeads({ campaignId, limit: 1000, bizName, bizWebsite, settings });
+        let launchResult = null;
+        if (autoApproveCampaigns) {
+            launchResult = await enrollAndSendScrapedLeads({ campaignId, limit: 1000, bizName, bizWebsite, settings });
         }
         
-        res.json({ success: true, campaign });
+        res.json({ success: true, campaign, launchResult });
     } catch (error) {
         console.error(`[Generate Campaign Error]`, error.message);
         
@@ -3049,24 +3063,31 @@ Ensure the response is valid JSON. Output only the raw JSON array (do not includ
             }
         ];
         
+        const status = autoApproveCampaigns ? 'Active' : 'Awaiting Launch';
         const campaignId = db.insertCampaign({
             name: campaignName,
             type: campaignType,
             instructions: customInstructions,
             videoAsset: selectedVideoAsset,
-            status: 'Awaiting Launch',
+            status,
             steps: fallbackSteps
         });
+
+        let launchResult = null;
+        if (autoApproveCampaigns) {
+            launchResult = await enrollAndSendScrapedLeads({ campaignId, limit: 1000, bizName, bizWebsite, settings });
+        }
         
         res.json({
             success: true,
+            launchResult,
             campaign: {
                 id: campaignId,
                 name: campaignName,
                 type: campaignType,
                 instructions: customInstructions,
                 videoAsset: selectedVideoAsset,
-                status: 'Awaiting Launch',
+                status,
                 steps: fallbackSteps,
                 dateCreated: new Date().toLocaleDateString(),
                 targetLeadsCount: db.getLeadsCount({ stage: 'Scraped' })

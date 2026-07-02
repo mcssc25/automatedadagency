@@ -50,6 +50,7 @@ class AutopilotApp {
                 dailyScrapeEnabled: false,
                 dailyScrapeQuery: '',
                 autoEnrollScrapedLeads: false,
+                autoApproveCampaigns: false,
                 autoAdvanceCampaigns: false,
                 lastDailyScrapeDate: null,
                 autoPauseOnReply: true,
@@ -255,6 +256,7 @@ class AutopilotApp {
         this.dom.crmDailyScrapeQuery = document.getElementById("crm-daily-scrape-query");
         this.dom.crmDailyScrapeEnabled = document.getElementById("crm-daily-scrape-enabled");
         this.dom.crmAutoEnrollScraped = document.getElementById("crm-auto-enroll-scraped");
+        this.dom.crmAutoApproveCampaigns = document.getElementById("crm-auto-approve-campaigns");
         this.dom.crmAutoAdvanceCampaigns = document.getElementById("crm-auto-advance-campaigns");
         this.dom.btnRunCrmPipeline = document.getElementById("btn-run-crm-pipeline");
         this.dom.crmFirstCampaign = document.getElementById("crm-first-campaign");
@@ -397,8 +399,7 @@ class AutopilotApp {
         this.dom.btnSaveSettings.addEventListener("click", () => {
             this.state.useFallback = this.dom.settingsUseFallback.checked;
             this.state.outboundDailyLimit = parseInt(this.dom.settingsDailyLimit.value) || 50;
-            this.state.bypassEmailVerification = this.dom.settingsBypassVerification.checked;
-            this.state.crmAutopilot.bypassEmailVerification = this.state.bypassEmailVerification;
+            this.setAutoApproveCampaigns(this.dom.settingsBypassVerification.checked);
             this.state.crmAutopilot.bookingLink = this.dom.settingsBookingLink.value.trim();
             this.state.crmAutopilot.salesPageUrl = this.dom.settingsSalesPageUrl.value.trim();
             this.state.crmAutopilot.demoVideoUrl = this.dom.settingsDemoVideoUrl.value.trim();
@@ -407,7 +408,7 @@ class AutopilotApp {
             this.saveState();
             this.updateApiStatusUI();
             this.renderCampaignWorkflowSummary();
-            this.appendConsoleLine('system', `API, outbound, and sales asset settings updated. Server Gemini key live: ${this.state.serverConfig.geminiConfigured ? 'YES' : 'NO'}. Daily Limit: ${this.state.outboundDailyLimit}. Autopilot send: ${this.state.bypassEmailVerification}`);
+            this.appendConsoleLine('system', `API, outbound, and sales asset settings updated. Server Gemini key live: ${this.state.serverConfig.geminiConfigured ? 'YES' : 'NO'}. Daily Limit: ${this.state.outboundDailyLimit}. Auto-approve campaigns: ${this.state.crmAutopilot.autoApproveCampaigns}`);
             alert("Settings saved successfully.");
         });
 
@@ -630,6 +631,11 @@ class AutopilotApp {
             this.saveState();
             this.renderCampaignWorkflowSummary();
         });
+        this.dom.crmAutoApproveCampaigns.addEventListener("change", () => {
+            this.setAutoApproveCampaigns(this.dom.crmAutoApproveCampaigns.checked);
+            this.saveState();
+            this.renderCampaignWorkflowSummary();
+        });
         this.dom.crmAutoAdvanceCampaigns.addEventListener("change", () => {
             this.state.crmAutopilot.autoAdvanceCampaigns = this.dom.crmAutoAdvanceCampaigns.checked;
             this.saveState();
@@ -810,6 +816,7 @@ class AutopilotApp {
                 dailyScrapeEnabled: false,
                 dailyScrapeQuery: '',
                 autoEnrollScrapedLeads: false,
+                autoApproveCampaigns: false,
                 autoAdvanceCampaigns: false,
                 lastDailyScrapeDate: null,
                 autoPauseOnReply: true,
@@ -831,6 +838,7 @@ class AutopilotApp {
             dailyScrapeEnabled: false,
             dailyScrapeQuery: '',
             autoEnrollScrapedLeads: false,
+            autoApproveCampaigns: false,
             autoAdvanceCampaigns: false,
             lastDailyScrapeDate: null,
             autoPauseOnReply: true,
@@ -838,6 +846,7 @@ class AutopilotApp {
             bypassEmailVerification: false,
             ...this.state.crmAutopilot
         };
+        this.normalizeAutoApproveCampaigns();
         if (!Array.isArray(this.state.crmAutopilot.dncList)) {
             this.state.crmAutopilot.dncList = [];
         }
@@ -879,6 +888,7 @@ class AutopilotApp {
         this.dom.crmDailyScrapeQuery.value = this.state.crmAutopilot.dailyScrapeQuery || '';
         this.dom.crmDailyScrapeEnabled.checked = this.state.crmAutopilot.dailyScrapeEnabled === true;
         this.dom.crmAutoEnrollScraped.checked = this.state.crmAutopilot.autoEnrollScrapedLeads === true;
+        this.dom.crmAutoApproveCampaigns.checked = this.state.crmAutopilot.autoApproveCampaigns === true;
         this.dom.crmAutoAdvanceCampaigns.checked = this.state.crmAutopilot.autoAdvanceCampaigns === true;
         this.dom.crmAutoPause.checked = this.state.crmAutopilot.autoPauseOnReply !== false;
         this.dom.crmSimulateUnsubs.checked = false;
@@ -905,7 +915,7 @@ class AutopilotApp {
         this.dom.settingsApiKey.value = this.state.serverConfig.geminiConfigured ? "Configured on server (.env)" : "";
         this.dom.settingsUseFallback.checked = this.state.useFallback;
         this.dom.settingsDailyLimit.value = this.state.outboundDailyLimit || 50;
-        this.state.bypassEmailVerification = this.state.crmAutopilot.bypassEmailVerification || this.state.bypassEmailVerification || false;
+        this.normalizeAutoApproveCampaigns();
         this.dom.settingsBypassVerification.checked = this.state.bypassEmailVerification;
         this.dom.settingsBookingLink.value = this.state.crmAutopilot.bookingLink || '';
         this.dom.settingsSalesPageUrl.value = this.state.crmAutopilot.salesPageUrl || '';
@@ -1030,6 +1040,7 @@ class AutopilotApp {
                 ...this.state.crmAutopilot,
                 ...(serverState.crmAutopilot || {})
             };
+            this.normalizeAutoApproveCampaigns();
             this.state.leadStageCounts = serverState.leadStageCounts || {};
             
             await this.fetchLeadsFromServer();
@@ -1084,6 +1095,20 @@ class AutopilotApp {
         this.state.verificationQueue = [];
         this.state.supportSessions = [];
         localStorage.setItem(cleanupKey, "done");
+    }
+
+    normalizeAutoApproveCampaigns() {
+        const enabled = this.state.crmAutopilot.autoApproveCampaigns === true || this.state.crmAutopilot.bypassEmailVerification === true;
+        this.setAutoApproveCampaigns(enabled);
+    }
+
+    setAutoApproveCampaigns(enabled) {
+        const value = enabled === true;
+        this.state.bypassEmailVerification = value;
+        this.state.crmAutopilot.autoApproveCampaigns = value;
+        this.state.crmAutopilot.bypassEmailVerification = value;
+        if (this.dom.settingsBypassVerification) this.dom.settingsBypassVerification.checked = value;
+        if (this.dom.crmAutoApproveCampaigns) this.dom.crmAutoApproveCampaigns.checked = value;
     }
 
     saveState() {
@@ -1917,7 +1942,7 @@ class AutopilotApp {
         const firstName = this.getCampaignNameById(this.state.crmAutopilot.firstCampaignId);
         const secondName = this.getCampaignNameById(this.state.crmAutopilot.secondCampaignId);
         const thirdName = this.getCampaignNameById(this.state.crmAutopilot.thirdCampaignId);
-        const verificationMode = this.state.bypassEmailVerification ? 'Bypass enabled: new generated campaigns can send immediately.' : 'Manual approval: leads are not emailed until you approve a campaign.';
+        const verificationMode = this.state.crmAutopilot.autoApproveCampaigns ? 'Auto-approve enabled: new campaigns send Step 1 immediately to Scraped leads.' : 'Manual approval: campaigns wait in the Verification Queue until you approve Step 1.';
         const pauseMode = this.state.crmAutopilot.autoPauseOnReply !== false ? 'Replies pause the campaign and mark the lead Hot Lead.' : 'Replies mark Hot Lead, but auto-pause is off.';
 
         container.innerHTML = `
@@ -1941,7 +1966,7 @@ class AutopilotApp {
                 <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Launch Rule</div>
                 <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:8px;">${verificationMode}</div>
                 <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">${pauseMode}</div>
-                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">Auto-enroll: ${this.state.crmAutopilot.autoEnrollScrapedLeads ? 'On' : 'Off'} · Auto-follow-up: ${this.state.crmAutopilot.autoAdvanceCampaigns ? 'On' : 'Off'}</div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">Auto-approve: ${this.state.crmAutopilot.autoApproveCampaigns ? 'On' : 'Off'} · Auto-enroll: ${this.state.crmAutopilot.autoEnrollScrapedLeads ? 'On' : 'Off'} · Auto-follow-up: ${this.state.crmAutopilot.autoAdvanceCampaigns ? 'On' : 'Off'}</div>
             </div>
             <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; padding:14px;">
                 <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">Daily Scrape</div>
@@ -4011,9 +4036,11 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             const data = await response.json();
 
             if (data.campaign) {
-                if (this.state.bypassEmailVerification) {
+                if (this.state.crmAutopilot.autoApproveCampaigns) {
+                    const sentCount = data.launchResult?.sentCount || 0;
+                    const failedCount = data.launchResult?.failedCount || 0;
                     this.appendConsoleLine('system', `Launching campaign "${name}" immediately via Mailgun...`);
-                    alert(`Campaign launched! Emails sent directly to leads (Bypass Verification active).`);
+                    alert(`Campaign auto-approved. Sent Step 1 to ${sentCount} leads${failedCount ? ` (${failedCount} failed)` : ''}.`);
                 } else {
                     alert(`Campaign generated! A campaign template for "${name}" is waiting in your Verification Queue.`);
                 }

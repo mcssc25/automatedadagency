@@ -1150,7 +1150,7 @@
                     <div style="background:rgba(255,145,0,0.05); border:1px solid var(--orange); border-radius:8px; padding:12px 16px; margin-bottom:20px; display:flex; align-items:center; gap:12px;">
                         <i class="fa-solid fa-envelope-shield text-orange" style="font-size:1.5rem;"></i>
                         <div style="font-size:0.85rem; color:var(--text-secondary);">
-                            <strong>Email Verification Enabled:</strong> Outbound emails will wait here for your manual approval. Once you review and approve a draft, it is dispatched. You can turn this off in Settings to run on 100% autopilot.
+                            <strong>Email Verification Enabled:</strong> Outbound emails wait here for review unless Auto-Approve Campaigns is enabled in CRM Autopilot Settings. Approved or auto-approved campaigns send Step 1 immediately.
                         </div>
                     </div>
                     
@@ -1296,6 +1296,13 @@
                                             </label>
                                         </label>
                                         <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+                                            <span style="font-size:0.85rem; color:var(--text-primary);">Auto-Approve New Campaigns</span>
+                                            <label class="toggle-switch" style="width:36px; height:20px;">
+                                                <input type="checkbox" id="crm-auto-approve-campaigns">
+                                                <span class="toggle-slider" style="border-radius:20px;"></span>
+                                            </label>
+                                        </label>
+                                        <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
                                             <span style="font-size:0.85rem; color:var(--text-primary);">Auto-Send Due Follow-Up Steps</span>
                                             <label class="toggle-switch" style="width:36px; height:20px;">
                                                 <input type="checkbox" id="crm-auto-advance-campaigns">
@@ -1418,8 +1425,9 @@
                         <div class="form-group">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="settings-bypass-verification">
-                                <span>Bypass Email Verification (Full Autopilot Outbound)</span>
+                                <span>Auto-Approve New CRM Campaigns</span>
                             </label>
+                            <p class="helper-text">When enabled, generated CRM campaigns launch Step 1 immediately to Scraped leads instead of waiting in the Verification Queue.</p>
                         </div>
                         <h3 style="margin-top:24px; border-top:1px solid var(--border-color); padding-top:20px;"><i class="fa-solid fa-link"></i> Sales Links</h3>
                         <div class="form-group">
