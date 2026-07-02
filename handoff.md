@@ -35,6 +35,10 @@ Last updated: 2026-07-02
 - `node --check server.js` passed after the realtor scrape filter/order/count fix.
 - Cheerio selector smoke for case-insensitive class/aria selectors passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
+- VPS deployment verification after realtor roster quality fix:
+  - `ad-agency-autopilot` rebuilt and restarted healthy; scraper sidecar and tunnel remained running.
+  - `docker exec ad-agency-autopilot node --check /app/server.js` passed.
+  - Deployed `/app/server.js` contains `isLikelyIndividualAgentLeadName`, `realtorContactsOnly`, generic email filtering, and count-limited insertion after skips.
 - `node --check app.js` passed.
 - `node --check server.js` passed.
 - Temporary local smoke server on `PORT=3132` with auth disabled returned 200 for `/`.
@@ -45,7 +49,8 @@ Last updated: 2026-07-02
 ## Repo / Deployment Status
 
 - Social video preview layout code commit pushed and deployed: `13ab621` (`Fix social video preview layout`).
-- This handoff includes the post-deploy documentation sync for that release.
+- Realtor roster quality code commit pushed and deployed: `43cc427` (`Prioritize realtor roster lead quality`).
+- This handoff includes post-deploy documentation for the latest scraper quality fix and the prior video-preview release.
 - Runtime secrets/data remain uncommitted.
 - Previously deployed commits:
   - `13ab621` (`Fix social video preview layout`)
@@ -54,12 +59,14 @@ Last updated: 2026-07-02
   - `43c3054` (`Make lead scraping async`)
   - `0ae31d0` (`Add realtor directory lead discovery`)
   - `4946727` (`Add brokerage roster lead scraping`)
+  - `43cc427` (`Prioritize realtor roster lead quality`)
   - `2b33db0` (`Add CRM auto-approve campaign setting`)
 
 ## Deployment Notes
 
 - Latest deployment copied only `app.js`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
+- Realtor roster quality deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T115554Z-realtor-roster-quality`.
 - Rebuild/restart targeted only `ad-agency-autopilot`; scraper sidecar and other VPS projects were left alone.
 - Deployed container checks passed for `node --check /app/app.js` and `node --check /app/server.js`.
 - `docker compose ps ad-agency-autopilot` reported the app container healthy on `127.0.0.1:3100->3000`.

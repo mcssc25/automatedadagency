@@ -27,7 +27,7 @@ Last updated: 2026-07-02
 - Mailgun inbound replies post to `/api/webhooks/inbound-email`; CRM polls on `#crm`.
 - `OUTBOUND_POSTAL_ADDRESS` is still blank, so outbound Mailgun sends fail closed until the user supplies a valid physical mailing address.
 - Lead scraping uses async jobs: `POST /api/scrape-leads` starts a job, `/api/scrape-leads/jobs/:id` polls status, and completed jobs insert/dedupe leads.
-- Preferred realtor scraping route is brokerage-first: Maps finds local brokerages, then the backend crawls public roster/team/agent pages for visible agent emails; Maps business/brokerage names and generic office/admin emails should not be inserted as agent leads.
+- Preferred realtor scraping route is brokerage-first: Maps finds local brokerages, then the backend crawls public roster/team/agent pages for visible agent emails; Maps business/brokerage names and generic office/admin emails should not be inserted as agent leads, and insertion continues past skips to fill the requested count when possible.
 - Realtor directory discovery uses Zillow/Realtor.com/Redfin/Homes.com as profile-discovery signals only; do not bypass robots, logins, CAPTCHAs, paywalls, or private APIs.
 - Lead records support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
 - CRM has a persistent `campaign_enrollments` ledger so campaign progress is separate from lead pipeline stage.
@@ -40,7 +40,7 @@ Last updated: 2026-07-02
 ## Current Status
 
 - 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
-- Hardening deployment commit: `c35051f`; async lead scrape commit: `43c3054`; realtor directory commit: `0ae31d0`; brokerage roster commit: `4946727`; CRM auto-approve commit: `2b33db0`.
+- Hardening deployment commit: `c35051f`; async lead scrape commit: `43c3054`; realtor directory commit: `0ae31d0`; brokerage roster commit: `4946727`; realtor roster quality commit: `43cc427`; CRM auto-approve commit: `2b33db0`.
 - Latest deployed update fixes social post media card previews: video cards render in a portrait `9 / 16` frame with `object-fit: contain`, image cards stay `16 / 9`, and action buttons wrap inside cards.
 - Verification for latest update: `node --check app.js`, `node --check server.js`, temporary `PORT=3132` server returned 200; deployed container is healthy and deployed checks for `/app/app.js` and `/app/server.js` passed. In-app browser visual seeding was blocked by the browser sandbox, so no live visual card screenshot was captured.
 - Social video preview layout code commit `13ab621` (`Fix social video preview layout`) was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
