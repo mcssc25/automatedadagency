@@ -7,6 +7,7 @@ Last updated: 2026-07-02
 - Built the first backend-only lead intelligence engine for nationwide realtor database building.
 - Added hidden SQLite tables for `market_cities`, `brokerage_profiles`, `brokerage_offices`, `roster_contacts`, and `intelligence_runs`.
 - Seeded the first 20 mid-market/mid-income cities for discovery, starting with Birmingham, Huntsville, Knoxville, Chattanooga, Greenville, Columbia, Pensacola, Lakeland, Tulsa, Omaha, and others.
+- Added deterministic brokerage-brand seeds across those cities for `Keller Williams`, `RE/MAX`, `Coldwell Banker`, `Realty ONE Group`, `EXIT Realty`, `Better Homes and Gardens Real Estate`, `Century 21`, `Berkshire Hathaway HomeServices`, `eXp Realty`, `Real Broker`, `United Real Estate`, `HomeSmart`, `Fathom Realty`, and `Realty Executives`.
 - Added a one-cycle worker that discovers local/regional/100% commission/flat-fee brokerage offices for a city, researches brokerage tech offerings, finds official office/roster URLs, browser-harvests public roster pages with Playwright/Chromium, paginates where possible, and stores contacts in hidden `roster_contacts` instead of the visible CRM pipeline.
 - Added backend controls: `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/seed`, and `POST /api/lead-intelligence/run-once`.
 - Added Docker runtime support for browser harvesting: `playwright-core`, system `chromium`, and `BROWSER_CHROMIUM_PATH=/usr/bin/chromium`.

@@ -2319,8 +2319,42 @@ const LEAD_INTELLIGENCE_SEED_CITIES = [
     { city: 'Louisville', state: 'KY', metro: 'Louisville/Jefferson County', incomeBand: 'mid', priority: 70 }
 ];
 
+const LEAD_INTELLIGENCE_BROKERAGE_BRAND_SEEDS = [
+    { name: 'Keller Williams', category: 'franchise office' },
+    { name: 'RE/MAX', category: 'franchise office' },
+    { name: 'Coldwell Banker', category: 'franchise office' },
+    { name: 'Realty ONE Group', category: 'franchise office' },
+    { name: 'EXIT Realty', category: 'franchise office' },
+    { name: 'Better Homes and Gardens Real Estate', category: 'franchise office' },
+    { name: 'Century 21', category: 'franchise office' },
+    { name: 'Berkshire Hathaway HomeServices', category: 'franchise office' },
+    { name: 'eXp Realty', category: 'cloud brokerage' },
+    { name: 'Real Broker', category: 'cloud brokerage' },
+    { name: 'United Real Estate', category: '100 percent commission' },
+    { name: 'HomeSmart', category: '100 percent commission' },
+    { name: 'Fathom Realty', category: 'cloud brokerage' },
+    { name: 'Realty Executives', category: 'franchise office' }
+];
+
 function seedLeadIntelligenceDefaults() {
-    return db.seedMarketCities(LEAD_INTELLIGENCE_SEED_CITIES);
+    const cityChanges = db.seedMarketCities(LEAD_INTELLIGENCE_SEED_CITIES);
+    let officeChanges = 0;
+
+    for (const city of LEAD_INTELLIGENCE_SEED_CITIES) {
+        for (const brand of LEAD_INTELLIGENCE_BROKERAGE_BRAND_SEEDS) {
+            const office = db.upsertBrokerageOffice({
+                brokerageName: brand.name,
+                category: brand.category,
+                city: city.city,
+                state: city.state,
+                searchQuery: `${brand.name} ${city.city} ${city.state} agents`,
+                status: 'Pending'
+            });
+            if (office) officeChanges++;
+        }
+    }
+
+    return cityChanges + officeChanges;
 }
 
 function normalizeSocialLinks(links = []) {
