@@ -21,6 +21,7 @@ Last updated: 2026-07-02
 - Scrape insertion now uses `isUsefulLeadEmail`, so generic office/admin-style emails are blocked at final insert even if they came from Gemini/directory fallback.
 - Existing bad production rows were cleaned up: deleted lead ids `13` and `14` after backing up the DB. Kept the single clean `Rob Smith` row and the valid `Danielle Mize` row.
 - DB cleanup backup: `/opt/ad-agency-autopilot/data/backups/lead-cleanup-20260702T173550Z-rob-smith-privacy`.
+- Code deploy backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T173702Z-realtor-dedupe-cleanup`.
 
 ## Previous Update
 
@@ -61,6 +62,12 @@ Last updated: 2026-07-02
 - `node --check server.js` passed after the realtor lead cleanup guardrails.
 - `git diff --check` passed with normal Windows CRLF warnings only.
 - Production DB inspection confirmed the bad rows were `Privacy Policy` and `Privacy Policy Unable`; post-cleanup recent rows show those two removed.
+- VPS deployment verification after realtor lead cleanup:
+  - `ad-agency-autopilot` rebuilt and restarted healthy on `127.0.0.1:3100->3000`.
+  - `docker exec ad-agency-autopilot node --check /app/server.js` passed.
+  - Deployed `/app/server.js` contains `getLeadIdentityKey`, `isDisallowedLeadSourceUrl`, and `realtorContactsOnly` insert guards.
+  - Gulf Shores rows now show only `Danielle Mize` and one `Rob Smith` for that scrape query.
+  - Public URL returned `401`, expected because production/admin Basic auth is enabled.
 - `node --check server.js` passed after the brokerage-roster-first change.
 - `git diff --check` passed with normal Windows CRLF warnings only.
 - VPS deployment verification after brokerage-roster-first update:
@@ -93,6 +100,7 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
+- Realtor dedupe/privacy cleanup code commit pushed and deployed: `1d500a7` (`Tighten realtor lead dedupe`).
 - Brokerage-roster-first code commit pushed and deployed: `649b399` (`Prioritize brokerage roster discovery`).
 - Social video preview layout code commit pushed and deployed: `13ab621` (`Fix social video preview layout`).
 - Realtor roster quality code commit pushed and deployed: `43cc427` (`Prioritize realtor roster lead quality`).
@@ -109,12 +117,15 @@ Last updated: 2026-07-02
   - `43cc427` (`Prioritize realtor roster lead quality`)
   - `b0c92e2` (`Bound realtor scrape fallback time`)
   - `649b399` (`Prioritize brokerage roster discovery`)
+  - `1d500a7` (`Tighten realtor lead dedupe`)
   - `2b33db0` (`Add CRM auto-approve campaign setting`)
 
 ## Deployment Notes
 
 - Latest deployment copied only `app.js`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Brokerage-roster-first deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T171906Z-brokerage-search-first`.
+- Realtor dedupe/privacy cleanup deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T173702Z-realtor-dedupe-cleanup`.
+- Production DB cleanup backup created at `/opt/ad-agency-autopilot/data/backups/lead-cleanup-20260702T173550Z-rob-smith-privacy`.
 - Backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
 - Realtor roster quality deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T115554Z-realtor-roster-quality`.
 - Bounded realtor fallback deployment copied `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T120757Z-bound-realtor-fallback`.
