@@ -17,7 +17,7 @@ Last updated: 2026-07-02
 
 - Goal is a review-first AI marketing operator: business research, competitor discovery, content/ad generation, lead discovery, and email campaigns.
 - User wants to see each automation part work and approve outputs before full autonomy.
-- Dashboard/support activity should distinguish real records/jobs from demo simulation; no fake leads, fake chats, fake KPI movement, fake publish success, fake email sends, or mock trend fallbacks.
+- Dashboard/support activity should distinguish real records/jobs from demo simulation; no fake leads, fake chats, fake KPI movement, fake publish success, fake email sends, fake engagement metrics, or mock trend fallbacks.
 - Onboarding scan should produce deep business intelligence: company crawl, Gemini grounded research, competitor profiles/social links, SWOT, and business report.
 
 ## CRM / Email Safeguards
@@ -42,8 +42,11 @@ Last updated: 2026-07-02
 
 - 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
 - Hardening deployment commit: `c35051f`; async lead scrape commit: `43c3054`; realtor directory commit: `0ae31d0`; brokerage roster commit: `4946727`; realtor roster quality commit: `43cc427`; brokerage-roster-first discovery commit: `649b399`; realtor dedupe/privacy commit: `1d500a7`; CRM auto-approve commit: `2b33db0`.
-- Latest deployed update fixes social post media card previews: video cards render in a portrait `9 / 16` frame with `object-fit: contain`, image cards stay `16 / 9`, and action buttons wrap inside cards.
-- Verification for latest update: `node --check app.js`, `node --check server.js`, temporary `PORT=3132` server returned 200; deployed container is healthy and deployed checks for `/app/app.js` and `/app/server.js` passed. In-app browser visual seeding was blocked by the browser sandbox, so no live visual card screenshot was captured.
+- Latest deployed update makes Content Studio Research & Trends onboarding-aware: `/api/trends` builds keyword plans from business description, offers, audience, SWOT/report, goals, competitor profiles, and deterministic real-estate CRM terms such as `real estate crm`, `ai for realtors`, and `realtor software`; the UI shows top keyword targets and searched queries.
+- Trend research should not invent engagement numbers. If the trend parser lacks real engagement, it returns `Trend score N` or `High engagement signal`.
+- Verification for latest update: `node --check app.js`, `node --check server.js`, `git diff --check`, and a bounded local `/api/trends` smoke for Real Estate CRM Pro returned 12 trends, 12 keyword targets, and 4 searched queries.
+- Trend-keyword deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`; deployed container syntax checks passed and app is healthy.
+- Previous deployed update fixed social post media card previews: video cards render in a portrait `9 / 16` frame with `object-fit: contain`, image cards stay `16 / 9`, and action buttons wrap inside cards.
 - Social video preview layout code commit `13ab621` (`Fix social video preview layout`) was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
 - Lead-management code commit `2e0a824` (`Add CRM lead management controls`) was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T160315Z-lead-management`.
 

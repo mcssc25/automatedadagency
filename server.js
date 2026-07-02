@@ -1,5 +1,5 @@
 const express = require('express');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const axios = require('axios');
@@ -2662,20 +2662,394 @@ Return ONLY valid JSON:
     }
 });
 
-function runLast30DaysSearch(scriptPath, query, platformHint) {
-    return new Promise((resolve) => {
-        const safeQuery = String(query).replace(/"/g, '');
-        const cmd = `py -3.12 "${scriptPath}" "${safeQuery}" --emit=compact --quick`;
-        console.log(`[Trends Scraper] Running ${platformHint} command: ${cmd}`);
+const TREND_RESEARCH_MAX_QUERIES = Math.max(4, Math.min(24, parseInt(process.env.TREND_RESEARCH_MAX_QUERIES || '12', 10) || 12));
+const TREND_TERM_STOPWORDS = new Set([
+    'about', 'after', 'again', 'agency', 'agent', 'agents', 'also', 'and', 'are', 'audience',
+    'business', 'client', 'company', 'core', 'customer', 'customers', 'description', 'for',
+    'from', 'have', 'help', 'into', 'marketing', 'more', 'offer', 'offers', 'only', 'our',
+    'service', 'services', 'software', 'that', 'their', 'them', 'these', 'this', 'value',
+    'with', 'your'
+]);
 
-        exec(cmd, { timeout: 45000 }, (error, stdout) => {
+function cleanTrendTerm(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/https?:\/\/\S+/g, ' ')
+        .replace(/[^a-z0-9+#.\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function dedupeStrings(values = [], limit = 20) {
+    const seen = new Set();
+    const output = [];
+    for (const value of values) {
+        const cleaned = cleanTrendTerm(value);
+        if (!cleaned || cleaned.length < 3 || seen.has(cleaned)) continue;
+        seen.add(cleaned);
+        output.push(cleaned);
+        if (output.length >= limit) break;
+    }
+    return output;
+}
+
+function truncateForPrompt(value, maxLength = 900) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function splitCompetitorList(competitors) {
+    return String(competitors || '')
+        .split(',')
+        .map(item => normalizeDomain(item.trim()) || item.trim())
+        .filter(Boolean);
+}
+
+function competitorDomainToBrand(domain) {
+    return String(domain || '')
+        .replace(/^https?:\/\//i, '')
+        .replace(/^www\./i, '')
+        .split('/')[0]
+        .split('.')[0]
+        .replace(/[-_]+/g, ' ')
+        .trim();
+}
+
+function extractKeywordCandidatesFromText(text) {
+    const cleaned = cleanTrendTerm(text);
+    if (!cleaned) return [];
+    const words = cleaned.split(/\s+/).filter(word => word.length > 2 && !TREND_TERM_STOPWORDS.has(word));
+    const candidates = [];
+    const important = /\b(ai|crm|realtor|realtors|real|estate|broker|brokerage|lead|leads|follow|automation|listing|listings|software|transaction|marketing)\b/i;
+
+    for (let size = 2; size <= 4; size++) {
+        for (let i = 0; i <= words.length - size; i++) {
+            const phrase = words.slice(i, i + size).join(' ');
+            if (important.test(phrase)) candidates.push(phrase);
+        }
+    }
+
+    return dedupeStrings(candidates, 12);
+}
+
+function inferFallbackTrendKeywords(context = {}) {
+    const combined = [
+        context.bizName,
+        context.bizDesc,
+        context.bizAudience,
+        context.bizSwot,
+        context.businessReport,
+        context.agencyGoal,
+        context.coreMessage
+    ].join(' ').toLowerCase();
+
+    const terms = [];
+    if (/real estate|realtor|brokerage|listing|agent/.test(combined)) {
+        terms.push(
+            'real estate crm',
+            'ai for realtors',
+            'realtor software',
+            'crm for realtors',
+            'real estate agent crm',
+            'real estate ai tools',
+            'real estate lead follow up',
+            'real estate lead generation',
+            'realtor marketing automation',
+            'real estate client management',
+            'listing follow up automation',
+            'real estate database management'
+        );
+    }
+    if (/crm|pipeline|lead|follow up|sales/.test(combined)) {
+        terms.push(
+            'crm automation',
+            'lead follow up automation',
+            'sales pipeline software',
+            'client follow up system'
+        );
+    }
+    if (/ai|automation|automated/.test(combined)) {
+        terms.push(
+            'ai automation tools',
+            'ai business automation',
+            'ai sales assistant'
+        );
+    }
+
+    const competitorTerms = splitCompetitorList(context.competitors)
+        .map(competitorDomainToBrand)
+        .filter(Boolean)
+        .map(brand => `${brand} alternatives`);
+
+    return dedupeStrings([
+        ...terms,
+        ...extractKeywordCandidatesFromText(combined),
+        ...competitorTerms,
+        'business growth tips'
+    ], 18);
+}
+
+function keywordObjectsFromTerms(terms = [], source = 'Onboarding keyword') {
+    return dedupeStrings(terms, 20).map((term, index) => ({
+        term,
+        reason: source,
+        priority: Math.max(1, 100 - index * 5)
+    }));
+}
+
+async function buildTrendKeywordPlan(context = {}) {
+    const fallbackTerms = inferFallbackTrendKeywords(context);
+    const fallbackPlan = {
+        primarySearchTerms: fallbackTerms.slice(0, 8),
+        viralKeywordHypotheses: fallbackTerms.slice(0, 12),
+        customerPainPoints: [],
+        keywords: keywordObjectsFromTerms(fallbackTerms, 'Derived from onboarding profile')
+    };
+
+    const competitorProfiles = context.competitorProfiles && typeof context.competitorProfiles === 'object'
+        ? Object.values(context.competitorProfiles).slice(0, 8)
+        : [];
+    const prompt = `Use Google Search grounding and the onboarding profile below to build a social-content research keyword plan.
+The goal is to find real high-engagement short-form posts/videos and the keywords likely driving them.
+
+Business name: ${context.bizName || 'Client Business'}
+Business description and offers: ${truncateForPrompt(context.bizDesc, 1200)}
+Target audience: ${truncateForPrompt(context.bizAudience, 700)}
+Strategy/SWOT notes: ${truncateForPrompt(context.bizSwot, 900)}
+Business report: ${truncateForPrompt(context.businessReport, 900)}
+Known competitors: ${context.competitors || 'None provided'}
+Competitor profile notes: ${truncateForPrompt(JSON.stringify(competitorProfiles), 1200)}
+
+Return JSON only:
+{
+  "primarySearchTerms": ["3-6 word search terms"],
+  "viralKeywordHypotheses": ["keywords/topics likely tied to viral posts"],
+  "customerPainPoints": ["audience pains to search"],
+  "keywords": [
+    { "term": "real estate crm", "reason": "why this matters", "priority": 100 }
+  ]
+}
+
+Rules:
+- Include direct category terms even without competitor URLs.
+- For a real estate CRM business, include terms like real estate crm, ai for realtors, realtor software, crm for realtors, real estate lead follow up, and real estate ai tools when relevant.
+- Favor buying-intent, pain-point, and creator-hook phrases people would use in Instagram Reels, TikTok, YouTube Shorts, Facebook Reels, Reddit, and LinkedIn content.
+- Do not invent exact engagement numbers.`;
+
+    try {
+        const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+        const data = parseModelJson(raw);
+        const generatedTerms = dedupeStrings([
+            ...(Array.isArray(data.primarySearchTerms) ? data.primarySearchTerms : []),
+            ...(Array.isArray(data.viralKeywordHypotheses) ? data.viralKeywordHypotheses : []),
+            ...(Array.isArray(data.customerPainPoints) ? data.customerPainPoints : []),
+            ...(Array.isArray(data.keywords) ? data.keywords.map(item => item && item.term) : []),
+            ...fallbackTerms
+        ], 18);
+        const keywordObjects = Array.isArray(data.keywords)
+            ? data.keywords
+                .map((item, index) => ({
+                    term: cleanTrendTerm(item && item.term),
+                    reason: String((item && item.reason) || 'AI keyword research').trim(),
+                    priority: Number(item && item.priority) || Math.max(1, 100 - index * 5)
+                }))
+                .filter(item => item.term)
+            : [];
+
+        return {
+            primarySearchTerms: dedupeStrings([...(Array.isArray(data.primarySearchTerms) ? data.primarySearchTerms : []), ...generatedTerms], 10),
+            viralKeywordHypotheses: dedupeStrings([...(Array.isArray(data.viralKeywordHypotheses) ? data.viralKeywordHypotheses : []), ...generatedTerms], 14),
+            customerPainPoints: Array.isArray(data.customerPainPoints) ? data.customerPainPoints.slice(0, 8) : [],
+            keywords: [...keywordObjects, ...keywordObjectsFromTerms(generatedTerms, 'Derived from onboarding profile')]
+                .filter((item, index, arr) => arr.findIndex(other => other.term === item.term) === index)
+                .slice(0, 16)
+        };
+    } catch (error) {
+        console.warn('[Trends Agent] Keyword plan research failed; using deterministic onboarding keywords.', error.message);
+        return fallbackPlan;
+    }
+}
+
+function buildTrendResearchQueries(plan = {}, context = {}) {
+    const competitors = splitCompetitorList(context.competitors);
+    const competitorBrands = competitors.map(competitorDomainToBrand).filter(Boolean);
+    const terms = dedupeStrings([
+        ...(Array.isArray(plan.primarySearchTerms) ? plan.primarySearchTerms : []),
+        ...(Array.isArray(plan.viralKeywordHypotheses) ? plan.viralKeywordHypotheses : []),
+        ...(Array.isArray(plan.keywords) ? plan.keywords.map(item => item && item.term) : []),
+        ...inferFallbackTrendKeywords(context)
+    ], 18);
+
+    const platformRotations = [
+        { platform: 'youtube', suffix: 'youtube shorts viral' },
+        { platform: 'instagram', suffix: 'instagram reels viral' },
+        { platform: 'tiktok', suffix: 'tiktok viral tips' },
+        { platform: 'facebook', suffix: 'facebook reels viral' },
+        { platform: 'reddit', suffix: 'reddit discussion' },
+        { platform: 'linkedin', suffix: 'linkedin post' }
+    ];
+
+    const queries = [];
+    competitorBrands.slice(0, 4).forEach((brand, index) => {
+        const platform = platformRotations[index % platformRotations.length];
+        const category = terms[0] || 'business software';
+        queries.push({
+            platform: platform.platform,
+            keyword: `${brand} ${category}`,
+            query: `${brand} ${category} ${platform.suffix}`.slice(0, 140)
+        });
+    });
+
+    terms.forEach((term, index) => {
+        const platform = platformRotations[index % platformRotations.length];
+        queries.push({
+            platform: platform.platform,
+            keyword: term,
+            query: `${term} ${platform.suffix}`.slice(0, 140)
+        });
+    });
+
+    return queries
+        .filter((item, index, arr) => arr.findIndex(other => other.query === item.query) === index)
+        .slice(0, TREND_RESEARCH_MAX_QUERIES);
+}
+
+function scoreTrendEngagement(trend = {}) {
+    const score = Number(trend.trendScore) || 0;
+    const engagement = String(trend.engagement || '').toLowerCase();
+    const matches = [...engagement.matchAll(/(\d+(?:\.\d+)?)(k|m)?\s*(views|likes|comments|reposts|shares|replies)?/g)];
+    const parsed = matches.reduce((total, match) => {
+        let value = Number(match[1]) || 0;
+        if (match[2] === 'k') value *= 1000;
+        if (match[2] === 'm') value *= 1000000;
+        return total + value;
+    }, 0);
+    return score * 1000 + parsed;
+}
+
+function summarizeKeywordPerformance(plan = {}, trends = []) {
+    const byTerm = new Map();
+    const seedKeywords = Array.isArray(plan.keywords) ? plan.keywords : [];
+    seedKeywords.forEach((keyword, index) => {
+        if (!keyword || !keyword.term) return;
+        const term = cleanTrendTerm(keyword.term);
+        byTerm.set(term, {
+            term,
+            reason: keyword.reason || 'Selected from onboarding profile',
+            priority: Number(keyword.priority) || Math.max(1, 100 - index * 5),
+            trendCount: 0,
+            bestEngagement: '',
+            score: Number(keyword.priority) || 0
+        });
+    });
+
+    trends.forEach(trend => {
+        const term = cleanTrendTerm(trend.searchKeyword || trend.keyword || trend.topic);
+        if (!term) return;
+        const current = byTerm.get(term) || {
+            term,
+            reason: 'Returned high-engagement posts in trend research',
+            priority: 50,
+            trendCount: 0,
+            bestEngagement: '',
+            score: 0
+        };
+        current.trendCount += 1;
+        const trendScore = scoreTrendEngagement(trend);
+        current.score += 100 + trendScore;
+        if (!current.bestEngagement || trendScore > current.bestTrendScore) {
+            current.bestEngagement = trend.engagement || current.bestEngagement;
+            current.bestTrendScore = trendScore;
+        }
+        byTerm.set(term, current);
+    });
+
+    return [...byTerm.values()]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 12)
+        .map(item => ({
+            term: item.term,
+            reason: item.reason,
+            trendCount: item.trendCount,
+            bestEngagement: item.bestEngagement,
+            priority: item.priority
+        }));
+}
+
+async function researchGroundedSocialTrends(context = {}, plan = {}, limit = 8) {
+    const keywords = (Array.isArray(plan.keywords) ? plan.keywords : [])
+        .map(item => item.term)
+        .filter(Boolean)
+        .slice(0, 10)
+        .join(', ');
+    const prompt = `Use Google Search grounding to find real public recent social/video/content examples for this market.
+Business: ${context.bizName || 'Client Business'}
+Audience: ${truncateForPrompt(context.bizAudience, 500)}
+Description/offers: ${truncateForPrompt(context.bizDesc, 800)}
+Known competitors: ${context.competitors || 'None provided'}
+Priority keywords: ${keywords || inferFallbackTrendKeywords(context).slice(0, 8).join(', ')}
+
+Return JSON only:
+{
+  "trends": [
+    {
+      "platform": "youtube|instagram|tiktok|facebook|linkedin|reddit|market",
+      "competitor": "creator/company/source name",
+      "topic": "short topic",
+      "body": "brief paraphrase of the real post/content angle",
+      "engagement": "public engagement if visible, otherwise Search-backed trend signal",
+      "keyword": "keyword that found it",
+      "sourceUrl": "public source URL if available"
+    }
+  ]
+}
+
+Only include items supported by search results. Do not invent exact likes/views/comments.`;
+
+    try {
+        const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+        const data = parseModelJson(raw);
+        const trends = Array.isArray(data.trends) ? data.trends : [];
+        return trends.slice(0, limit).map((trend, index) => ({
+            id: index + 1,
+            competitor: String(trend.competitor || 'Market keyword').trim(),
+            platform: cleanTrendTerm(trend.platform || 'market').split(' ')[0] || 'market',
+            topic: String(trend.topic || trend.keyword || 'Market trend').trim().slice(0, 120),
+            body: String(trend.body || trend.topic || '').trim(),
+            mediaUrl: '',
+            engagement: String(trend.engagement || 'Search-backed trend signal').trim(),
+            searchKeyword: cleanTrendTerm(trend.keyword || trend.topic),
+            sourceUrl: String(trend.sourceUrl || '').trim(),
+            researchSource: 'grounded-search'
+        })).filter(trend => trend.body || trend.topic);
+    } catch (error) {
+        console.warn('[Trends Agent] Grounded trend fallback failed.', error.message);
+        return [];
+    }
+}
+
+function runLast30DaysSearch(scriptPath, query, platformHint, keyword) {
+    return new Promise((resolve) => {
+        const safeQuery = String(query || '').replace(/["\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
+        console.log(`[Trends Scraper] Running ${platformHint} query: ${safeQuery}`);
+
+        execFile('py', ['-3.12', scriptPath, safeQuery, '--emit=compact', '--quick'], { timeout: 45000 }, (error, stdout) => {
             if (error) {
                 console.error(`[Trends CLI Error:${platformHint}]`, error.message);
                 return resolve([]);
             }
 
             try {
-                resolve(parseCLIOutputToTrends(stdout, null, platformHint));
+                const trends = parseCLIOutputToTrends(stdout, null, platformHint).map(trend => ({
+                    ...trend,
+                    engagement: trend.hasParsedEngagement
+                        ? trend.engagement
+                        : (trend.trendScore ? `Trend score ${trend.trendScore}` : "High engagement signal"),
+                    searchQuery: safeQuery,
+                    searchKeyword: keyword || safeQuery,
+                    researchSource: 'last30days'
+                }));
+                resolve(trends);
             } catch (parseError) {
                 console.error(`[Trends Parse Error:${platformHint}]`, parseError.message);
                 resolve([]);
@@ -2686,43 +3060,46 @@ function runLast30DaysSearch(scriptPath, query, platformHint) {
 
 // 4. Competitor Trends Scraper Endpoint
 app.post('/api/trends', async (req, res) => {
-    const { competitors, bizName, bizDesc } = req.body;
+    const {
+        competitors,
+        bizName,
+        bizDesc,
+        bizAudience,
+        bizSwot,
+        businessReport,
+        competitorProfiles,
+        agencyGoal,
+        coreMessage
+    } = req.body;
     
     try {
-        console.log(`[Trends Agent] Generating targeted search query for research...`);
-        const queryPrompt = `Given the following business profile:
-Name: ${bizName || 'Client Business'}
-Description: ${bizDesc || 'Client business description not provided'}
-Competitors: ${competitors || 'No competitors provided'}
+        const context = {
+            competitors,
+            bizName,
+            bizDesc,
+            bizAudience,
+            bizSwot,
+            businessReport,
+            competitorProfiles,
+            agencyGoal,
+            coreMessage
+        };
 
-Return only a 3-4 word search query (no quotes, no punctuation) optimized for short-form social content research. Prioritize creator-style hooks and customer pain points that would perform on Instagram Reels, Facebook Reels, and YouTube Shorts. Examples: "real estate transaction coordination", "mortgage automated underwriting".`;
-
-        let searchQuery = "small business marketing";
-        try {
-            const rawQuery = await queryGemini(queryPrompt);
-            searchQuery = rawQuery.trim().replace(/["']/g, "");
-            console.log(`[Trends Agent] Optimized Search Query: "${searchQuery}"`);
-        } catch (geminiErr) {
-            console.warn(`[Trends Agent] Gemini query optimization failed, using default query.`, geminiErr.message);
-        }
+        console.log(`[Trends Agent] Building onboarding-aware keyword plan for research...`);
+        const keywordPlan = await buildTrendKeywordPlan(context);
+        const researchQueries = buildTrendResearchQueries(keywordPlan, context);
+        console.log(`[Trends Agent] Research queries:`, researchQueries.map(item => item.query));
 
         // Execute last30days CLI tool via Python 3.12 with platform-specific searches.
         const scriptPath = path.resolve('C:\\Users\\daved\\.gemini\\config\\plugins\\last30days-plugin\\skills\\last30days\\scripts\\last30days.py');
-        const researchQueries = [
-            { platform: "instagram", query: `${searchQuery} instagram reels viral` },
-            { platform: "youtube", query: `${searchQuery} youtube shorts viral` },
-            { platform: "facebook", query: `${searchQuery} facebook reels viral` },
-            { platform: "tiktok", query: `${searchQuery} tiktok tips viral` }
-        ];
-
         const queryResults = await Promise.all(
-            researchQueries.map(item => runLast30DaysSearch(scriptPath, item.query, item.platform))
+            researchQueries.map(item => runLast30DaysSearch(scriptPath, item.query, item.platform, item.keyword))
         );
 
         const competitorList = (competitors || "market").split(",").map(c => c.trim()).filter(Boolean);
         const seen = new Set();
         const trends = queryResults.flat().map((trend, index) => {
-            const key = `${trend.platform}:${trend.topic}:${trend.body}`.toLowerCase();
+            const key = `${trend.platform}:${trend.topic}:${trend.body}:${trend.sourceUrl || ''}`.toLowerCase();
             if (seen.has(key)) return null;
             seen.add(key);
             return {
@@ -2730,19 +3107,39 @@ Return only a 3-4 word search query (no quotes, no punctuation) optimized for sh
                 id: index + 1,
                 competitor: trend.competitor || competitorList[index % Math.max(competitorList.length, 1)] || "market"
             };
-        }).filter(Boolean).slice(0, 12);
+        }).filter(Boolean)
+            .sort((a, b) => scoreTrendEngagement(b) - scoreTrendEngagement(a))
+            .slice(0, 12);
 
-        if (trends.length > 0) {
+        let finalTrends = trends;
+        if (finalTrends.length === 0) {
+            console.warn(`[Trends Scraper] No platform trends parsed from last30days. Trying grounded search synthesis.`);
+            finalTrends = await researchGroundedSocialTrends(context, keywordPlan, 8);
+        }
+
+        const keywords = summarizeKeywordPerformance(keywordPlan, finalTrends);
+
+        if (finalTrends.length > 0) {
             const platformMix = trends.reduce((acc, t) => {
                 acc[t.platform] = (acc[t.platform] || 0) + 1;
                 return acc;
             }, {});
-            console.log(`[Trends Scraper] Parsed ${trends.length} trends. Mix:`, platformMix);
-            return res.json(trends);
+            console.log(`[Trends Scraper] Returning ${finalTrends.length} trends. Mix:`, platformMix);
+            return res.json({
+                trends: finalTrends,
+                keywords,
+                searchedQueries: researchQueries.map(item => item.query),
+                keywordPlan
+            });
         }
 
-        console.warn(`[Trends Scraper] No platform trends parsed.`);
-        return res.json([]);
+        console.warn(`[Trends Scraper] No platform or grounded trends parsed.`);
+        return res.json({
+            trends: [],
+            keywords,
+            searchedQueries: researchQueries.map(item => item.query),
+            keywordPlan
+        });
 
     } catch (error) {
         console.error(`[Trends Error]`, error.message);
@@ -3208,12 +3605,16 @@ function parseCLIOutputToTrends(stdout, competitorsList, platformHint) {
         const lines = part.split("\n");
         const headerLine = lines[0].trim();
         
-        const headerMatch = headerLine.match(/^(\d+)\.\s+(.*?)(?:\s+\(score\s+\d+.*sources:\s*(.*?)\))?$/);
+        const headerMatch = headerLine.match(/^(\d+)\.\s+(.*)$/);
         if (!headerMatch) continue;
 
         const topicId = parseInt(headerMatch[1]);
-        let topicTitle = headerMatch[2].trim();
-        const sourcesStr = (headerMatch[3] || "").toLowerCase();
+        const headerText = headerMatch[2].trim();
+        const scoreMatch = headerText.match(/\(score\s+(\d+)/i);
+        const sourceMatch = headerText.match(/sources:\s*([^)]+)/i);
+        const trendScore = scoreMatch ? parseInt(scoreMatch[1], 10) : 0;
+        let topicTitle = headerText.replace(/\s+\(score\s+.*$/i, '').trim();
+        const sourcesStr = (sourceMatch && sourceMatch[1] ? sourceMatch[1] : "").toLowerCase();
 
         let body = "";
         let platform = platformHint || "instagram";
@@ -3282,7 +3683,7 @@ function parseCLIOutputToTrends(stdout, competitorsList, platformHint) {
             topicTitle = topicTitle.substring(0, 80) + "...";
         }
 
-        let engagement = "High Engagement";
+        let engagement = "High engagement signal";
         if (engagementStr) {
             engagement = engagementStr
                 .replace(/likes?/g, " Likes")
@@ -3319,7 +3720,9 @@ function parseCLIOutputToTrends(stdout, competitorsList, platformHint) {
             topic: topicTitle,
             body,
             mediaUrl,
-            engagement
+            engagement,
+            trendScore,
+            hasParsedEngagement: Boolean(engagementStr)
         });
     }
 

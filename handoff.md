@@ -1,143 +1,54 @@
-# Ad Agency Autopilot Handoff
+# Handoff
 
 Last updated: 2026-07-02
 
-## Current State
-
-- Local project is a Git repository on branch `main`.
-- Remote repo: `https://github.com/mcssc25/automatedadagency.git`.
-- Production app: `https://agents.realestatecrmpro.com`.
-- VPS path: `/opt/ad-agency-autopilot`.
-- Runtime is on the shared ClaimPilot VPS `178.156.178.56`, but this project is separate; only modify `/opt/ad-agency-autopilot`.
-- VPS deployment is file-copy based, not a Git checkout.
-- Do not modify ClaimPilot or `fluffysbait.com`.
-
 ## Latest Update
 
-- Tightened realtor lead quality after Gulf Shores scrape inserted Rob Smith three times, including two rows named `Privacy Policy` / `Privacy Policy Unable`.
-- Realtor lead insertion now rejects non-agent page/title names such as privacy, policy, terms, cookies, unable/error pages, legal/accessibility pages, etc.
-- Brokerage roster extraction now skips privacy/legal/policy source URLs before parsing candidate contacts.
-- Candidate merging and insertion now dedupe by normalized person identity, using name plus phone, company, or source/website domain, not email alone.
-- Scrape insertion now uses `isUsefulLeadEmail`, so generic office/admin-style emails are blocked at final insert even if they came from Gemini/directory fallback.
-- Existing bad production rows were cleaned up: deleted lead ids `13` and `14` after backing up the DB. Kept the single clean `Rob Smith` row and the valid `Danielle Mize` row.
-- DB cleanup backup: `/opt/ad-agency-autopilot/data/backups/lead-cleanup-20260702T173550Z-rob-smith-privacy`.
-- Code deploy backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T173702Z-realtor-dedupe-cleanup`.
-
-## Previous Update
-
-- Changed realtor lead scraping to prioritize brokerage roster discovery from grounded Google/Gemini search instead of starting with Google Maps place rows.
-- Realtor queries now first discover brokerage/office websites and likely public roster URLs, then crawl those roster/team/agent/profile pages for visible individual agent emails.
-- Maps enrichment is now a fallback when brokerage roster discovery does not fill the requested count; it can be disabled with `LEAD_MAPS_FALLBACK=false`.
-- New bounded knobs: `LEAD_BROKERAGE_SEARCH_TIMEOUT_MS` defaults to 120 seconds, and `LEAD_BROKERAGE_SEARCH_MAX_BROKERAGES` defaults to 12.
-- Discovery filters out Zillow/Realtor.com/Redfin/Homes.com as crawl targets and normalizes only real URL/domain-looking brokerage links before crawling.
-
-## Previous Update
-
-- Fixed a realtor scrape UX failure where a Gulf Shores scrape could keep spinning without an obvious completed/error result.
-- Production logs showed Maps found 20 places, stricter brokerage/business filters rejected the Maps business rows, several brokerage websites returned 403/500/timeouts, the directory fallback timed out after 120 seconds, and then generic Gemini fallback kept the job waiting.
-- Realtor scrape jobs now use a bounded `LEAD_REALTOR_DIRECTORY_TIMEOUT_MS` fallback timeout, default 45 seconds.
-- Generic Gemini fallback is skipped for realtor queries unless `LEAD_GENERIC_GEMINI_FALLBACK_FOR_REALTORS=true` is explicitly set.
-- If no public individual agent emails are found, the job completes with 0 leads plus warnings instead of failing silently or waiting through long fallbacks.
-- The CRM UI now logs and alerts the warning text when a scrape completes with no imported leads.
-
-## Previous Update
-
-- Fixed realtor scrape lead quality and count behavior after a Gulf Shores scrape inserted brokerage/business rows.
-- Root cause: Maps/business website enrichment was creating candidates before brokerage roster scraping, using the Maps place title as the lead name; then candidate slicing happened before duplicate/invalid filtering, so asking for 5 could insert only 4.
-- Realtor queries now crawl brokerage roster/team/agent pages first from Maps-discovered brokerage websites.
-- Maps-derived row candidates are only allowed for realtor queries when the Maps title looks like an individual agent name, not a brokerage/business/team name.
-- Generic office/admin-style emails such as `admin@`, `info@`, `office@`, `sales@`, `support@`, and `bugreport@` are filtered from lead insertion.
-- Insert logic now continues past duplicate/DNC/invalid candidates until it inserts up to the requested count when enough valid candidates exist.
-- Existing production leads were inspected but not deleted; the bad Gulf Shores business-name rows remain until the user chooses to delete/purge them.
-
-## Previous Update
-
-- Fixed social post media previews so AI video assets display as portrait previews instead of being cropped into the old short landscape frame.
-- `app.js` now assigns media previews a `media-video` or `media-image` class and removes inline `max-height: 180px` / `object-fit: cover` rules from draft, scheduled, and sent-log cards.
-- `index.css` now gives video previews a centered `9 / 16` frame using `object-fit: contain`, image previews a `16 / 9` frame using `object-fit: cover`, and card action rows `flex-wrap: wrap`.
-- The generation request path already sends `aspectRatio: "9:16"` to `/api/generate-video`; no backend aspect-ratio change was needed.
+- Made Content Studio `Research & Trends` smarter and onboarding-aware.
+- Frontend now sends `/api/trends` the saved business description/offers, audience, SWOT, business report, agency goal, core message, competitor domains, and competitor profiles.
+- Backend now builds a keyword plan from onboarding context, grounded Gemini keyword research when available, deterministic business-category fallback terms, and competitor brand/category combinations.
+- Real estate CRM profiles now explicitly seed searches such as `real estate crm`, `ai for realtors`, `realtor software`, `crm for realtors`, `real estate lead follow up`, and `real estate ai tools`.
+- `/api/trends` now runs multiple platform-intent searches instead of a single 3-4 word query, ranks parsed results by trend score/engagement signal, and falls back to grounded search synthesis only when the last30days parser returns no posts.
+- The trend response now includes `trends`, `keywords`, `searchedQueries`, and `keywordPlan`.
+- The UI now renders a `Top keyword targets` card above trend cards, shows the keyword that produced each card, supports source links when present, and gives a useful no-results message listing searched terms.
+- Removed user-visible fake engagement metrics from parsed trend output: unparsed engagement now displays `Trend score N` or `High engagement signal` instead of random likes/comments.
 
 ## Verification
 
-- `node --check server.js` passed after the realtor lead cleanup guardrails.
-- `git diff --check` passed with normal Windows CRLF warnings only.
-- Production DB inspection confirmed the bad rows were `Privacy Policy` and `Privacy Policy Unable`; post-cleanup recent rows show those two removed.
-- VPS deployment verification after realtor lead cleanup:
-  - `ad-agency-autopilot` rebuilt and restarted healthy on `127.0.0.1:3100->3000`.
-  - `docker exec ad-agency-autopilot node --check /app/server.js` passed.
-  - Deployed `/app/server.js` contains `getLeadIdentityKey`, `isDisallowedLeadSourceUrl`, and `realtorContactsOnly` insert guards.
-  - Gulf Shores rows now show only `Danielle Mize` and one `Rob Smith` for that scrape query.
-  - Public URL returned `401`, expected because production/admin Basic auth is enabled.
-- `node --check server.js` passed after the brokerage-roster-first change.
-- `git diff --check` passed with normal Windows CRLF warnings only.
-- VPS deployment verification after brokerage-roster-first update:
-  - `ad-agency-autopilot` rebuilt and restarted healthy on `127.0.0.1:3100->3000`.
-  - `docker exec ad-agency-autopilot node --check /app/server.js` passed.
-  - Deployed `/app/server.js` contains `discoverBrokerageRosterTargetsWithSearch`, `LEAD_BROKERAGE_SEARCH_TIMEOUT_MS`, and `LEAD_MAPS_FALLBACK`.
-  - Public URL returned `401`, expected because production/admin Basic auth is enabled.
-- Production investigation showed no new rows inserted for the latest Gulf Shores scrape; lead count remained 2, with only the old scraped Dave/Kelly lead plus the hot test lead.
-- `docker logs ad-agency-autopilot` showed the scrape reached directory/Gemini fallback after roster/site failures, explaining the no-result/no-error perception.
-- `node --check server.js` and `node --check app.js` passed after the bounded-fallback/no-leads-warning fix.
-- `git diff --check` passed with normal Windows CRLF warnings only.
-- VPS deployment verification after bounded fallback fix:
-  - `ad-agency-autopilot` rebuilt and restarted healthy; scraper sidecar and tunnel remained running.
-  - `docker exec ad-agency-autopilot node --check /app/server.js` and `/app/app.js` passed.
-  - Deployed code contains `LEAD_REALTOR_DIRECTORY_TIMEOUT_MS`, `LEAD_GENERIC_GEMINI_FALLBACK_FOR_REALTORS`, the no-public-agent-emails warning, and the UI no-leads warning.
-- Production investigation showed the Gulf Shores scrape created business-name leads from Maps rows (`Coastal Resort Realty`, `Kim Ward Realty, LLC`, `Living My Best Life Realty`, `Realty Executives Gulf Coast`) and inserted 4 because one candidate email was duplicate-filtered.
-- `node --check server.js` passed after the realtor scrape filter/order/count fix.
-- Cheerio selector smoke for case-insensitive class/aria selectors passed.
-- `git diff --check` passed with normal Windows CRLF warnings only.
-- VPS deployment verification after realtor roster quality fix:
-  - `ad-agency-autopilot` rebuilt and restarted healthy; scraper sidecar and tunnel remained running.
-  - `docker exec ad-agency-autopilot node --check /app/server.js` passed.
-  - Deployed `/app/server.js` contains `isLikelyIndividualAgentLeadName`, `realtorContactsOnly`, generic email filtering, and count-limited insertion after skips.
-- `node --check app.js` passed.
 - `node --check server.js` passed.
-- Temporary local smoke server on `PORT=3132` with auth disabled returned 200 for `/`.
-- Temporary local server was stopped after the check.
-- In-app browser was connected and viewport reset afterward, but its sandbox blocked synthetic draft/card seeding (`data:` URLs and storage/DOM writes), so no browser screenshot of a seeded video card was captured.
-- No AI image/video generation, real publish, campaign send, or production mutation was triggered.
+- `node --check app.js` passed.
+- `git diff --check` passed with normal Windows CRLF warnings only.
+- Bounded local smoke request to `/api/trends` for `Real Estate CRM Pro` with `TREND_RESEARCH_MAX_QUERIES=4` returned:
+  - 12 trend cards
+  - 12 keyword targets
+  - 4 searched queries
+  - keyword examples including `real estate crm` and `ai for realtors`
+- Deployed `docker exec ad-agency-autopilot node --check /app/server.js` passed.
+- Deployed `docker exec ad-agency-autopilot node --check /app/app.js` passed.
+- `docker compose ps ad-agency-autopilot` reported the app container healthy.
+- No AI image/video generation, campaign send, email send, or production data mutation was triggered by local verification.
 
 ## Repo / Deployment Status
 
-- Realtor dedupe/privacy cleanup code commit pushed and deployed: `1d500a7` (`Tighten realtor lead dedupe`).
-- Brokerage-roster-first code commit pushed and deployed: `649b399` (`Prioritize brokerage roster discovery`).
-- Social video preview layout code commit pushed and deployed: `13ab621` (`Fix social video preview layout`).
-- Realtor roster quality code commit pushed and deployed: `43cc427` (`Prioritize realtor roster lead quality`).
-- Bounded realtor fallback code commit pushed and deployed: `b0c92e2` (`Bound realtor scrape fallback time`).
-- This handoff includes post-deploy documentation for the latest scraper quality fix and the prior video-preview release.
+- Files changed: `server.js`, `app.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
-- Previously deployed commits:
-  - `13ab621` (`Fix social video preview layout`)
-  - `2e0a824` (`Add CRM lead management controls`)
-  - `c35051f` (`Harden agency app deployment`)
-  - `43c3054` (`Make lead scraping async`)
-  - `0ae31d0` (`Add realtor directory lead discovery`)
-  - `4946727` (`Add brokerage roster lead scraping`)
-  - `43cc427` (`Prioritize realtor roster lead quality`)
-  - `b0c92e2` (`Bound realtor scrape fallback time`)
-  - `649b399` (`Prioritize brokerage roster discovery`)
-  - `1d500a7` (`Tighten realtor lead dedupe`)
-  - `2b33db0` (`Add CRM auto-approve campaign setting`)
+- Deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
+- Deployment copied only `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`.
+- Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.
+- `ad-agency-autopilot` was rebuilt/restarted only for that service; the lead scraper sidecar remained running.
+- Production container is healthy on `127.0.0.1:3100->3000`.
+- Public URL returned `401`, expected because production/admin Basic auth is enabled.
+- Commit/push is the remaining repo step for this deployed update.
 
 ## Deployment Notes
 
-- Latest deployment copied only `app.js`, `index.css`, `MEMORY.md`, and `handoff.md`.
-- Brokerage-roster-first deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T171906Z-brokerage-search-first`.
-- Realtor dedupe/privacy cleanup deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T173702Z-realtor-dedupe-cleanup`.
-- Production DB cleanup backup created at `/opt/ad-agency-autopilot/data/backups/lead-cleanup-20260702T173550Z-rob-smith-privacy`.
-- Backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
-- Realtor roster quality deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T115554Z-realtor-roster-quality`.
-- Bounded realtor fallback deployment copied `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T120757Z-bound-realtor-fallback`.
-- Rebuild/restart targeted only `ad-agency-autopilot`; scraper sidecar and other VPS projects were left alone.
-- Deployed container checks passed for `node --check /app/app.js` and `node --check /app/server.js`.
-- `docker compose ps ad-agency-autopilot` reported the app container healthy on `127.0.0.1:3100->3000`.
-- Public URL check returned `401`, expected because production/admin Basic auth is enabled.
-- Do not copy ignored runtime files or local DB/log/smoke artifacts.
+- Keep deploy scoped to `/opt/ad-agency-autopilot`; do not touch ClaimPilot or `fluffysbait.com`.
+- Copy only changed source/docs files. Do not copy `.env`, `credentials.json`, `mailgun api.txt`, DB files, downloads, logs, backups, or `node_modules`.
+- Backup already created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.
+- Rebuild/restart targeted only the `ad-agency-autopilot` service; the lead scraper sidecar and other VPS projects were left alone.
 
 ## Next Steps
 
-- Browser-check a real/generated AI video draft on desktop and mobile to confirm the portrait preview and wrapped buttons match the expected card layout.
-- Add a valid physical mailing address to local and VPS `OUTBOUND_POSTAL_ADDRESS`, then run a safe test campaign send.
-- Add smoke/integration tests for CRM lead scrape, campaign approval/send, DNC block, inbound reply pause, manual lead pause, and manual lead delete.
-- Still needed for a full agency: direct ad-platform integrations, platform analytics, client reporting, billing/contracts, calendar booking, multi-client isolation, and durable server-side content scheduling.
+- Check the production Content Studio tab with a real onboarded profile to confirm keyword chips and trend cards render as expected.
+- Add a valid physical mailing address to `OUTBOUND_POSTAL_ADDRESS`, then run a safe outbound campaign send test.
+- Add integration tests for `/api/trends` response shape, deterministic real-estate CRM keyword seeding, and no-fake-engagement behavior.

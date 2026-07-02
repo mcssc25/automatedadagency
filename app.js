@@ -72,6 +72,9 @@ class AutopilotApp {
             // Active Lists
             campaigns: [],
             socialPosts: [],
+            competitorTrends: [],
+            competitorTrendKeywords: [],
+            trendSearchQueries: [],
             leads: [],
             leadsPage: 1,
             leadsPagesCount: 1,
@@ -754,6 +757,9 @@ class AutopilotApp {
         if (!Array.isArray(this.state.campaignsList)) this.state.campaignsList = [];
         if (!Array.isArray(this.state.verificationQueue)) this.state.verificationQueue = [];
         if (!Array.isArray(this.state.socialPosts)) this.state.socialPosts = [];
+        if (!Array.isArray(this.state.competitorTrends)) this.state.competitorTrends = [];
+        if (!Array.isArray(this.state.competitorTrendKeywords)) this.state.competitorTrendKeywords = [];
+        if (!Array.isArray(this.state.trendSearchQueries)) this.state.trendSearchQueries = [];
         if (!Array.isArray(this.state.scheduledPosts)) this.state.scheduledPosts = [];
         if (!Array.isArray(this.state.publishedPosts)) this.state.publishedPosts = [];
         
@@ -1134,6 +1140,9 @@ class AutopilotApp {
             marketingGoal: this.state.marketingGoal,
             useFallback: this.state.useFallback,
             socialPosts: this.state.socialPosts,
+            competitorTrends: this.state.competitorTrends,
+            competitorTrendKeywords: this.state.competitorTrendKeywords,
+            trendSearchQueries: this.state.trendSearchQueries,
             scheduledPosts: this.state.scheduledPosts,
             publishedPosts: this.state.publishedPosts,
             leads: this.state.leads,
@@ -3155,14 +3164,22 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
                 body: JSON.stringify({ 
                     competitors: Array.isArray(this.state.competitorUrls) ? this.state.competitorUrls.join(', ') : this.state.competitorUrls,
                     bizName: this.state.bizName,
-                    bizDesc: this.state.bizDesc
+                    bizDesc: this.state.bizDesc,
+                    bizAudience: this.state.bizAudience,
+                    bizSwot: this.state.bizSwot,
+                    businessReport: this.state.businessReport,
+                    competitorProfiles: this.state.competitorProfiles,
+                    agencyGoal: this.state.agencyGoal,
+                    coreMessage: this.state.coreMessage
                 })
             });
 
             if (!response.ok) throw new Error("Failed to load trends");
 
             const data = await response.json();
-            this.state.competitorTrends = data;
+            this.state.competitorTrends = Array.isArray(data) ? data : (Array.isArray(data.trends) ? data.trends : []);
+            this.state.competitorTrendKeywords = Array.isArray(data.keywords) ? data.keywords : [];
+            this.state.trendSearchQueries = Array.isArray(data.searchedQueries) ? data.searchedQueries : [];
             this.saveState();
             this.renderCompetitorTrendsGrid();
         } catch (error) {
@@ -3172,41 +3189,74 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
     }
 
     renderCompetitorTrendsGrid() {
+        const keywordSummaryHtml = this.renderTrendKeywordSummary();
         if (!this.state.competitorTrends || this.state.competitorTrends.length === 0) {
             this.dom.trendsContainer.innerHTML = `
+                ${keywordSummaryHtml}
                 <div class="empty-state" style="padding: 40px; text-align: center; color: var(--text-secondary); width:100%; grid-column: 1 / -1;">
                     <i class="fa-solid fa-magnifying-glass" style="font-size: 2.5rem; color: var(--purple); margin-bottom: 15px;"></i>
-                    <p>No competitor trends found. Ensure you have competitor websites entered in your onboarding settings.</p>
+                    <p>No competitor posts were parsed yet. The agent searched onboarding keywords${this.state.trendSearchQueries && this.state.trendSearchQueries.length ? ` like ${this.escapeHtml(this.state.trendSearchQueries.slice(0, 3).join(', '))}` : ''}; try Refresh Trends again or enrich Agency Onboarding with more offers, audience pains, and competitor profiles.</p>
                 </div>`;
             return;
         }
 
-        this.dom.trendsContainer.innerHTML = this.state.competitorTrends.map(t => `
+        this.dom.trendsContainer.innerHTML = keywordSummaryHtml + this.state.competitorTrends.map(t => {
+            const platform = this.escapeHtml(t.platform || 'market');
+            const platformClass = String(t.platform || 'market').replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'market';
+            const keyword = this.escapeHtml(t.searchKeyword || t.keyword || '');
+            const sourceUrl = t.sourceUrl ? this.escapeHtml(t.sourceUrl) : '';
+            const platformIcon = platformClass === 'market' ? 'fa-solid fa-chart-line' : `fa-brands fa-${platformClass}`;
+            return `
             <div class="social-post-card" style="border-left: 3px solid var(--purple);">
                 <div class="post-meta">
                     <span class="badge" style="background: rgba(187,94,255,0.1); color: var(--purple); border:1px solid rgba(187,94,255,0.2);">
-                        <i class="fa-solid fa-globe"></i> ${t.competitor}
+                        <i class="fa-solid fa-globe"></i> ${this.escapeHtml(t.competitor || 'Market')}
                     </span>
-                    <span class="post-platform ${t.platform}-color" style="font-size:0.75rem;">
-                        <i class="fa-brands fa-${t.platform}"></i> ${t.platform}
+                    <span class="post-platform ${platformClass}-color" style="font-size:0.75rem;">
+                        <i class="${platformIcon}"></i> ${platform}
                     </span>
                 </div>
-                <strong style="display:block; margin: 10px 0 5px 0; font-size: 0.95rem; color: var(--text-primary);">${t.topic}</strong>
-                <p class="post-body" style="font-size: 0.85rem; color: var(--text-secondary); font-style: italic;">"${t.body}"</p>
+                <strong style="display:block; margin: 10px 0 5px 0; font-size: 0.95rem; color: var(--text-primary);">${this.escapeHtml(t.topic || 'Trend angle')}</strong>
+                ${keyword ? `<div style="font-size:0.72rem; color:var(--accent); margin-bottom:7px;"><i class="fa-solid fa-key"></i> ${keyword}</div>` : ''}
+                <p class="post-body" style="font-size: 0.85rem; color: var(--text-secondary); font-style: italic;">"${this.escapeHtml(t.body || '')}"</p>
                 ${t.mediaUrl ? `
                 <div class="post-media-preview" style="margin-top: 10px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); max-height: 140px; width: 100%;">
-                    <img src="${t.mediaUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+                    <img src="${this.escapeHtml(t.mediaUrl)}" style="width: 100%; height: 100%; object-fit: cover;" />
                 </div>` : ''}
                 <div style="font-size: 0.75rem; color: var(--orange); margin-top: 10px; font-weight:600;">
-                    <i class="fa-solid fa-fire"></i> Viral engagement: ${t.engagement}
+                    <i class="fa-solid fa-fire"></i> Viral engagement: ${this.escapeHtml(t.engagement || 'High engagement signal')}
                 </div>
+                ${sourceUrl ? `<a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; gap:6px; align-items:center; margin-top:8px; font-size:0.75rem; color:var(--accent); text-decoration:none;"><i class="fa-solid fa-arrow-up-right-from-square"></i> Source</a>` : ''}
                 <div class="card-actions-row">
-                    <button class="card-action-btn btn-draft-trend" onclick="App.handleTrendRewrite(${t.id})">
+                    <button class="card-action-btn btn-draft-trend" onclick="App.handleTrendRewrite(${Number(t.id) || 0})">
                         <i class="fa-solid fa-wand-magic-sparkles"></i> Turn into Draft
                     </button>
                 </div>
             </div>
-        `).join("");
+        `}).join("");
+    }
+
+    renderTrendKeywordSummary() {
+        const keywords = Array.isArray(this.state.competitorTrendKeywords) ? this.state.competitorTrendKeywords : [];
+        if (!keywords.length) return '';
+
+        const keywordChips = keywords.slice(0, 10).map(item => {
+            const term = this.escapeHtml(item.term || item.keyword || '');
+            if (!term) return '';
+            const count = Number(item.trendCount) || 0;
+            const countHtml = count ? `<span style="opacity:0.75;">${count} hit${count === 1 ? '' : 's'}</span>` : '';
+            return `<span class="badge" style="display:inline-flex; gap:6px; align-items:center; background:rgba(0,229,255,0.08); border:1px solid rgba(0,229,255,0.18); color:var(--accent); margin:0 6px 6px 0;"><i class="fa-solid fa-key"></i>${term}${countHtml}</span>`;
+        }).join('');
+
+        const queryCount = Array.isArray(this.state.trendSearchQueries) ? this.state.trendSearchQueries.length : 0;
+        return `
+            <div class="social-post-card" style="grid-column:1 / -1; border-left:3px solid var(--accent);">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
+                    <strong style="font-size:0.95rem; color:var(--text-primary);"><i class="fa-solid fa-chart-line text-cyan"></i> Top keyword targets</strong>
+                    <span style="font-size:0.75rem; color:var(--text-secondary);">${queryCount ? `${queryCount} research searches` : 'Onboarding-derived plan'}</span>
+                </div>
+                <div>${keywordChips}</div>
+            </div>`;
     }
 
     async handleTrendRewrite(trendId) {
