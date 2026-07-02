@@ -44,6 +44,10 @@ Last updated: 2026-07-02
 - `docker logs ad-agency-autopilot` showed the scrape reached directory/Gemini fallback after roster/site failures, explaining the no-result/no-error perception.
 - `node --check server.js` and `node --check app.js` passed after the bounded-fallback/no-leads-warning fix.
 - `git diff --check` passed with normal Windows CRLF warnings only.
+- VPS deployment verification after bounded fallback fix:
+  - `ad-agency-autopilot` rebuilt and restarted healthy; scraper sidecar and tunnel remained running.
+  - `docker exec ad-agency-autopilot node --check /app/server.js` and `/app/app.js` passed.
+  - Deployed code contains `LEAD_REALTOR_DIRECTORY_TIMEOUT_MS`, `LEAD_GENERIC_GEMINI_FALLBACK_FOR_REALTORS`, the no-public-agent-emails warning, and the UI no-leads warning.
 - Production investigation showed the Gulf Shores scrape created business-name leads from Maps rows (`Coastal Resort Realty`, `Kim Ward Realty, LLC`, `Living My Best Life Realty`, `Realty Executives Gulf Coast`) and inserted 4 because one candidate email was duplicate-filtered.
 - `node --check server.js` passed after the realtor scrape filter/order/count fix.
 - Cheerio selector smoke for case-insensitive class/aria selectors passed.
@@ -63,6 +67,7 @@ Last updated: 2026-07-02
 
 - Social video preview layout code commit pushed and deployed: `13ab621` (`Fix social video preview layout`).
 - Realtor roster quality code commit pushed and deployed: `43cc427` (`Prioritize realtor roster lead quality`).
+- Bounded realtor fallback code commit pushed and deployed: `b0c92e2` (`Bound realtor scrape fallback time`).
 - This handoff includes post-deploy documentation for the latest scraper quality fix and the prior video-preview release.
 - Runtime secrets/data remain uncommitted.
 - Previously deployed commits:
@@ -73,6 +78,7 @@ Last updated: 2026-07-02
   - `0ae31d0` (`Add realtor directory lead discovery`)
   - `4946727` (`Add brokerage roster lead scraping`)
   - `43cc427` (`Prioritize realtor roster lead quality`)
+  - `b0c92e2` (`Bound realtor scrape fallback time`)
   - `2b33db0` (`Add CRM auto-approve campaign setting`)
 
 ## Deployment Notes
@@ -80,6 +86,7 @@ Last updated: 2026-07-02
 - Latest deployment copied only `app.js`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
 - Realtor roster quality deployment copied `server.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T115554Z-realtor-roster-quality`.
+- Bounded realtor fallback deployment copied `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`; backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T120757Z-bound-realtor-fallback`.
 - Rebuild/restart targeted only `ad-agency-autopilot`; scraper sidecar and other VPS projects were left alone.
 - Deployed container checks passed for `node --check /app/app.js` and `node --check /app/server.js`.
 - `docker compose ps ad-agency-autopilot` reported the app container healthy on `127.0.0.1:3100->3000`.
