@@ -1305,7 +1305,7 @@ function isPlausibleAgentName(value, brokerageName = '') {
     if (!text || text.length < 3 || text.length > 80) return false;
     if (text.includes('@') || /\d{3}/.test(text)) return false;
     if (brokerageName && text.toLowerCase() === cleanLeadText(brokerageName).toLowerCase()) return false;
-    if (/\b(contact|email|phone|office|search|language|agents?|realtors?|brokerage|properties|listings|buy|sell|home)\b/i.test(text)) return false;
+    if (/\b(contact|email|phone|office|search|language|agents?|realtors?|brokerage|properties|listings|buy|sell|home|privacy|policy|terms?|cookies?|unable|error|page|website|site map|accessibility)\b/i.test(text)) return false;
     return /^[A-Za-z][A-Za-z .,'-]+$/.test(text);
 }
 
@@ -1322,6 +1322,73 @@ function normalizeAgentName(value) {
         .replace(/\b(realtor|broker|associate broker|agent|sales associate|licensed)\b/ig, '')
         .replace(/[|•·]+/g, ' ')
         .trim();
+}
+
+function normalizeLeadIdentityText(value = '') {
+    return cleanLeadText(value)
+        .toLowerCase()
+        .replace(/\b(realtor|broker|associate broker|agent|sales associate|licensed|llc|inc|ltd|company|co)\b/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeLeadPhoneKey(value = '') {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1);
+    return digits.length >= 10 ? digits.slice(-10) : '';
+}
+
+function getLeadDomainKey(lead = {}) {
+    const domain = normalizeDomain(lead.website || lead.sourceUrl || '');
+    return domain && !domain.includes('@') ? domain : '';
+}
+
+function getLeadIdentityKey(lead = {}) {
+    const nameKey = normalizeLeadIdentityText(lead.name);
+    if (!nameKey) return '';
+
+    const phoneKey = normalizeLeadPhoneKey(lead.phone);
+    if (phoneKey) return `name-phone:${nameKey}|${phoneKey}`;
+
+    const companyKey = normalizeLeadIdentityText(lead.company);
+    if (companyKey) return `name-company:${nameKey}|${companyKey}`;
+
+    const domainKey = getLeadDomainKey(lead);
+    if (domainKey) return `name-domain:${nameKey}|${domainKey}`;
+
+    return `name:${nameKey}`;
+}
+
+function isDisallowedLeadSourceUrl(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return false;
+
+    try {
+        const parsed = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+        const pathText = decodeURIComponent(`${parsed.pathname} ${parsed.search}`).toLowerCase();
+        return /\b(privacy|terms|cookie|cookies|legal|accessibility|dmca|disclaimer|site-?map|policy)\b/i.test(pathText);
+    } catch (error) {
+        return /\b(privacy|terms|cookie|cookies|legal|accessibility|dmca|disclaimer|site-?map|policy)\b/i.test(raw);
+    }
+}
+
+function leadIdentityMatches(a = {}, b = {}) {
+    const nameA = normalizeLeadIdentityText(a.name);
+    const nameB = normalizeLeadIdentityText(b.name);
+    if (!nameA || !nameB || nameA !== nameB) return false;
+
+    const phoneA = normalizeLeadPhoneKey(a.phone);
+    const phoneB = normalizeLeadPhoneKey(b.phone);
+    if (phoneA && phoneB && phoneA === phoneB) return true;
+
+    const companyA = normalizeLeadIdentityText(a.company);
+    const companyB = normalizeLeadIdentityText(b.company);
+    if (companyA && companyB && companyA === companyB) return true;
+
+    const domainA = getLeadDomainKey(a);
+    const domainB = getLeadDomainKey(b);
+    return Boolean(domainA && domainB && domainA === domainB);
 }
 
 function findAgentNameInScope($, scope, brokerageName = '') {
@@ -1382,6 +1449,8 @@ function collectEmailsFromContactElement($, el) {
 }
 
 function extractBrokerageAgentCandidatesFromHtml(html, pageUrl, brokerageName, brokerageWebsite, discoveryQuery) {
+    if (isDisallowedLeadSourceUrl(pageUrl)) return [];
+
     const $ = cheerio.load(String(html || ''));
     const candidates = [];
     const seenEmails = new Set();
@@ -1859,12 +1928,15 @@ function isRealtorLeadQuery(query = '') {
 
 function mergeLeadCandidatesByEmail(...candidateGroups) {
     const merged = [];
-    const seen = new Set();
+    const seenEmails = new Set();
+    const seenIdentities = new Set();
 
     for (const candidate of candidateGroups.flat()) {
         const emailKey = String(candidate.email || '').trim().toLowerCase();
-        if (!emailKey || seen.has(emailKey)) continue;
-        seen.add(emailKey);
+        const identityKey = getLeadIdentityKey(candidate);
+        if (!emailKey || seenEmails.has(emailKey) || (identityKey && seenIdentities.has(identityKey))) continue;
+        seenEmails.add(emailKey);
+        if (identityKey) seenIdentities.add(identityKey);
         merged.push(candidate);
     }
 
@@ -2018,12 +2090,26 @@ function insertLeadCandidates(candidates, discoveryQuery, options = {}) {
     const insertedLeads = [];
     const skipped = { dnc: 0, duplicate: 0, invalid: 0 };
     const limit = Math.min(Math.max(parseInt(options.limit, 10) || candidates.length || 0, 0), 1000);
+    const seenIdentityKeys = new Set();
 
     for (const lead of candidates) {
         if (limit && insertedLeads.length >= limit) break;
 
-        if (!lead.name || !isLikelyEmail(lead.email)) {
+        if (!lead.name || !isUsefulLeadEmail(lead.email)) {
             skipped.invalid++;
+            continue;
+        }
+
+        if (options.realtorContactsOnly) {
+            if (!isLikelyIndividualAgentLeadName(lead.name) || isDisallowedLeadSourceUrl(lead.sourceUrl || lead.website)) {
+                skipped.invalid++;
+                continue;
+            }
+        }
+
+        const identityKey = getLeadIdentityKey(lead);
+        if (identityKey && seenIdentityKeys.has(identityKey)) {
+            skipped.duplicate++;
             continue;
         }
 
@@ -2037,6 +2123,15 @@ function insertLeadCandidates(candidates, discoveryQuery, options = {}) {
             skipped.duplicate++;
             console.log(`[Scraper] Skipping duplicate lead email: ${lead.email}`);
             continue;
+        }
+
+        if (identityKey) {
+            const possibleExistingMatches = db.getLeads({ search: lead.name, limit: 50 });
+            if (possibleExistingMatches.some(existing => leadIdentityMatches(existing, lead))) {
+                skipped.duplicate++;
+                console.log(`[Scraper] Skipping duplicate lead identity: ${lead.name}`);
+                continue;
+            }
         }
 
         const leadRecord = {
@@ -2055,6 +2150,7 @@ function insertLeadCandidates(candidates, discoveryQuery, options = {}) {
         const leadId = db.insertLead(leadRecord);
 
         if (leadId) {
+            if (identityKey) seenIdentityKeys.add(identityKey);
             insertedLeads.push({
                 id: leadId,
                 ...leadRecord
@@ -2176,7 +2272,10 @@ async function runLeadScrape(niche, count, onProgress = () => {}) {
     }
 
     onProgress('inserting', `Found ${candidates.length} candidate(s). Inserting new valid leads...`);
-    const { insertedLeads, skipped } = insertLeadCandidates(candidates, niche, { limit: count });
+    const { insertedLeads, skipped } = insertLeadCandidates(candidates, niche, {
+        limit: count,
+        realtorContactsOnly: realtorQuery
+    });
 
     return {
         leads: insertedLeads,

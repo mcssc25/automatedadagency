@@ -14,6 +14,16 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Tightened realtor lead quality after Gulf Shores scrape inserted Rob Smith three times, including two rows named `Privacy Policy` / `Privacy Policy Unable`.
+- Realtor lead insertion now rejects non-agent page/title names such as privacy, policy, terms, cookies, unable/error pages, legal/accessibility pages, etc.
+- Brokerage roster extraction now skips privacy/legal/policy source URLs before parsing candidate contacts.
+- Candidate merging and insertion now dedupe by normalized person identity, using name plus phone, company, or source/website domain, not email alone.
+- Scrape insertion now uses `isUsefulLeadEmail`, so generic office/admin-style emails are blocked at final insert even if they came from Gemini/directory fallback.
+- Existing bad production rows were cleaned up: deleted lead ids `13` and `14` after backing up the DB. Kept the single clean `Rob Smith` row and the valid `Danielle Mize` row.
+- DB cleanup backup: `/opt/ad-agency-autopilot/data/backups/lead-cleanup-20260702T173550Z-rob-smith-privacy`.
+
+## Previous Update
+
 - Changed realtor lead scraping to prioritize brokerage roster discovery from grounded Google/Gemini search instead of starting with Google Maps place rows.
 - Realtor queries now first discover brokerage/office websites and likely public roster URLs, then crawl those roster/team/agent/profile pages for visible individual agent emails.
 - Maps enrichment is now a fallback when brokerage roster discovery does not fill the requested count; it can be disabled with `LEAD_MAPS_FALLBACK=false`.
@@ -48,6 +58,9 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- `node --check server.js` passed after the realtor lead cleanup guardrails.
+- `git diff --check` passed with normal Windows CRLF warnings only.
+- Production DB inspection confirmed the bad rows were `Privacy Policy` and `Privacy Policy Unable`; post-cleanup recent rows show those two removed.
 - `node --check server.js` passed after the brokerage-roster-first change.
 - `git diff --check` passed with normal Windows CRLF warnings only.
 - VPS deployment verification after brokerage-roster-first update:
