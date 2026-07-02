@@ -318,6 +318,21 @@ function updateLead(lead) {
     return result.changes;
 }
 
+function deleteLead(id) {
+    const deleteEnrollments = db.prepare('DELETE FROM campaign_enrollments WHERE leadId = ?');
+    const deleteLeadRow = db.prepare('DELETE FROM leads WHERE id = ?');
+    try {
+        db.exec('BEGIN');
+        deleteEnrollments.run(id);
+        const changes = deleteLeadRow.run(id).changes;
+        db.exec('COMMIT');
+        return changes;
+    } catch (err) {
+        db.exec('ROLLBACK');
+        throw err;
+    }
+}
+
 // DNC DAO
 function isEmailDnc(email) {
     const stmt = db.prepare('SELECT 1 FROM dnc_list WHERE LOWER(email) = ?');
@@ -489,6 +504,7 @@ module.exports = {
     getLeadByEmail,
     insertLead,
     updateLead,
+    deleteLead,
     isEmailDnc,
     addEmailToDnc,
     getDncList,

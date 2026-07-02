@@ -6,65 +6,48 @@ Last updated: 2026-07-02
 
 - Project: Ad Agency Autopilot / Autonomous Sales CRM for selling Real Estate CRM Pro.
 - GitHub repo: `https://github.com/mcssc25/automatedadagency.git`, branch `main`.
-- Production app URL: `https://agents.realestatecrmpro.com`.
-- VPS app path: `/opt/ad-agency-autopilot`.
-- Production runs on the ClaimPilot/shared VPS at `178.156.178.56`; only touch `/opt/ad-agency-autopilot` there, never the separate ClaimPilot project.
-- VPS deploys are file-copy based, not `git pull` based: backup changed runtime files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`, copy only this app's files, then `docker compose up -d --build ad-agency-autopilot`.
-- Cloudflare Tunnel routes the app hostname to the VPS. Do not alter `fluffysbait.com`.
-- Mailgun outreach sending domain: `outreach.realestatecrmpro.com`.
-- App secrets live outside git in ignored env/runtime files. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, logs, or `node_modules`.
-- Gemini key rotations may use `C:\Users\daved\Desktop\Gemini Key for AI Ad Agency.txt`; keep the key itself only in ignored `.env` files and never in docs/git.
+- Production app URL: `https://agents.realestatecrmpro.com`; VPS path: `/opt/ad-agency-autopilot`.
+- Production runs on shared ClaimPilot VPS `178.156.178.56`; only touch `/opt/ad-agency-autopilot`, never ClaimPilot or `fluffysbait.com`.
+- VPS deploys are file-copy based, not `git pull`: backup changed runtime files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`, copy only this app's files, then rebuild `ad-agency-autopilot`.
+- Runtime secrets/data are ignored. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, logs, or `node_modules`.
+- Mailgun outreach domain: `outreach.realestatecrmpro.com`.
+- Gemini key rotations may use `C:\Users\daved\Desktop\Gemini Key for AI Ad Agency.txt`; never store the key in docs/git.
 
 ## Product Direction
 
-- Goal is a review-first AI marketing operator: deep business research, competitor discovery, viral social research/adaptation, lead discovery, and email campaigns.
-- User wants to see each automation part work and approve outputs before turning on full autonomy.
-- Dashboard/support activity should distinguish real records/jobs from demo simulation; no fake leads, fake support chats, fake KPI movement, fake publishing success, fake email sends, or mock trend fallbacks.
-- Content Studio can recommend today's post, draft copy, and attach locally saved generated images through `/api/generate-image-prompt` + `/api/generate-image`.
-- Onboarding scan is intended to produce deep business intelligence: company crawl, Gemini grounded research, competitor profiles/social links, SWOT, and business report.
+- Goal is a review-first AI marketing operator: business research, competitor discovery, content/ad generation, lead discovery, and email campaigns.
+- User wants to see each automation part work and approve outputs before full autonomy.
+- Dashboard/support activity should distinguish real records/jobs from demo simulation; no fake leads, fake chats, fake KPI movement, fake publish success, fake email sends, or mock trend fallbacks.
+- Onboarding scan should produce deep business intelligence: company crawl, Gemini grounded research, competitor profiles/social links, SWOT, and business report.
 
 ## CRM / Email Safeguards
 
 - Lead emails are normalized before storage; scraping skips invalid emails, existing lead emails, and DNC emails.
-- DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients.
-- DNC removal is disabled unless `ALLOW_DNC_REMOVAL=true` is intentionally set for admin recovery.
+- DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients and DNC removal requires `ALLOW_DNC_REMOVAL=true`.
 - Mailgun inbound replies post to `/api/webhooks/inbound-email`; CRM polls on `#crm`.
-- Lead scraping prefers `LEAD_SCRAPER_URL=http://lead-scraper:8080`; `/api/scrape-leads` now starts an async in-memory job, `/api/scrape-leads/jobs/:id` polls status, and completed jobs insert/dedupe leads.
-- If Maps has a website but no email, the backend crawls homepage/contact-style pages for public emails before Gemini fallback.
-- Realtor-focused lead scraping adds a compliant directory-discovery layer for Zillow/Realtor.com/Redfin/Homes.com profile signals, but does not bypass robots, logins, CAPTCHAs, private APIs, or scrape Realtor.com without permission; emails must be publicly visible before insertion.
-- Preferred realtor scraping route is now brokerage-first: Maps finds local brokerages, then the backend crawls brokerage roster/team/agent pages and limited public agent profile links for visible agent emails.
-- Lead records support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
-- Sales asset settings persist in CRM settings: booking/calendar link, sales page URL, default demo YouTube video, and YouTube page/channel.
-- Campaign copy can use `[CTA Link]`, `[Booking Link]`, `[Demo Link]`, `[YouTube Link]`, `[Sales Page]`, and `[Website]`.
-- Campaign approval targets only leads with stage `Scraped`, sends Step 1 immediately through Mailgun, and stores campaign id/step on those leads.
-- CRM has a persistent `campaign_enrollments` ledger so campaign progress is separate from lead pipeline stage.
-- Backend pipeline automation is behind explicit toggles: daily scrape, auto-enroll Scraped leads into Campaign 1, auto-approve new campaigns, and auto-send due follow-up steps. Defaults are off.
-- Auto-approved campaigns launch Step 1 immediately; delayed campaign steps are sent by the backend worker only when auto-follow-up is enabled.
-- Open/click/signup routing is not connected yet; only inbound replies are tracked through Mailgun inbound webhook.
-
-## Current Local Status
-
-- 2026-07-02 dev hardening update: `server.js` now serves only allowlisted root frontend files plus `/downloads`; source, DB, credentials, logs, and runtime files are no longer static assets.
-- Production/container mode now requires `ADMIN_PASSWORD` unless `ADMIN_AUTH_ENABLED=false`; Basic auth protects dashboard/API while `/api/app-config`, `/api/unsubscribe`, `/api/webhooks/inbound-email`, and `/downloads/*` remain public.
-- CORS is restricted to `PUBLIC_APP_URL` / `CORS_ALLOWED_ORIGINS` instead of wildcard.
-- Mailgun inbound webhook now verifies timestamp/token/signature HMAC and supports urlencoded or multipart fields via `multer`.
-- Outbound Mailgun sends now require `PUBLIC_APP_URL` and `OUTBOUND_POSTAL_ADDRESS` by default, append unsubscribe/mailing-address footer, and set `List-Unsubscribe` headers.
-- Scheduled post "Post Now" from the scheduled queue now passes `'scheduledPosts'` correctly.
-- Current local/Docker state checked on 2026-07-02: 3 leads, 1 Scraped lead, 2 DNC entries, 0 campaigns, auto-approve/auto-follow-up off.
-- Hardening update was deployed to VPS on 2026-07-02 with `ADMIN_PASSWORD`, `PUBLIC_APP_URL`, `MAILGUN_WEBHOOK_SIGNING_KEY`, auth enabled, and restricted CORS.
-- Public verification after deploy: unauthenticated dashboard/API/source/DB requests are blocked; authenticated dashboard/CRM works; source/DB paths return 404 even with auth; Mailgun unsigned webhook rejects and valid signed webhook passes.
-- 2026-07-02 lead scrape fix: async job polling prevents Cloudflare/browser request timeouts from surfacing as raw HTML during long scrape/enrichment runs.
 - `OUTBOUND_POSTAL_ADDRESS` is still blank, so outbound Mailgun sends fail closed until the user supplies a valid physical mailing address.
-- Hardening deployment code commit: `c35051f` (`Harden agency app deployment`).
-- Async lead scrape commit `43c3054` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T092935Z-async-lead-scrape`.
-- Realtor directory discovery commit `0ae31d0` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T095955Z-realtor-directory-discovery`.
-- Brokerage roster scraping commit `4946727` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T101539Z-brokerage-roster-scrape`.
-- Latest code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.
-- Commit `2b33db0` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
+- Lead scraping uses async jobs: `POST /api/scrape-leads` starts a job, `/api/scrape-leads/jobs/:id` polls status, and completed jobs insert/dedupe leads.
+- Preferred realtor scraping route is brokerage-first: Maps finds local brokerages, then the backend crawls public roster/team/agent pages for visible agent emails.
+- Realtor directory discovery uses Zillow/Realtor.com/Redfin/Homes.com as profile-discovery signals only; do not bypass robots, logins, CAPTCHAs, paywalls, or private APIs.
+- Lead records support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
+- CRM has a persistent `campaign_enrollments` ledger so campaign progress is separate from lead pipeline stage.
+- Campaign approval targets only `Scraped` leads, sends Step 1 through Mailgun, and stores campaign id/step on leads.
+- Backend automation toggles default off: daily scrape, auto-enroll Scraped leads, auto-approve campaigns, and auto-send due follow-ups.
+- Auto-pause on reply is supported through Mailgun inbound webhook; manual lead pause/delete controls were added locally on 2026-07-02.
+- Manual pause stops active campaign enrollment for one lead and logs a timeline note. Manual delete removes the lead and their enrollment rows but does not add DNC.
+- Open/click/signup routing is not connected yet; only inbound replies are tracked.
+
+## Current Status
+
+- 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
+- Hardening deployment commit: `c35051f`; async lead scrape commit: `43c3054`; realtor directory commit: `0ae31d0`; brokerage roster commit: `4946727`; CRM auto-approve commit: `2b33db0`.
+- Latest update adds lead-detail controls for `Pause Campaign` and `Delete Lead`, plus `POST /api/leads/:id/pause-campaign` and `DELETE /api/leads/:id`.
+- Local verification for latest update: `node --check db.js`, `node --check server.js`, `node --check app.js`, `db.initDb()` module load, and temporary smoke on `PORT=3131` for `/api/crm-state` plus 404 pause/delete routes passed.
+- Lead-management update commit subject: `Add CRM lead management controls`; deployment status is tracked in `handoff.md`.
 
 ## Working Agreements
 
-- At the end of each meaningful update, refresh both `MEMORY.md` and `handoff.md`.
-- Keep `MEMORY.md` short and prune stale details instead of appending forever.
-- Keep `handoff.md` focused on latest state, verification, blockers, and next steps.
-- User preference: after completing project updates, push/deploy them live by default unless there is a clear blocker, explicit pause, or safety issue.
+- After every meaningful update, refresh both `MEMORY.md` and `handoff.md`.
+- Keep `MEMORY.md` compact and high-signal; prune stale details instead of appending forever.
+- Keep `handoff.md` focused on latest state, verification, blockers, repo/deploy status, and next steps.
+- User preference: after completing project updates, push/deploy live by default unless there is a clear blocker, explicit pause, or safety issue.

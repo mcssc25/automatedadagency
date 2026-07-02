@@ -1723,6 +1723,55 @@ body {
     margin-top: 8px;
 }
 
+.lead-management-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.lead-action-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.1;
+    cursor: pointer;
+    transition: all var(--transition-speed) ease;
+}
+
+.lead-action-button i {
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+.lead-action-button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.lead-action-button.danger {
+    color: #ff9a9a;
+}
+
+.lead-action-button.danger i {
+    color: #ff5c5c;
+}
+
+.lead-action-button.danger:hover {
+    border-color: #ff5c5c;
+    color: #ffb0b0;
+}
+
 .lead-enrollment-note {
     margin-top: 8px;
     color: var(--text-secondary);

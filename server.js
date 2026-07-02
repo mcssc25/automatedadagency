@@ -477,6 +477,48 @@ app.put('/api/leads/:id', (req, res) => {
     }
 });
 
+app.post('/api/leads/:id/pause-campaign', (req, res) => {
+    try {
+        const leadId = parseInt(req.params.id);
+        const lead = db.getLeadById(leadId);
+        if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+        const pausedEnrollments = db.pauseLeadEnrollments(leadId, 'Paused');
+        lead.currentCampaignId = null;
+        lead.currentCampaignStep = null;
+        lead.lastStepTime = null;
+        lead.history = Array.isArray(lead.history) ? lead.history : [];
+        lead.history.push({
+            sender: 'agent-action',
+            time: 'Just Now',
+            text: pausedEnrollments > 0
+                ? 'Campaign outreach manually paused for this lead.'
+                : 'Manual pause requested. No active campaign enrollment was running.'
+        });
+        db.updateLead(lead);
+
+        const updatedLead = attachEnrollmentSummaries([db.getLeadById(leadId)])[0];
+        res.json({ success: true, pausedEnrollments, lead: updatedLead });
+    } catch (err) {
+        console.error('[CRM Lead Pause Error]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/leads/:id', (req, res) => {
+    try {
+        const leadId = parseInt(req.params.id);
+        const lead = db.getLeadById(leadId);
+        if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+        const deleted = db.deleteLead(leadId);
+        res.json({ success: true, deleted });
+    } catch (err) {
+        console.error('[CRM Lead Delete Error]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // DNC endpoints
 app.get('/api/dnc', (req, res) => {
     try {

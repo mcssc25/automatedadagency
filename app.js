@@ -3851,6 +3851,13 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             leadWebsiteUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(leadWebsiteUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-globe"></i>Website</a>` : '',
             leadSourceUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(leadSourceUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-map-location-dot"></i>Maps Source</a>` : ''
         ].filter(Boolean).join('');
+        const canPauseCampaign = lead.activeEnrollment && lead.activeEnrollment.status === 'Active';
+        const leadManagementActions = [
+            canPauseCampaign
+                ? `<button type="button" class="lead-action-button" title="Pause this lead's active drip campaign" onclick="App.pauseLeadCampaign(${lead.id})"><i class="fa-solid fa-pause"></i> Pause Campaign</button>`
+                : '',
+            `<button type="button" class="lead-action-button danger" title="Delete this lead from the pipeline" onclick="App.deleteLead(${lead.id})"><i class="fa-solid fa-trash"></i> Delete Lead</button>`
+        ].filter(Boolean).join('');
         const safeEnrollmentLine = lead.activeEnrollment
             ? `<div class="lead-enrollment-note">Campaign ${this.escapeHtml(lead.activeEnrollment.campaignOrder)}: ${this.escapeHtml(lead.activeEnrollment.campaignName || 'Unknown')} &middot; Step ${this.escapeHtml(lead.activeEnrollment.currentStep)} &middot; ${this.escapeHtml(lead.activeEnrollment.status)}</div>`
             : '';
@@ -3865,6 +3872,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             </div>
             ${leadMetaChips ? `<div class="selected-lead-meta">${leadMetaChips}</div>` : ''}
             ${leadActionLinks ? `<div class="selected-lead-actions">${leadActionLinks}</div>` : ''}
+            ${leadManagementActions ? `<div class="lead-management-actions">${leadManagementActions}</div>` : ''}
             ${safeEnrollmentLine}
         `;
 
@@ -3892,6 +3900,58 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         
         // Auto scroll
         this.dom.crmChatMessages.scrollTop = this.dom.crmChatMessages.scrollHeight;
+    }
+
+    async pauseLeadCampaign(leadId) {
+        const lead = this.state.leads.find(item => String(item.id) === String(leadId));
+        if (!lead) return;
+
+        if (!confirm(`Pause the active campaign for ${lead.name}?`)) return;
+
+        try {
+            const response = await fetch(`/api/leads/${leadId}/pause-campaign`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+            });
+            if (!response.ok) {
+                throw new Error(await this.parseApiError(response, "Could not pause campaign"));
+            }
+
+            const data = await response.json();
+            this.appendConsoleLine('agent-sales', `Paused campaign outreach for ${lead.name}. ${data.pausedEnrollments || 0} enrollment(s) updated.`);
+            await this.loadCrmStateFromServer();
+            this.renderSelectedLead();
+            this.renderCampaignWorkflowSummary();
+        } catch (error) {
+            console.error("[Lead Pause Error]", error);
+            alert(`Failed to pause campaign: ${error.message}`);
+        }
+    }
+
+    async deleteLead(leadId) {
+        const lead = this.state.leads.find(item => String(item.id) === String(leadId));
+        if (!lead) return;
+
+        if (!confirm(`Delete ${lead.name} from the lead pipeline?\n\nThis removes their CRM record and campaign enrollment history, but it does not add them to the DNC blacklist.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/leads/${leadId}`, { method: "DELETE" });
+            if (!response.ok) {
+                throw new Error(await this.parseApiError(response, "Could not delete lead"));
+            }
+
+            this.appendConsoleLine('agent-sales', `Deleted ${lead.name} from the lead pipeline.`);
+            this.state.selectedLeadId = null;
+            this.state.selectedLeadIndex = null;
+            await this.loadCrmStateFromServer();
+            this.renderSelectedLead();
+            this.renderCampaignWorkflowSummary();
+        } catch (error) {
+            console.error("[Lead Delete Error]", error);
+            alert(`Failed to delete lead: ${error.message}`);
+        }
     }
 
     async runCrmPipelineNow() {
