@@ -83,7 +83,8 @@ Last updated: 2026-07-02
 
 - Files changed for OpenRouter lead-intelligence provider wiring: `server.js`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
-- OpenRouter wiring is verified locally and pending commit/deploy in the current turn.
+- OpenRouter wiring commit pushed to `main`: `e484757` (`Add OpenRouter lead intelligence provider`).
+- OpenRouter wiring is pending production deploy in the current turn.
 - Files changed for lead-intelligence work: `Dockerfile`, `db.js`, `docker-compose.yml`, `package.json`, `package-lock.json`, `server.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
 - Lead-intelligence code is pushed and deployed. Main commits: `a91eb02` (`Add brokerage lead intelligence engine`), `66340d0` (`Seed brokerage brand city searches`), `c7434e6` (`Preserve discovered brokerage targets`), `fb0284b` (`Keep seeded offices queue position`), `6fb7bd3` (`Detect blocked roster browser pages`), `caea108` (`Mark interrupted intelligence runs`).
