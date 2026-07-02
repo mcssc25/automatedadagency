@@ -38,12 +38,16 @@ Last updated: 2026-07-02
   - `DELETE /api/leads/999999999` returned 404.
 - Smoke did not mutate any real lead records.
 - No real campaign send was triggered.
+- VPS deployment verification:
+  - Backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T160315Z-lead-management`.
+  - `ad-agency-autopilot` rebuilt and restarted healthy.
+  - Deployed container checks passed for `node --check /app/db.js`, `/app/server.js`, and `/app/app.js`.
+  - Deployed files include `pause-campaign`, `pauseLeadCampaign`, and `deleteLead`.
 
 ## Repo / Deployment Status
 
-- Modified files: `app.js`, `db.js`, `index.css`, `server.js`, `MEMORY.md`, `handoff.md`.
-- Latest lead-management commit subject: `Add CRM lead management controls`.
-- Latest lead-management update is committed locally at this point, but not pushed or deployed yet.
+- Lead-management code commit pushed and deployed: `2e0a824` (`Add CRM lead management controls`).
+- This handoff includes the post-deploy documentation sync for that release.
 - Runtime secrets/data remain uncommitted.
 - Previously deployed commits:
   - `c35051f` (`Harden agency app deployment`)
@@ -54,14 +58,12 @@ Last updated: 2026-07-02
 
 ## Deployment Notes
 
-- If deploying this latest update, back up changed production files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`.
-- Copy only this app's changed files to `/opt/ad-agency-autopilot`.
-- Rebuild/restart only the app service with Docker Compose; keep scraper and tunnel separate unless their status requires attention.
+- Latest deployment copied only `app.js`, `db.js`, `index.css`, `server.js`, `MEMORY.md`, and `handoff.md`.
+- Rebuild/restart targeted only `ad-agency-autopilot`; scraper sidecar was left running.
 - Do not copy ignored runtime files or local DB/log/smoke artifacts.
 
 ## Next Steps
 
-- Commit/push/deploy the lead-management update when ready.
 - Browser-check the selected lead panel on desktop and mobile after deploy to confirm the new controls sit cleanly under the lead metadata.
 - Add a valid physical mailing address to local and VPS `OUTBOUND_POSTAL_ADDRESS`, then run a safe test campaign send.
 - Add smoke/integration tests for CRM lead scrape, campaign approval/send, DNC block, inbound reply pause, manual lead pause, and manual lead delete.

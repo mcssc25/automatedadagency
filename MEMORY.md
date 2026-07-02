@@ -43,7 +43,7 @@ Last updated: 2026-07-02
 - Hardening deployment commit: `c35051f`; async lead scrape commit: `43c3054`; realtor directory commit: `0ae31d0`; brokerage roster commit: `4946727`; CRM auto-approve commit: `2b33db0`.
 - Latest update adds lead-detail controls for `Pause Campaign` and `Delete Lead`, plus `POST /api/leads/:id/pause-campaign` and `DELETE /api/leads/:id`.
 - Local verification for latest update: `node --check db.js`, `node --check server.js`, `node --check app.js`, `db.initDb()` module load, and temporary smoke on `PORT=3131` for `/api/crm-state` plus 404 pause/delete routes passed.
-- Lead-management update commit subject: `Add CRM lead management controls`; deployment status is tracked in `handoff.md`.
+- Lead-management code commit `2e0a824` (`Add CRM lead management controls`) was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T160315Z-lead-management`.
 
 ## Working Agreements
 
