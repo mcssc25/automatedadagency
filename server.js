@@ -2651,6 +2651,10 @@ async function findNextRosterPage(page) {
     });
 }
 
+function isBlockedRosterError(message = '') {
+    return /\b(cloudflare|security verification|not a bot|captcha|forbidden|too many requests|blocked|403|429)\b/i.test(String(message || ''));
+}
+
 async function harvestRosterWithBrowser(office) {
     const chromium = loadPlaywrightChromium();
     const executablePath = process.env.BROWSER_CHROMIUM_PATH || process.env.CHROMIUM_PATH || '/usr/bin/chromium';
@@ -2682,6 +2686,11 @@ async function harvestRosterWithBrowser(office) {
 
             await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: ROSTER_BROWSER_TIMEOUT_MS });
             await page.waitForTimeout(1500);
+
+            const challengeText = await page.evaluate(() => `${document.title || ''}\n${document.body?.innerText || ''}`.slice(0, 1200));
+            if (/\b(just a moment|security verification|verify you are not a bot|cloudflare|captcha)\b/i.test(challengeText)) {
+                throw new Error('Blocked by browser security verification / Cloudflare challenge.');
+            }
 
             const pageContacts = await extractRosterContactsFromBrowserPage(page, office.brokerageName, office);
             contacts.push(...pageContacts);
@@ -2733,7 +2742,8 @@ async function harvestBrokerageOfficeRoster(office) {
         return {
             contacts: fallbackCandidates,
             pagesScanned: 0,
-            warning: browserError.message
+            warning: browserError.message,
+            blocked: isBlockedRosterError(browserError.message)
         };
     }
 }
@@ -2811,7 +2821,7 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
             if (saved) insertedOrUpdated++;
         }
 
-        const status = insertedOrUpdated > 0 ? 'Harvested' : 'No Contacts';
+        const status = insertedOrUpdated > 0 ? 'Harvested' : harvest.blocked ? 'Blocked' : harvest.warning ? 'Failed' : 'No Contacts';
         db.updateBrokerageOffice(office.id, {
             status,
             lastHarvestAt: new Date().toISOString(),
