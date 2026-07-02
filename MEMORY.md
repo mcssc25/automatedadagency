@@ -43,7 +43,8 @@ Last updated: 2026-07-02
 
 - Local server on port 3000 was restarted on 2026-07-02 after CRM auto-approve changes.
 - `/api/crm-state` is SQLite-backed after restart and currently reports 1 Scraped lead, 2 DNC entries, 0 campaigns, and auto-approve/auto-follow-up off.
-- Latest local code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.
+- Latest code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.
+- Commit `2b33db0` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
 
 ## Working Agreements
 

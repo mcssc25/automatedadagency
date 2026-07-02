@@ -41,16 +41,26 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
-- Local changed files: `app.js`, `index.html`, `server.js`, `MEMORY.md`, `handoff.md`.
+- Git commit pushed: `2b33db0` (`Add CRM campaign auto-approve toggle`).
+- Local repo status was clean after commit/push before this final documentation refresh.
+- Live deployment completed on `/opt/ad-agency-autopilot`.
+- VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
+- Rebuilt only the `ad-agency-autopilot` service; tunnel and lead scraper stayed running.
 - Runtime secrets/data remain uncommitted.
-- Production has not yet been updated with this change in this handoff state.
+
+## Live Verification
+
+- VPS `docker compose ps ad-agency-autopilot` reported healthy.
+- Public `/api/app-config` returned `geminiConfigured: true`.
+- Public `/api/crm-state` returned:
+  - `campaignsListCount: 0`
+  - `verificationQueueCount: 1`
+  - `autoApproveCampaigns: false`
+  - `bypassEmailVerification: false`
+  - `autoAdvanceCampaigns: false`
+  - `dncCount: 0`
+- Public HTML contains `crm-auto-approve-campaigns`, `Auto-Approve New Campaigns`, and `Auto-Approve New CRM Campaigns`.
 
 ## Next Steps
 
-- Commit/push the CRM auto-approve update.
-- Deploy changed files to `/opt/ad-agency-autopilot` and rebuild only the `ad-agency-autopilot` service.
-- Live smoke test after deploy:
-  - Public `/api/app-config`.
-  - Public `/api/crm-state` for the new `autoApproveCampaigns` field.
-  - UI check that CRM Autopilot Settings shows the new toggle.
 - To fully exercise the drip, use a safe test lead/domain, enable Auto-Approve plus Auto-Send Due Follow-Up Steps, generate a campaign, then verify Step 1 sends and `campaign_enrollments.nextActionAt` is populated for Step 2.
