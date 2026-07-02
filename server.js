@@ -47,6 +47,24 @@ const REALTOR_DIRECTORY_DOMAINS = [
     'redfin.com',
     'homes.com'
 ];
+const BROKERAGE_ROSTER_KEYWORDS = [
+    'agent',
+    'agents',
+    'associate',
+    'associates',
+    'broker',
+    'brokers',
+    'realtor',
+    'realtors',
+    'roster',
+    'staff',
+    'team',
+    'professionals',
+    'our agents',
+    'meet the team',
+    'find an agent',
+    'getagent'
+];
 let pipelineWorkerRunning = false;
 const leadScrapeJobs = new Map();
 const webhookReplayTokens = new Map();
@@ -1225,6 +1243,168 @@ function extractPublicEmailsFromHtml(html) {
     return parseEmailListFromCsvValue(emailText.join('\n'));
 }
 
+function cleanLeadText(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function extractPhoneFromText(value) {
+    const text = String(value || '');
+    const match = text.match(/(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}(?:\s*(?:x|ext\.?)\s*\d+)?/i);
+    return match ? cleanLeadText(match[0]) : '';
+}
+
+function isPlausibleAgentName(value, brokerageName = '') {
+    const text = cleanLeadText(value)
+        .replace(/\b(realtor|broker|associate broker|agent|sales associate|licensed|abr|crs|gri|sfr|srs)\b/ig, '')
+        .replace(/[|•·]+/g, ' ')
+        .trim();
+
+    if (!text || text.length < 3 || text.length > 80) return false;
+    if (text.includes('@') || /\d{3}/.test(text)) return false;
+    if (brokerageName && text.toLowerCase() === cleanLeadText(brokerageName).toLowerCase()) return false;
+    if (/\b(contact|email|phone|office|search|language|agents?|realtors?|brokerage|properties|listings|buy|sell|home)\b/i.test(text)) return false;
+    return /^[A-Za-z][A-Za-z .,'-]+$/.test(text);
+}
+
+function normalizeAgentName(value) {
+    return cleanLeadText(value)
+        .replace(/\b(realtor|broker|associate broker|agent|sales associate|licensed)\b/ig, '')
+        .replace(/[|•·]+/g, ' ')
+        .trim();
+}
+
+function findAgentNameInScope($, scope, brokerageName = '') {
+    const preferredSelectors = [
+        '[itemprop="name"]',
+        '[class*="agent-name" i]',
+        '[class*="associate-name" i]',
+        '[class*="member-name" i]',
+        '[class*="name" i]',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'strong'
+    ];
+
+    for (const selector of preferredSelectors) {
+        const matches = $(scope).find(selector).addBack(selector);
+        for (const el of matches.toArray()) {
+            const candidate = normalizeAgentName($(el).text());
+            if (isPlausibleAgentName(candidate, brokerageName)) return candidate;
+        }
+    }
+
+    const lines = cleanLeadText($(scope).text())
+        .split(/(?:(?:\s{2,})|(?:\s-\s)|(?:\s\|\s))/)
+        .map(normalizeAgentName)
+        .filter(Boolean);
+
+    return lines.find(line => isPlausibleAgentName(line, brokerageName)) || '';
+}
+
+function getAgentContactScope($, el) {
+    let scope = $(el);
+    for (let i = 0; i < 6; i++) {
+        const text = cleanLeadText(scope.text());
+        if (text.length >= 20 && text.length <= 2500) return scope;
+        const parent = scope.parent();
+        if (!parent.length || parent.is('body')) break;
+        scope = parent;
+    }
+    return scope;
+}
+
+function collectEmailsFromContactElement($, el) {
+    const node = $(el);
+    const values = [
+        node.attr('href') || '',
+        node.attr('data-email') || '',
+        node.attr('data-contact-email') || '',
+        node.attr('aria-label') || '',
+        node.attr('title') || '',
+        node.text() || '',
+        node.html() || ''
+    ];
+
+    return parseEmailListFromCsvValue(values.join('\n'));
+}
+
+function extractBrokerageAgentCandidatesFromHtml(html, pageUrl, brokerageName, brokerageWebsite, discoveryQuery) {
+    const $ = cheerio.load(String(html || ''));
+    const candidates = [];
+    const seenEmails = new Set();
+
+    function pushCandidate(email, scope, defaultName = '') {
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        if (!isUsefulLeadEmail(normalizedEmail) || seenEmails.has(normalizedEmail)) return;
+
+        const text = cleanLeadText($(scope).text());
+        const defaultCleanName = normalizeAgentName(defaultName);
+        const name = isPlausibleAgentName(defaultCleanName, brokerageName)
+            ? defaultCleanName
+            : findAgentNameInScope($, scope, brokerageName);
+        if (!isPlausibleAgentName(name, brokerageName)) return;
+
+        seenEmails.add(normalizedEmail);
+        candidates.push({
+            name,
+            company: brokerageName || name,
+            emails: [normalizedEmail],
+            phone: extractPhoneFromText(text),
+            website: brokerageWebsite || pageUrl,
+            sourceUrl: pageUrl,
+            discoveryQuery
+        });
+    }
+
+    $('a[href^="mailto:"], [data-email], [data-contact-email], [aria-label*="email" i], [title*="email" i]').each((i, el) => {
+        const emails = collectEmailsFromContactElement($, el);
+        const scope = getAgentContactScope($, el);
+        for (const email of emails) pushCandidate(email, scope);
+    });
+
+    $('script[type="application/ld+json"]').each((i, el) => {
+        const raw = $(el).contents().text();
+        try {
+            const parsed = JSON.parse(raw);
+            const nodes = Array.isArray(parsed) ? parsed : [parsed];
+            const queue = [...nodes];
+            while (queue.length) {
+                const node = queue.shift();
+                if (!node || typeof node !== 'object') continue;
+                if (Array.isArray(node)) {
+                    queue.push(...node);
+                    continue;
+                }
+                if (node['@graph']) queue.push(...(Array.isArray(node['@graph']) ? node['@graph'] : [node['@graph']]));
+                const type = Array.isArray(node['@type']) ? node['@type'].join(' ') : String(node['@type'] || '');
+                const email = String(node.email || '').trim();
+                if (email && /\b(person|realestateagent|real estate agent|agent)\b/i.test(type)) {
+                    pushCandidate(email, $.root(), node.name || '');
+                }
+            }
+        } catch (error) {
+            // Ignore malformed JSON-LD.
+        }
+    });
+
+    if (candidates.length === 0) {
+        const emails = extractPublicEmailsFromHtml(html);
+        for (const email of emails) {
+            const bodyText = $.root().text();
+            const emailIndex = bodyText.toLowerCase().indexOf(email.toLowerCase());
+            const windowText = emailIndex >= 0
+                ? bodyText.slice(Math.max(0, emailIndex - 600), emailIndex + 600)
+                : bodyText.slice(0, 1200);
+            const pseudoScope = $('<div></div>').text(windowText);
+            pushCandidate(email, pseudoScope);
+        }
+    }
+
+    return candidates.flatMap(candidate => normalizeLeadCandidate(candidate, discoveryQuery, pageUrl));
+}
+
 function isUsefulLeadContactLink(urlObj) {
     const pathName = urlObj.pathname.toLowerCase();
     if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mov|avi|css|js|ico)$/i.test(pathName)) return false;
@@ -1257,6 +1437,74 @@ function collectLeadContactLinks(html, pageUrl, baseHost, maxLinks = 4) {
             absolute.hash = '';
             const cleanUrl = absolute.href.replace(/\/+$/, '');
             if (!links.includes(cleanUrl)) links.push(cleanUrl);
+        } catch (error) {
+            // Ignore malformed links.
+        }
+    });
+
+    return links.slice(0, maxLinks);
+}
+
+function isLikelyBrokerageRosterLink(urlObj, label = '') {
+    const pathName = decodeURIComponent(urlObj.pathname || '').toLowerCase();
+    const combined = `${pathName} ${cleanLeadText(label).toLowerCase()}`;
+    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mov|avi|css|js|ico)$/i.test(pathName)) return false;
+    if (/\b(login|signin|signup|register|privacy|terms|property|properties|listing|listings|home-search|idx|valuation|mortgage|careers?)\b/i.test(combined)) return false;
+    return BROKERAGE_ROSTER_KEYWORDS.some(keyword => combined.includes(keyword));
+}
+
+function collectBrokerageRosterLinks(html, pageUrl, baseHost, maxLinks = 8) {
+    const $ = cheerio.load(String(html || ''));
+    const scored = new Map();
+
+    $('a[href]').each((i, el) => {
+        const rawHref = $(el).attr('href');
+        if (!rawHref || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:') || rawHref.startsWith('#')) return;
+        try {
+            const absolute = new URL(rawHref, pageUrl);
+            if (!['http:', 'https:'].includes(absolute.protocol)) return;
+            const host = absolute.hostname.replace(/^www\./i, '').toLowerCase();
+            if (host !== baseHost || !isLikelyBrokerageRosterLink(absolute, $(el).text())) return;
+            absolute.hash = '';
+            const cleanUrl = absolute.href.replace(/\/+$/, '');
+            const combined = `${absolute.pathname.toLowerCase()} ${cleanLeadText($(el).text()).toLowerCase()}`;
+            let score = 1;
+            if (/\b(agent|agents|realtor|realtors|getagent|roster)\b/i.test(combined)) score += 4;
+            if (/\b(team|staff|professionals|associates)\b/i.test(combined)) score += 2;
+            if (/\b(contact|about|office)\b/i.test(combined)) score += 1;
+            scored.set(cleanUrl, Math.max(scored.get(cleanUrl) || 0, score));
+        } catch (error) {
+            // Ignore malformed links.
+        }
+    });
+
+    return [...scored.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([url]) => url)
+        .slice(0, maxLinks);
+}
+
+function collectAgentProfileLinks(html, pageUrl, baseHost, maxLinks = 20) {
+    const $ = cheerio.load(String(html || ''));
+    const links = [];
+
+    $('a[href]').each((i, el) => {
+        const rawHref = $(el).attr('href');
+        if (!rawHref || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:') || rawHref.startsWith('#')) return;
+        try {
+            const absolute = new URL(rawHref, pageUrl);
+            if (!['http:', 'https:'].includes(absolute.protocol)) return;
+            const host = absolute.hostname.replace(/^www\./i, '').toLowerCase();
+            if (host !== baseHost) return;
+            const pathName = decodeURIComponent(absolute.pathname || '').toLowerCase();
+            const label = cleanLeadText($(el).text()).toLowerCase();
+            const combined = `${pathName} ${label}`;
+            if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mov|avi|css|js|ico)$/i.test(pathName)) return;
+            if (/\b(login|signin|property|properties|listing|listings|search|privacy|terms)\b/i.test(combined)) return;
+            if (!/\b(agent|agents|realtor|realtors|associate|contact|profile|getagent)\b/i.test(combined)) return;
+            absolute.hash = '';
+            const cleanUrl = absolute.href.replace(/\/+$/, '');
+            if (cleanUrl !== pageUrl.replace(/\/+$/, '') && !links.includes(cleanUrl)) links.push(cleanUrl);
         } catch (error) {
             // Ignore malformed links.
         }
@@ -1313,6 +1561,72 @@ async function findPublicEmailsOnWebsite(website) {
     }
 
     return [...found];
+}
+
+async function scrapeBrokerageRosterCandidatesFromWebsite(website, brokerageName, discoveryQuery) {
+    if (!website) return [];
+
+    const startUrl = normalizeWebsiteUrl(website);
+    const baseHost = normalizeDomain(startUrl);
+    const maxRosterPages = Math.min(Math.max(parseInt(process.env.LEAD_ROSTER_MAX_PAGES_PER_SITE, 10) || 12, 3), 40);
+    const foundCandidates = [];
+    const crawled = new Set();
+    const queued = [];
+
+    function addPage(url) {
+        const cleanUrl = String(url || '').replace(/\/+$/, '');
+        if (!cleanUrl || crawled.has(cleanUrl) || queued.includes(cleanUrl)) return;
+        queued.push(cleanUrl);
+    }
+
+    try {
+        const homepage = await fetchLeadContactHtml(startUrl);
+        addPage(homepage.finalUrl || startUrl);
+        collectBrokerageRosterLinks(homepage.html, homepage.finalUrl, baseHost, Math.min(maxRosterPages, 8)).forEach(addPage);
+
+        while (queued.length && crawled.size < maxRosterPages) {
+            const pageUrl = queued.shift();
+            if (!pageUrl || crawled.has(pageUrl)) continue;
+            crawled.add(pageUrl);
+
+            let page;
+            try {
+                page = await fetchLeadContactHtml(pageUrl);
+            } catch (error) {
+                console.warn(`[Brokerage Roster] Failed to fetch ${pageUrl}: ${error.message}`);
+                continue;
+            }
+
+            const pageCandidates = extractBrokerageAgentCandidatesFromHtml(
+                page.html,
+                page.finalUrl || pageUrl,
+                brokerageName,
+                startUrl,
+                discoveryQuery
+            );
+            foundCandidates.push(...pageCandidates);
+
+            if (foundCandidates.length === 0 || crawled.size < 3) {
+                collectAgentProfileLinks(page.html, page.finalUrl || pageUrl, baseHost, 12).forEach(addPage);
+            }
+        }
+    } catch (error) {
+        console.warn(`[Brokerage Roster] Website roster lookup failed for ${website}: ${error.message}`);
+    }
+
+    return mergeLeadCandidatesByEmail(foundCandidates);
+}
+
+async function scrapeBrokerageRosterCandidatesFromMapsRow(row, discoveryQuery) {
+    const website = getMapsRowValue(row, 'website', 'web_site', 'web site');
+    if (!website) return [];
+
+    const brokerageName = getMapsRowValue(row, 'title', 'name', 'business name', 'business_name') || website;
+    const candidates = await scrapeBrokerageRosterCandidatesFromWebsite(website, brokerageName, discoveryQuery);
+    if (candidates.length > 0) {
+        console.log(`[Brokerage Roster] Found ${candidates.length} public agent email lead(s) on ${website} for ${brokerageName}.`);
+    }
+    return candidates;
 }
 
 function normalizeMapsCsvRow(row, discoveryQuery, extraEmails = []) {
@@ -1420,7 +1734,23 @@ async function scrapeLeadCandidatesWithMapsSidecar(niche, count) {
         4,
         row => normalizeMapsCsvRowWithWebsiteEnrichment(row, niche)
     );
-    const candidates = rowCandidates.flat();
+    let candidates = rowCandidates.flat();
+
+    if (isRealtorLeadQuery(niche) && candidates.length < count) {
+        const maxBrokerages = Math.min(Math.max(parseInt(process.env.LEAD_ROSTER_MAX_BROKERAGES, 10) || 8, 1), 25);
+        const brokerageRows = rowsToEnrich
+            .filter(row => getMapsRowValue(row, 'website', 'web_site', 'web site'))
+            .slice(0, maxBrokerages);
+
+        if (brokerageRows.length > 0) {
+            const rosterCandidateGroups = await mapWithConcurrency(
+                brokerageRows,
+                2,
+                row => scrapeBrokerageRosterCandidatesFromMapsRow(row, niche)
+            );
+            candidates = mergeLeadCandidatesByEmail(candidates, rosterCandidateGroups.flat());
+        }
+    }
 
     return candidates.slice(0, count);
 }

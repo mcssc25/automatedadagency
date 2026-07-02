@@ -32,6 +32,7 @@ Last updated: 2026-07-02
 - Lead scraping prefers `LEAD_SCRAPER_URL=http://lead-scraper:8080`; `/api/scrape-leads` now starts an async in-memory job, `/api/scrape-leads/jobs/:id` polls status, and completed jobs insert/dedupe leads.
 - If Maps has a website but no email, the backend crawls homepage/contact-style pages for public emails before Gemini fallback.
 - Realtor-focused lead scraping adds a compliant directory-discovery layer for Zillow/Realtor.com/Redfin/Homes.com profile signals, but does not bypass robots, logins, CAPTCHAs, private APIs, or scrape Realtor.com without permission; emails must be publicly visible before insertion.
+- Preferred realtor scraping route is now brokerage-first: Maps finds local brokerages, then the backend crawls brokerage roster/team/agent pages and limited public agent profile links for visible agent emails.
 - Lead records support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
 - Sales asset settings persist in CRM settings: booking/calendar link, sales page URL, default demo YouTube video, and YouTube page/channel.
 - Campaign copy can use `[CTA Link]`, `[Booking Link]`, `[Demo Link]`, `[YouTube Link]`, `[Sales Page]`, and `[Website]`.

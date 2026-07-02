@@ -14,6 +14,15 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Implemented brokerage-roster scraping as the preferred realtor lead strategy.
+- For realtor queries, Maps-discovered brokerage websites now get crawled for roster/team/agent pages before the Gemini directory fallback runs.
+- The roster crawler looks for pages/links matching agent, agents, associate, broker, realtor, roster, staff, team, professionals, meet-the-team, find-an-agent, and `getagent`.
+- On roster/profile pages it extracts agent candidates from `mailto`, `data-email`, `data-contact-email`, email labels/titles, JSON-LD Person/RealEstateAgent data, nearby phone text, and nearby name/card text.
+- The crawler follows a limited number of same-site roster/profile/contact links only; defaults are `LEAD_ROSTER_MAX_BROKERAGES=8` and `LEAD_ROSTER_MAX_PAGES_PER_SITE=12`.
+- Leads are still inserted only when a valid public email is found; phone-only roster entries are skipped for now.
+
+## Previous Update
+
 - Added realtor-focused lead discovery for the user's main market.
 - Realtor queries now run Maps/website enrichment first, then top up from a compliant `real-estate-directories` Gemini grounded-search layer using Zillow/Realtor.com/Redfin/Homes.com as profile discovery signals.
 - The directory layer requires a public email on an allowed profile page, agent/brokerage website, schema/metadata, or linked public contact page before a lead can be inserted.
@@ -44,6 +53,10 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- Local code checks for brokerage-roster scraper:
+  - `node --check server.js` passed.
+  - Cheerio selector smoke confirmed case-insensitive class/aria email selectors work.
+  - `git diff --check` passed with normal Windows CRLF warnings only.
 - Local code checks for realtor directory update:
   - `node --check server.js` passed.
   - `git diff --check` passed with normal Windows CRLF warnings only.
