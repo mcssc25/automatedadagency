@@ -14,6 +14,15 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Added realtor-focused lead discovery for the user's main market.
+- Realtor queries now run Maps/website enrichment first, then top up from a compliant `real-estate-directories` Gemini grounded-search layer using Zillow/Realtor.com/Redfin/Homes.com as profile discovery signals.
+- The directory layer requires a public email on an allowed profile page, agent/brokerage website, schema/metadata, or linked public contact page before a lead can be inserted.
+- It explicitly avoids bypassing logins, CAPTCHAs, robots restrictions, paywalls, or private APIs; Realtor.com direct scraping is not implemented because its robots file says scraping is unauthorized without express written permission.
+- Daily scrape automation now uses the same shared `runLeadScrape()` path as manual scraping, so realtor-focused discovery applies to scheduled intake too.
+- Email extraction now checks common contact attributes such as `data-email`, `data-contact-email`, email-ish `aria-label`, and email-ish `title` in addition to text, mailto, and schema fields.
+
+## Previous Update
+
 - Implemented async CRM lead scraping to prevent Cloudflare/browser request timeouts.
 - `POST /api/scrape-leads` now starts an in-memory lead scrape job and returns `202` with a `job.id` immediately.
 - Added `GET /api/scrape-leads/jobs/:id` so the UI can poll `queued` / `running` / `completed` / `failed` status.
@@ -35,6 +44,11 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- Local code checks for realtor directory update:
+  - `node --check server.js` passed.
+  - `git diff --check` passed with normal Windows CRLF warnings only.
+  - Temporary local smoke server on `PORT=3334` verified a realtor query enters the new `real-estate-directories` job phase.
+  - Local DB check after smoke still showed 3 leads, so no smoke/test realtor leads were inserted.
 - Local code checks for async scrape update:
   - `node --check server.js` passed.
   - `node --check app.js` passed.

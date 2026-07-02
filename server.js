@@ -41,6 +41,12 @@ const SCRAPER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
 };
+const REALTOR_DIRECTORY_DOMAINS = [
+    'zillow.com',
+    'realtor.com',
+    'redfin.com',
+    'homes.com'
+];
 let pipelineWorkerRunning = false;
 const leadScrapeJobs = new Map();
 const webhookReplayTokens = new Map();
@@ -1203,6 +1209,16 @@ function extractPublicEmailsFromHtml(html) {
         emailText.push($(el).attr('content') || $(el).text());
     });
 
+    $('[data-email], [data-contact-email], [aria-label*="email" i], [title*="email" i]').each((i, el) => {
+        emailText.push(
+            $(el).attr('data-email') ||
+            $(el).attr('data-contact-email') ||
+            $(el).attr('aria-label') ||
+            $(el).attr('title') ||
+            $(el).text()
+        );
+    });
+
     emailText.push($.root().text());
     emailText.push(String(html || ''));
 
@@ -1443,6 +1459,64 @@ Return ONLY valid JSON. No markdown blocks, no formatting.`;
     return (data.leads || []).flatMap(lead => normalizeLeadCandidate(lead, niche));
 }
 
+function isRealtorLeadQuery(query = '') {
+    return /\b(realtor|realtors|real estate agent|real estate agents|broker|brokers|brokerage|realty)\b/i.test(String(query || ''));
+}
+
+function mergeLeadCandidatesByEmail(...candidateGroups) {
+    const merged = [];
+    const seen = new Set();
+
+    for (const candidate of candidateGroups.flat()) {
+        const emailKey = String(candidate.email || '').trim().toLowerCase();
+        if (!emailKey || seen.has(emailKey)) continue;
+        seen.add(emailKey);
+        merged.push(candidate);
+    }
+
+    return merged;
+}
+
+async function scrapeRealtorDirectoryLeadCandidates(niche, count) {
+    const domainList = REALTOR_DIRECTORY_DOMAINS.join(', ');
+    const prompt = `Find up to ${count} real real-estate agent or brokerage contacts matching this target market: "${niche}".
+
+Use public web search with emphasis on these real-estate directory domains as discovery signals: ${domainList}.
+Do not bypass logins, CAPTCHAs, robots restrictions, paywalls, or private APIs.
+Do not fabricate emails. Only include an email if it is publicly visible on an agent/brokerage website, an allowed public profile page, schema/metadata, or a clearly linked public contact page.
+If a Zillow, Realtor.com, Redfin, or Homes.com profile does not expose a public email, use it only as a source/profile URL and look for the agent's own website or brokerage page where the email is publicly listed.
+Skip generic lead forms without visible email addresses. Skip records that only have a phone number.
+
+For each contact, extract:
+1. Agent or brokerage contact name
+2. Brokerage/company name
+3. Direct or public business email address
+4. Direct or office phone number if public
+5. Agent website or brokerage website if public
+6. Source URL where the agent/profile/contact evidence was found
+7. City/state or address if public
+
+You MUST return a JSON object with this exact structure:
+{
+  "leads": [
+    {
+      "name": "Sarah Smith",
+      "company": "Example Realty",
+      "email": "sarah.smith@example.com",
+      "phone": "(305) 555-1234",
+      "website": "https://www.example-realty.com/sarah-smith",
+      "address": "Crystal Lake, IL",
+      "sourceUrl": "https://www.example-realty.com/sarah-smith"
+    }
+  ]
+}
+Return ONLY valid JSON. No markdown blocks, no formatting.`;
+
+    const rawResponse = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
+    const data = await parseModelJsonWithRepair(rawResponse);
+    return (data.leads || []).flatMap(lead => normalizeLeadCandidate(lead, niche));
+}
+
 function insertLeadCandidates(candidates, discoveryQuery) {
     const insertedLeads = [];
     const skipped = { dnc: 0, duplicate: 0, invalid: 0 };
@@ -1509,6 +1583,23 @@ async function runLeadScrape(niche, count, onProgress = () => {}) {
         const message = formatErrorMessage(error);
         errors.push(`maps-sidecar: ${message}`);
         console.warn(`[Maps Scraper Error] ${message}`);
+    }
+
+    if (isRealtorLeadQuery(niche) && candidates.length < count) {
+        try {
+            const remaining = Math.max(count - candidates.length, 1);
+            onProgress('real-estate-directories', `Searching public realtor directory/profile signals for ${remaining} more verified email lead(s)...`);
+            const directoryCandidates = await scrapeRealtorDirectoryLeadCandidates(niche, Math.min(Math.max(remaining * 2, 10), count));
+            const previousCount = candidates.length;
+            candidates = mergeLeadCandidatesByEmail(candidates, directoryCandidates).slice(0, count);
+            if (candidates.length > previousCount) {
+                source = previousCount > 0 ? 'maps-sidecar+realtor-directories' : 'realtor-directories';
+            }
+        } catch (error) {
+            const message = formatErrorMessage(error);
+            errors.push(`real-estate-directories: ${message}`);
+            console.error(`[Realtor Directory Search Error] ${message}`);
+        }
     }
 
     if (candidates.length === 0) {
@@ -2941,9 +3032,13 @@ async function runCrmPipelineAutomation(trigger = 'manual') {
         if (settings.dailyScrapeEnabled && settings.dailyScrapeQuery && settings.lastDailyScrapeDate !== today) {
             try {
                 const count = Math.min(Math.max(parseInt(settings.dailyLeadTarget, 10) || 25, 1), 100);
-                const candidates = await scrapeLeadCandidatesWithMapsSidecar(settings.dailyScrapeQuery, count);
-                const { insertedLeads } = insertLeadCandidates(candidates.slice(0, count), settings.dailyScrapeQuery);
-                summary.scraped = insertedLeads.length;
+                const scrapeResult = await runLeadScrape(settings.dailyScrapeQuery, count, (phase, message) => {
+                    console.log(`[Daily Scrape] ${phase}: ${message}`);
+                });
+                summary.scraped = scrapeResult.leads.length;
+                if (scrapeResult.warnings && scrapeResult.warnings.length) {
+                    summary.warnings.push(`daily-scrape: ${scrapeResult.warnings.join(' | ')}`);
+                }
                 writeCrmSettings({ ...settings, lastDailyScrapeDate: today });
             } catch (err) {
                 summary.warnings.push(`daily-scrape: ${err.message}`);
