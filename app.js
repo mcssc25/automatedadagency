@@ -92,7 +92,18 @@ class AutopilotApp {
             // API setup
             useFallback: CONFIG.USE_FALLBACK_SIMULATION,
             serverConfig: {
-                geminiConfigured: false
+                geminiConfigured: false,
+                openRouterConfigured: false,
+                openRouterModels: {
+                    order: []
+                }
+            },
+            openRouterSettings: {
+                configured: false,
+                enabled: false,
+                webSearchEnabled: false,
+                dailyRequestLimit: 200,
+                modelOrder: []
             }
         };
 
@@ -183,6 +194,13 @@ class AutopilotApp {
         this.dom.marketingGoalInput = document.getElementById("marketing-goal");
         
         this.dom.settingsApiKey = document.getElementById("settings-api-key");
+        this.dom.settingsOpenRouterKey = document.getElementById("settings-openrouter-key");
+        this.dom.settingsOpenRouterStatus = document.getElementById("settings-openrouter-status");
+        this.dom.settingsOpenRouterEnabled = document.getElementById("settings-openrouter-enabled");
+        this.dom.settingsOpenRouterWebSearch = document.getElementById("settings-openrouter-web-search");
+        this.dom.settingsOpenRouterDailyLimit = document.getElementById("settings-openrouter-daily-limit");
+        this.dom.settingsOpenRouterModels = document.getElementById("settings-openrouter-models");
+        this.dom.btnClearOpenRouterKey = document.getElementById("btn-clear-openrouter-key");
         this.dom.settingsUseFallback = document.getElementById("settings-use-fallback");
         this.dom.btnSaveSettings = document.getElementById("btn-save-settings");
         this.dom.toggleKeyVisibility = document.getElementById("toggle-key-visibility");
@@ -400,7 +418,7 @@ class AutopilotApp {
         });
 
         // Save integrations / API / Outbound config
-        this.dom.btnSaveSettings.addEventListener("click", () => {
+        this.dom.btnSaveSettings.addEventListener("click", async () => {
             this.state.useFallback = this.dom.settingsUseFallback.checked;
             this.state.outboundDailyLimit = parseInt(this.dom.settingsDailyLimit.value) || 50;
             this.setAutoApproveCampaigns(this.dom.settingsBypassVerification.checked);
@@ -409,17 +427,36 @@ class AutopilotApp {
             this.state.crmAutopilot.demoVideoUrl = this.dom.settingsDemoVideoUrl.value.trim();
             this.state.crmAutopilot.youtubePageUrl = this.dom.settingsYoutubePageUrl.value.trim();
             
-            this.saveState();
-            this.updateApiStatusUI();
-            this.renderCampaignWorkflowSummary();
-            this.appendConsoleLine('system', `API, outbound, and sales asset settings updated. Server Gemini key live: ${this.state.serverConfig.geminiConfigured ? 'YES' : 'NO'}. Daily Limit: ${this.state.outboundDailyLimit}. Auto-approve campaigns: ${this.state.crmAutopilot.autoApproveCampaigns}`);
-            alert("Settings saved successfully.");
+            try {
+                await this.saveOpenRouterSettings();
+                this.saveState();
+                this.updateApiStatusUI();
+                this.renderCampaignWorkflowSummary();
+                this.appendConsoleLine('system', `API, outbound, and sales asset settings updated. Server Gemini key live: ${this.state.serverConfig.geminiConfigured ? 'YES' : 'NO'}. OpenRouter lead research: ${this.state.openRouterSettings.enabled ? 'ON' : 'OFF'}. Daily Limit: ${this.state.outboundDailyLimit}. Auto-approve campaigns: ${this.state.crmAutopilot.autoApproveCampaigns}`);
+                alert("Settings saved successfully.");
+            } catch (error) {
+                console.error("Failed to save settings:", error);
+                alert("Failed to save settings: " + error.message);
+            }
         });
 
         // The Gemini key is configured server-side. Keep this as a status field so
         // browser password managers do not mistake app settings for a login form.
         this.dom.toggleKeyVisibility.addEventListener("click", () => {
             this.appendConsoleLine('system', 'Gemini API key is loaded from the server .env file and is not editable in the browser.');
+        });
+
+        this.dom.btnClearOpenRouterKey.addEventListener("click", async () => {
+            if (!confirm("Clear the saved OpenRouter API key?")) return;
+            this.dom.settingsOpenRouterKey.value = "";
+            this.dom.settingsOpenRouterEnabled.checked = false;
+            try {
+                await this.saveOpenRouterSettings({ clearApiKey: true });
+                this.appendConsoleLine('system', 'OpenRouter API key cleared. Lead intelligence will use Gemini unless an env key is configured.');
+                alert("OpenRouter key cleared.");
+            } catch (error) {
+                alert("Failed to clear OpenRouter key: " + error.message);
+            }
         });
 
         // Web scraping button
@@ -863,6 +900,7 @@ class AutopilotApp {
         this.state.verificationQueue = this.state.verificationQueue.filter(item => item && Array.isArray(item.steps));
 
         await this.loadServerConfig();
+        await this.loadOpenRouterSettings();
         await this.loadCrmStateFromServer();
         
         // Populate inputs
@@ -920,6 +958,7 @@ class AutopilotApp {
         });
         
         this.dom.settingsApiKey.value = this.state.serverConfig.geminiConfigured ? "Configured on server (.env)" : "";
+        this.renderOpenRouterSettings();
         this.dom.settingsUseFallback.checked = this.state.useFallback;
         this.dom.settingsDailyLimit.value = this.state.outboundDailyLimit || 50;
         this.normalizeAutoApproveCampaigns();
@@ -952,6 +991,82 @@ class AutopilotApp {
         } catch (error) {
             console.warn("Could not load server config:", error.message);
         }
+    }
+
+    async loadOpenRouterSettings() {
+        try {
+            const response = await fetch('/api/openrouter-settings');
+            if (!response.ok) throw new Error("OpenRouter settings unavailable");
+            this.state.openRouterSettings = await response.json();
+        } catch (error) {
+            console.warn("Could not load OpenRouter settings:", error.message);
+            const models = this.state.serverConfig.openRouterModels || {};
+            this.state.openRouterSettings = {
+                configured: this.state.serverConfig.openRouterConfigured === true,
+                enabled: this.state.serverConfig.openRouterConfigured === true,
+                webSearchEnabled: models.webSearchEnabled === true,
+                dailyRequestLimit: models.dailyRequestLimit || 200,
+                modelOrder: Array.isArray(models.order) ? models.order : []
+            };
+        }
+    }
+
+    renderOpenRouterSettings() {
+        const settings = this.state.openRouterSettings || {};
+        const modelOrder = Array.isArray(settings.modelOrder) ? settings.modelOrder : [];
+        if (this.dom.settingsOpenRouterKey) {
+            this.dom.settingsOpenRouterKey.value = "";
+            this.dom.settingsOpenRouterKey.placeholder = settings.configured
+                ? `Configured from ${settings.source || 'server'}; paste a new key to replace`
+                : "Paste OpenRouter key to save";
+        }
+        if (this.dom.settingsOpenRouterStatus) {
+            this.dom.settingsOpenRouterStatus.textContent = settings.configured
+                ? `OpenRouter configured from ${settings.source || 'server'}. Lead intelligence will try free models before Gemini when enabled.`
+                : "OpenRouter is optional. Lead intelligence will use free OpenRouter models first when enabled, then fall back to Gemini.";
+        }
+        if (this.dom.settingsOpenRouterEnabled) this.dom.settingsOpenRouterEnabled.checked = settings.enabled === true;
+        if (this.dom.settingsOpenRouterWebSearch) this.dom.settingsOpenRouterWebSearch.checked = settings.webSearchEnabled === true;
+        if (this.dom.settingsOpenRouterDailyLimit) this.dom.settingsOpenRouterDailyLimit.value = settings.dailyRequestLimit || 200;
+        if (this.dom.settingsOpenRouterModels) {
+            this.dom.settingsOpenRouterModels.value = modelOrder.join('\n');
+        }
+    }
+
+    async saveOpenRouterSettings({ clearApiKey = false } = {}) {
+        const modelOrder = (this.dom.settingsOpenRouterModels.value || '')
+            .split(/\r?\n|,/)
+            .map(item => item.trim())
+            .filter(Boolean);
+        const payload = {
+            enabled: this.dom.settingsOpenRouterEnabled.checked,
+            apiKey: this.dom.settingsOpenRouterKey.value.trim(),
+            clearApiKey,
+            webSearchEnabled: this.dom.settingsOpenRouterWebSearch.checked,
+            dailyRequestLimit: parseInt(this.dom.settingsOpenRouterDailyLimit.value, 10) || 200,
+            modelOrder
+        };
+
+        const response = await fetch('/api/openrouter-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.success === false) {
+            throw new Error(data.error || "OpenRouter settings could not be saved");
+        }
+
+        this.state.openRouterSettings = data.openRouter || this.state.openRouterSettings;
+        this.state.serverConfig.openRouterConfigured = this.state.openRouterSettings.enabled === true;
+        this.state.serverConfig.openRouterModels = {
+            ...(this.state.serverConfig.openRouterModels || {}),
+            order: this.state.openRouterSettings.modelOrder || [],
+            research: this.state.openRouterSettings.researchModel,
+            webSearchEnabled: this.state.openRouterSettings.webSearchEnabled,
+            dailyRequestLimit: this.state.openRouterSettings.dailyRequestLimit
+        };
+        this.renderOpenRouterSettings();
     }
 
     getConfiguredClientLabel() {
@@ -1189,7 +1304,12 @@ class AutopilotApp {
     }
 
     updateApiStatusUI() {
-        if (this.state.serverConfig && this.state.serverConfig.geminiConfigured) {
+        const geminiLive = this.state.serverConfig && this.state.serverConfig.geminiConfigured;
+        const openRouterLive = this.state.openRouterSettings && this.state.openRouterSettings.enabled;
+        if (geminiLive && openRouterLive) {
+            this.dom.headerApiStatus.innerHTML = `<i class="fa-solid fa-microchip text-accent"></i> OpenRouter + Gemini Live`;
+            this.dom.headerApiStatus.style.color = "var(--accent)";
+        } else if (geminiLive) {
             this.dom.headerApiStatus.innerHTML = `<i class="fa-solid fa-microchip text-accent"></i> Gemini API Live`;
             this.dom.headerApiStatus.style.color = "var(--accent)";
         } else {

@@ -4,6 +4,15 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Added OpenRouter API key management to the Integrations/API Configuration screen.
+- The UI now has an OpenRouter key field, enable toggle, web-search toggle, daily request cap, and editable free-model rotation list.
+- Saved OpenRouter keys are stored server-side in ignored runtime `credentials.json`; the browser only sees configured/enabled status and never receives the saved key back.
+- Lead-intelligence OpenRouter calls now rotate through free models before falling back to Gemini. The default order starts with `openai/gpt-oss-120b:free`, then `google/gemma-4-31b-it:free`, `nvidia/nemotron-3-super-120b-a12b:free`, `poolside/laguna-m.1:free`, Qwen, Llama, Hermes, Gemma 4 26B, Nemotron Nano, GPT OSS 20B, and other free slugs.
+- The server still falls back to Gemini grounding when OpenRouter is disabled, the key is missing, the daily cap is reached, or all OpenRouter model attempts fail.
+- OpenRouter web search remains opt-in because it may consume OpenRouter credits even with free text models.
+
+## Previous Update
+
 - Wired OpenRouter as an optional low-cost LLM provider for hidden lead-intelligence research.
 - Added OpenRouter config knobs: `OPENROUTER_ENABLED`, `OPENROUTER_API_KEY`, `OPENROUTER_DEFAULT_MODEL`, `OPENROUTER_RESEARCH_MODEL`, `OPENROUTER_WEB_SEARCH_ENABLED`, `OPENROUTER_WEB_SEARCH_MAX_RESULTS`, `OPENROUTER_DAILY_REQUEST_LIMIT`, `OPENROUTER_APP_NAME`, and `LEAD_INTELLIGENCE_RESEARCH_PROVIDER`.
 - Brokerage discovery, specific brokerage roster URL lookup, and brokerage tech-stack research now prefer OpenRouter when enabled and fall back to Gemini grounding if OpenRouter is unavailable, capped, or errors.
@@ -53,6 +62,10 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- `node --check server.js` passed after the OpenRouter Integrations UI and model-rotation update.
+- `node --check app.js` passed.
+- `git diff --check` passed with normal Windows CRLF warnings only.
+- Local API smoke on a temporary port verified `/api/openrouter-settings` load/save and `/api/app-config` reporting: saved OpenRouter config returned enabled/configured, first model `openai/gpt-oss-120b:free`, and app config reflected OpenRouter enabled.
 - `node --check server.js` passed after the OpenRouter provider wiring.
 - `git diff --check` passed with normal Windows CRLF warnings only.
 - `node --check server.js` passed after the lead-intelligence worker.
@@ -81,6 +94,9 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
+- Files changed for OpenRouter Integrations UI/model rotation: `server.js`, `app.js`, `index.html`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
+- Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
+- OpenRouter Integrations UI/model rotation is verified locally and pending commit/deploy in the current turn.
 - Files changed for OpenRouter lead-intelligence provider wiring: `server.js`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
 - OpenRouter wiring commit pushed to `main`: `e484757` (`Add OpenRouter lead intelligence provider`).

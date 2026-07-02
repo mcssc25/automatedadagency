@@ -31,8 +31,8 @@ const CRM_STATE_FILE = path.join(DATA_DIR, 'crm-state.json');
 const CRM_SETTINGS_FILE = path.join(DATA_DIR, 'crm-settings.json');
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const PUBLIC_APP_URL = String(process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || '').replace(/\/+$/, '');
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
-const OPENROUTER_ENABLED = process.env.OPENROUTER_ENABLED === 'true' && !!OPENROUTER_API_KEY;
+const OPENROUTER_ENV_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const OPENROUTER_ENV_ENABLED = process.env.OPENROUTER_ENABLED === 'true';
 const OPENROUTER_DEFAULT_MODEL = process.env.OPENROUTER_DEFAULT_MODEL || 'openrouter/free';
 const OPENROUTER_RESEARCH_MODEL = process.env.OPENROUTER_RESEARCH_MODEL || 'openai/gpt-oss-120b:free';
 const OPENROUTER_WEB_SEARCH_ENABLED = process.env.OPENROUTER_WEB_SEARCH_ENABLED === 'true';
@@ -40,7 +40,24 @@ const OPENROUTER_WEB_SEARCH_MAX_RESULTS = Math.min(Math.max(parseInt(process.env
 const OPENROUTER_DAILY_REQUEST_LIMIT = Math.min(Math.max(parseInt(process.env.OPENROUTER_DAILY_REQUEST_LIMIT, 10) || 200, 1), 5000);
 const OPENROUTER_SITE_URL = String(process.env.OPENROUTER_SITE_URL || PUBLIC_APP_URL || 'https://agents.realestatecrmpro.com').replace(/\/+$/, '');
 const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || 'Real Estate CRM Pro Lead Intelligence';
-const LEAD_INTELLIGENCE_RESEARCH_PROVIDER = String(process.env.LEAD_INTELLIGENCE_RESEARCH_PROVIDER || (OPENROUTER_ENABLED ? 'openrouter' : 'gemini')).toLowerCase();
+const LEAD_INTELLIGENCE_RESEARCH_PROVIDER = String(process.env.LEAD_INTELLIGENCE_RESEARCH_PROVIDER || '').toLowerCase();
+const DEFAULT_OPENROUTER_FREE_MODELS = [
+    'openai/gpt-oss-120b:free',
+    'google/gemma-4-31b-it:free',
+    'nvidia/nemotron-3-super-120b-a12b:free',
+    'poolside/laguna-m.1:free',
+    'qwen/qwen3-next-80b-a3b-instruct:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free',
+    'google/gemma-4-26b-a4b-it:free',
+    'nvidia/nemotron-3-nano-30b-a3b:free',
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    'openai/gpt-oss-20b:free',
+    'qwen/qwen3-coder:free',
+    'poolside/laguna-xs-2.1:free',
+    'cohere/north-mini-code:free',
+    'nvidia/nemotron-nano-9b-v2:free'
+];
 const ADMIN_AUTH_ENABLED = process.env.ADMIN_AUTH_ENABLED === 'true' || (NODE_ENV === 'production' && process.env.ADMIN_AUTH_ENABLED !== 'false');
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -231,6 +248,59 @@ function shouldRetryGeminiError(error) {
     return ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code) || [429, 500, 502, 503, 504].includes(status);
 }
 
+function parseCsvList(value) {
+    return String(value || '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+}
+
+function normalizeOpenRouterModelOrder(value) {
+    const configured = Array.isArray(value)
+        ? value.map(item => String(item || '').trim()).filter(Boolean)
+        : parseCsvList(value);
+    return [...new Set([...configured, ...DEFAULT_OPENROUTER_FREE_MODELS])];
+}
+
+function getOpenRouterIntegrationSettings() {
+    let creds = {};
+    try {
+        creds = getCredentials();
+    } catch (error) {
+        creds = {};
+    }
+
+    const apiKey = String(creds.openRouterApiKey || OPENROUTER_ENV_API_KEY || '').trim();
+    const enabled = creds.openRouterEnabled !== undefined
+        ? creds.openRouterEnabled === true
+        : OPENROUTER_ENV_ENABLED;
+    const webSearchEnabled = creds.openRouterWebSearchEnabled !== undefined
+        ? creds.openRouterWebSearchEnabled === true
+        : OPENROUTER_WEB_SEARCH_ENABLED;
+    const dailyRequestLimit = Math.min(Math.max(parseInt(creds.openRouterDailyRequestLimit || OPENROUTER_DAILY_REQUEST_LIMIT, 10) || OPENROUTER_DAILY_REQUEST_LIMIT, 1), 5000);
+    const modelOrder = normalizeOpenRouterModelOrder(creds.openRouterModelOrder || process.env.OPENROUTER_MODEL_ORDER || OPENROUTER_RESEARCH_MODEL);
+
+    return {
+        apiKey,
+        configured: !!apiKey,
+        enabled: enabled && !!apiKey,
+        source: creds.openRouterApiKey ? 'integrations' : (OPENROUTER_ENV_API_KEY ? 'env' : ''),
+        defaultModel: creds.openRouterDefaultModel || OPENROUTER_DEFAULT_MODEL,
+        researchModel: modelOrder[0] || OPENROUTER_RESEARCH_MODEL,
+        modelOrder,
+        webSearchEnabled,
+        webSearchMaxResults: OPENROUTER_WEB_SEARCH_MAX_RESULTS,
+        dailyRequestLimit
+    };
+}
+
+function getLeadIntelligenceResearchProvider() {
+    const openRouterEnabled = getOpenRouterIntegrationSettings().enabled;
+    if (LEAD_INTELLIGENCE_RESEARCH_PROVIDER === 'openrouter') return openRouterEnabled ? 'openrouter' : 'gemini';
+    if (LEAD_INTELLIGENCE_RESEARCH_PROVIDER) return LEAD_INTELLIGENCE_RESEARCH_PROVIDER;
+    return openRouterEnabled ? 'openrouter' : 'gemini';
+}
+
 function refreshOpenRouterDailyWindow() {
     const today = new Date().toISOString().slice(0, 10);
     if (openRouterUsageState.date !== today) {
@@ -240,9 +310,10 @@ function refreshOpenRouterDailyWindow() {
 }
 
 function canUseOpenRouter() {
-    if (!OPENROUTER_ENABLED) return false;
+    const settings = getOpenRouterIntegrationSettings();
+    if (!settings.enabled) return false;
     refreshOpenRouterDailyWindow();
-    return openRouterUsageState.requests < OPENROUTER_DAILY_REQUEST_LIMIT;
+    return openRouterUsageState.requests < settings.dailyRequestLimit;
 }
 
 function recordOpenRouterRequest() {
@@ -275,9 +346,10 @@ async function postGeminiWithRetry(url, payload, label, timeoutMs = 120000) {
 }
 
 async function postOpenRouterWithRetry(payload, label, timeoutMs = 120000) {
+    const settings = getOpenRouterIntegrationSettings();
     if (!canUseOpenRouter()) {
-        throw new Error(OPENROUTER_ENABLED
-            ? `OpenRouter daily request cap reached (${OPENROUTER_DAILY_REQUEST_LIMIT}).`
+        throw new Error(settings.configured
+            ? `OpenRouter daily request cap reached (${settings.dailyRequestLimit}) or OpenRouter is disabled.`
             : 'OpenRouter API key is not configured or OPENROUTER_ENABLED is not true.');
     }
 
@@ -287,7 +359,7 @@ async function postOpenRouterWithRetry(payload, label, timeoutMs = 120000) {
             recordOpenRouterRequest();
             return await axios.post('https://openrouter.ai/api/v1/chat/completions', payload, {
                 headers: {
-                    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                    'Authorization': `Bearer ${settings.apiKey}`,
                     'Content-Type': 'application/json',
                     'HTTP-Referer': OPENROUTER_SITE_URL,
                     'X-OpenRouter-Title': OPENROUTER_APP_NAME
@@ -433,6 +505,7 @@ app.get('/index.css', serveRootFile('index.css'));
 app.get('/config.js', serveRootFile('config.js'));
 
 app.get('/api/app-config', (req, res) => {
+    const openRouterSettings = getOpenRouterIntegrationSettings();
     res.json({
         geminiConfigured: !!GEMINI_API_KEY,
         geminiModels: {
@@ -441,12 +514,13 @@ app.get('/api/app-config', (req, res) => {
             image: GEMINI_IMAGE_MODEL,
             video: GEMINI_VIDEO_MODEL
         },
-        openRouterConfigured: OPENROUTER_ENABLED,
+        openRouterConfigured: openRouterSettings.enabled,
         openRouterModels: {
-            default: OPENROUTER_DEFAULT_MODEL,
-            research: OPENROUTER_RESEARCH_MODEL,
-            webSearchEnabled: OPENROUTER_WEB_SEARCH_ENABLED,
-            dailyRequestLimit: OPENROUTER_DAILY_REQUEST_LIMIT
+            default: openRouterSettings.defaultModel,
+            research: openRouterSettings.researchModel,
+            order: openRouterSettings.modelOrder,
+            webSearchEnabled: openRouterSettings.webSearchEnabled,
+            dailyRequestLimit: openRouterSettings.dailyRequestLimit
         }
     });
 });
@@ -727,9 +801,10 @@ async function queryOpenRouter(promptText, options = {}) {
     }
 
     if (options.webSearch === true) {
+        const settings = getOpenRouterIntegrationSettings();
         payload.plugins = [{
             id: 'web',
-            max_results: OPENROUTER_WEB_SEARCH_MAX_RESULTS
+            max_results: settings.webSearchMaxResults
         }];
     }
 
@@ -755,15 +830,45 @@ async function queryOpenRouter(promptText, options = {}) {
     throw new Error('Invalid response format received from OpenRouter API');
 }
 
-async function queryLeadIntelligenceResearch(promptText, options = {}) {
-    if (LEAD_INTELLIGENCE_RESEARCH_PROVIDER === 'openrouter' && OPENROUTER_ENABLED) {
+function isOpenRouterModelFallbackError(error) {
+    const status = error.response && error.response.status;
+    return [400, 402, 403, 404, 408, 409, 422, 429, 500, 502, 503, 504].includes(status)
+        || ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code)
+        || /rate|quota|limit|exhaust|provider|unavailable|disabled|not found|moderation|maximum/i.test(String(error.message || ''));
+}
+
+async function queryOpenRouterWithModelFallback(promptText, options = {}) {
+    const settings = getOpenRouterIntegrationSettings();
+    const modelOrder = normalizeOpenRouterModelOrder(options.modelOrder || settings.modelOrder);
+    let lastError;
+
+    for (const model of modelOrder) {
         try {
-            return await queryOpenRouter(promptText, {
+            const text = await queryOpenRouter(promptText, {
+                ...options,
+                model
+            });
+            return { text, model };
+        } catch (error) {
+            lastError = error;
+            console.warn(`[OpenRouter:${model}] failed: ${formatErrorMessage(error, 'OpenRouter model failed.')}`);
+            if (!isOpenRouterModelFallbackError(error)) break;
+        }
+    }
+
+    throw lastError || new Error('OpenRouter model fallback list is empty.');
+}
+
+async function queryLeadIntelligenceResearch(promptText, options = {}) {
+    if (getLeadIntelligenceResearchProvider() === 'openrouter' && getOpenRouterIntegrationSettings().enabled) {
+        try {
+            const result = await queryOpenRouterWithModelFallback(promptText, {
                 json: options.json,
-                model: options.openRouterModel || OPENROUTER_RESEARCH_MODEL,
-                webSearch: OPENROUTER_WEB_SEARCH_ENABLED,
+                modelOrder: options.modelOrder,
+                webSearch: getOpenRouterIntegrationSettings().webSearchEnabled,
                 timeoutMs: options.timeoutMs || 120000
             });
+            return result.text;
         } catch (error) {
             console.warn(`[Lead Intelligence] OpenRouter research failed; falling back to Gemini grounding: ${error.message}`);
         }
@@ -776,14 +881,15 @@ async function queryLeadIntelligenceResearch(promptText, options = {}) {
 }
 
 async function queryJsonRepairModel(promptText) {
-    if (OPENROUTER_ENABLED && canUseOpenRouter()) {
+    if (getOpenRouterIntegrationSettings().enabled && canUseOpenRouter()) {
         try {
-            return await queryOpenRouter(promptText, {
+            const result = await queryOpenRouterWithModelFallback(promptText, {
                 json: true,
-                model: OPENROUTER_DEFAULT_MODEL,
+                modelOrder: [OPENROUTER_DEFAULT_MODEL, ...getOpenRouterIntegrationSettings().modelOrder],
                 maxTokens: 4096,
                 timeoutMs: 90000
             });
+            return result.text;
         } catch (error) {
             console.warn(`[JSON Repair] OpenRouter repair failed; falling back to Gemini: ${error.message}`);
         }
@@ -5154,18 +5260,21 @@ app.post('/api/scrape-leads', (req, res) => {
 });
 
 app.get('/api/lead-intelligence/status', (req, res) => {
+    const openRouterSettings = getOpenRouterIntegrationSettings();
     res.json({
         enabled: LEAD_INTELLIGENCE_ENABLED,
         running: leadIntelligenceWorkerRunning,
         intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
         browserMode: true,
-        researchProvider: LEAD_INTELLIGENCE_RESEARCH_PROVIDER,
+        researchProvider: getLeadIntelligenceResearchProvider(),
         openRouter: {
-            configured: OPENROUTER_ENABLED,
-            defaultModel: OPENROUTER_DEFAULT_MODEL,
-            researchModel: OPENROUTER_RESEARCH_MODEL,
-            webSearchEnabled: OPENROUTER_WEB_SEARCH_ENABLED,
-            dailyRequestLimit: OPENROUTER_DAILY_REQUEST_LIMIT,
+            configured: openRouterSettings.enabled,
+            source: openRouterSettings.source,
+            defaultModel: openRouterSettings.defaultModel,
+            researchModel: openRouterSettings.researchModel,
+            modelOrder: openRouterSettings.modelOrder,
+            webSearchEnabled: openRouterSettings.webSearchEnabled,
+            dailyRequestLimit: openRouterSettings.dailyRequestLimit,
             dailyRequestsUsed: openRouterUsageState.requests
         },
         status: db.getLeadIntelligenceStatus()
@@ -5620,6 +5729,51 @@ function getTokens() {
 function saveTokens(tokens) {
     fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
 }
+
+function serializeOpenRouterSettingsForClient() {
+    const settings = getOpenRouterIntegrationSettings();
+    return {
+        configured: settings.configured,
+        enabled: settings.enabled,
+        source: settings.source,
+        defaultModel: settings.defaultModel,
+        researchModel: settings.researchModel,
+        modelOrder: settings.modelOrder,
+        webSearchEnabled: settings.webSearchEnabled,
+        dailyRequestLimit: settings.dailyRequestLimit,
+        dailyRequestsUsed: openRouterUsageState.requests
+    };
+}
+
+app.get('/api/openrouter-settings', (req, res) => {
+    res.json(serializeOpenRouterSettingsForClient());
+});
+
+app.post('/api/openrouter-settings', (req, res) => {
+    const creds = getCredentials();
+    const {
+        enabled,
+        apiKey,
+        clearApiKey,
+        webSearchEnabled,
+        dailyRequestLimit,
+        modelOrder
+    } = req.body || {};
+
+    if (clearApiKey === true) {
+        delete creds.openRouterApiKey;
+    } else if (typeof apiKey === 'string' && apiKey.trim()) {
+        creds.openRouterApiKey = apiKey.trim();
+    }
+
+    creds.openRouterEnabled = enabled === true;
+    creds.openRouterWebSearchEnabled = webSearchEnabled === true;
+    creds.openRouterDailyRequestLimit = Math.min(Math.max(parseInt(dailyRequestLimit, 10) || OPENROUTER_DAILY_REQUEST_LIMIT, 1), 5000);
+    creds.openRouterModelOrder = normalizeOpenRouterModelOrder(modelOrder);
+
+    saveCredentials(creds);
+    res.json({ success: true, openRouter: serializeOpenRouterSettingsForClient() });
+});
 
 // 1. Fetch Webhook Settings
 app.get('/api/make-webhook', (req, res) => {

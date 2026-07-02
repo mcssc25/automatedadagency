@@ -1411,6 +1411,36 @@
                             </div>
                             <p class="helper-text">This key is pre-loaded from config.js and used to call the Gemini API for copywriting and chatting.</p>
                         </div>
+                        <div class="form-group">
+                            <label for="settings-openrouter-key">OpenRouter API Key</label>
+                            <div class="input-with-button">
+                                <input type="password" id="settings-openrouter-key" placeholder="Paste OpenRouter key to save" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true">
+                                <button type="button" class="btn btn-outline" id="btn-clear-openrouter-key" title="Clear saved OpenRouter key"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                            <p class="helper-text" id="settings-openrouter-status">OpenRouter is optional. Lead intelligence will use free OpenRouter models first when enabled, then fall back to Gemini.</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="settings-openrouter-enabled">
+                                <span>Use OpenRouter free models for lead-intelligence research</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="settings-openrouter-web-search">
+                                <span>Allow OpenRouter web search for brokerage discovery</span>
+                            </label>
+                            <p class="helper-text">Leave this off while testing free usage. Web search can use extra OpenRouter credits even when the text model is free.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-openrouter-daily-limit">OpenRouter Daily Request Cap</label>
+                            <input type="number" id="settings-openrouter-daily-limit" min="1" max="5000" value="200" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-openrouter-models">Free Model Rotation</label>
+                            <textarea id="settings-openrouter-models" rows="7" spellcheck="false" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box; font-family:monospace; font-size:0.78rem;"></textarea>
+                            <p class="helper-text">One model per line. The first model is tried first; exhausted/free-model failures move to the next line before Gemini fallback.</p>
+                        </div>
                         <div class="form-group" style="display:none;">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="settings-use-fallback">
