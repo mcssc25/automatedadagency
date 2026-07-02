@@ -764,7 +764,14 @@ function upsertBrokerageOffice(office = {}) {
                 WHEN brokerage_offices.status = 'Harvested' THEN brokerage_offices.status
                 ELSE COALESCE(NULLIF(excluded.status, ''), brokerage_offices.status)
             END,
-            updatedAt = CURRENT_TIMESTAMP
+            updatedAt = CASE
+                WHEN excluded.status = 'Pending'
+                  AND NULLIF(excluded.website, '') IS NULL
+                  AND NULLIF(excluded.rosterUrl, '') IS NULL
+                  AND NULLIF(excluded.sourceUrl, '') IS NULL
+                THEN brokerage_offices.updatedAt
+                ELSE CURRENT_TIMESTAMP
+            END
     `);
 
     stmt.run(
