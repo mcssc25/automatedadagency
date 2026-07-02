@@ -49,6 +49,10 @@ Last updated: 2026-07-02
   - `git diff --check` passed with normal Windows CRLF warnings only.
   - Temporary local smoke server on `PORT=3334` verified a realtor query enters the new `real-estate-directories` job phase.
   - Local DB check after smoke still showed 3 leads, so no smoke/test realtor leads were inserted.
+- VPS deployment verification after realtor directory update:
+  - `ad-agency-autopilot` rebuilt and restarted healthy; scraper sidecar and tunnel remained running.
+  - `docker exec ad-agency-autopilot node --check /app/server.js` passed.
+  - Deployed `/app/server.js` contains `REALTOR_DIRECTORY_DOMAINS` and `real-estate-directories`; deployed `handoff.md` records the no-bypass boundary.
 - Local code checks for async scrape update:
   - `node --check server.js` passed.
   - `node --check app.js` passed.
@@ -90,7 +94,8 @@ Last updated: 2026-07-02
 ## Repo / Deployment Status
 
 - Async lead scrape implementation commit pushed and deployed: `43c3054` (`Make lead scraping async`).
-- Post-deploy documentation has been updated to reflect the async scrape release and VPS smoke checks.
+- Realtor directory discovery commit pushed and deployed: `0ae31d0` (`Add realtor directory lead discovery`).
+- Post-deploy documentation has been updated to reflect the async scrape and realtor directory releases plus VPS smoke checks.
 - Latest hardening code/config commit pushed: `c35051f` (`Harden agency app deployment`).
 - A post-deploy handoff/memory documentation sync was pushed after the hardening commit.
 - Local repo status after the documentation sync: clean on `main...origin/main`.
@@ -100,6 +105,7 @@ Last updated: 2026-07-02
 - VPS env backup: `/opt/ad-agency-autopilot/data/backups/env-20260702T090811Z/.env.before-hardening`.
 - VPS post-deploy file snapshot: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T090955Z-hardening-post`.
 - VPS async scrape backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T092935Z-async-lead-scrape`.
+- VPS realtor directory discovery backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T095955Z-realtor-directory-discovery`.
 - Runtime secrets/data remain uncommitted.
 
 ## Live Verification
@@ -121,7 +127,7 @@ Last updated: 2026-07-02
 
 ## Next Steps
 
-- Run one authenticated real lead scrape from the browser when ready to confirm end-to-end UX with live progress messages; no fake production scrape was started during deployment smoke.
+- Run one authenticated real realtor lead scrape from the browser when ready to confirm end-to-end UX with live progress messages; no fake production scrape was started during deployment smoke.
 - Add a valid physical mailing address to local and VPS `OUTBOUND_POSTAL_ADDRESS`, then run a safe test campaign send.
 - Reconcile local vs public runtime data before launch if the local desktop DB is still expected to mirror production.
 - Move Make/webhook credentials from `credentials.json` to env/secret storage or a protected persistent volume.
