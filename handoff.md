@@ -41,9 +41,10 @@ Last updated: 2026-07-02
 - `node --check app.js` passed.
 - `git diff --check` passed.
 - Local DB smoke initialized the new tables, seeded a Birmingham market row, and returned a hidden intelligence status summary.
-- Browser harvesting has not yet been verified inside the rebuilt production container.
+- Browser runtime was verified inside the rebuilt production container: `playwright-core` loads and `/usr/bin/chromium` exists.
 - Production smoke after initial deploy seeded 20 cities and 280 brand/city offices. Several local brokerage cycles completed with 0 contacts due to missing/blocked pages.
 - Targeted KW Birmingham smoke opened `https://kwbham.yourkwoffice.com/our-agents` in production Chromium but received a Cloudflare security-verification page (`Just a moment...`) instead of the visible roster, confirming that KW-style sites may need a managed/stealth browser provider rather than plain VPS headless Chromium.
+- Final production status after reliability fixes: app container healthy, deployed `server.js`/`db.js`/`app.js` syntax checks passed, KW Birmingham is marked `Blocked`, and stale run rows from deploy restarts are marked `Interrupted`.
 - `node --check server.js` passed.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
@@ -63,13 +64,20 @@ Last updated: 2026-07-02
 
 - Files changed for lead-intelligence work: `Dockerfile`, `db.js`, `docker-compose.yml`, `package.json`, `package-lock.json`, `server.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
-- Lead-intelligence code commit on `main`: `a91eb02` (`Add brokerage lead intelligence engine`); browser harvesting/production verification is still called out separately above.
-- Latest code commit pushed to `main`: `8eb10bd` (`Preserve trend cards on empty refresh`).
+- Lead-intelligence code is pushed and deployed. Main commits: `a91eb02` (`Add brokerage lead intelligence engine`), `66340d0` (`Seed brokerage brand city searches`), `c7434e6` (`Preserve discovered brokerage targets`), `fb0284b` (`Keep seeded offices queue position`), `6fb7bd3` (`Detect blocked roster browser pages`), `caea108` (`Mark interrupted intelligence runs`).
+- Latest code commit pushed to `main`: `caea108` (`Mark interrupted intelligence runs`).
 - Refresh-preservation deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T202056Z-trend-refresh-preserve`.
 - Deployed `ad-agency-autopilot` container is healthy.
 - Trend refresh preservation deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
 - Deployment copied only `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.
+- Lead-intelligence deployment backups:
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260702T202330Z-lead-intelligence-engine`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260702T203149Z-brand-city-seeds`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260702T203422Z-preserve-brokerage-targets`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260702T203617Z-keep-seed-queue-position`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260702T203847Z-detect-blocked-rosters`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260702T204126Z-interrupted-intelligence-runs`
 - `ad-agency-autopilot` was rebuilt/restarted only for that service; the lead scraper sidecar remained running.
 - Production container is healthy on `127.0.0.1:3100->3000`.
 - Public URL returned `401`, expected because production/admin Basic auth is enabled.
