@@ -30,11 +30,11 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
-- Social video preview layout commit created locally with message `Fix social video preview layout`.
-- Not yet pushed or deployed for this video-preview fix.
-- Last pushed/deployed commit remains `2e0a824` (`Add CRM lead management controls`).
+- Social video preview layout code commit pushed and deployed: `13ab621` (`Fix social video preview layout`).
+- This handoff includes the post-deploy documentation sync for that release.
 - Runtime secrets/data remain uncommitted.
 - Previously deployed commits:
+  - `13ab621` (`Fix social video preview layout`)
   - `2e0a824` (`Add CRM lead management controls`)
   - `c35051f` (`Harden agency app deployment`)
   - `43c3054` (`Make lead scraping async`)
@@ -44,14 +44,17 @@ Last updated: 2026-07-02
 
 ## Deployment Notes
 
-- If deploying this fix, copy only `app.js`, `index.css`, `MEMORY.md`, and `handoff.md`.
-- Rebuild/restart should target only `ad-agency-autopilot`; leave scraper sidecar and other VPS projects alone.
+- Latest deployment copied only `app.js`, `index.css`, `MEMORY.md`, and `handoff.md`.
+- Backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
+- Rebuild/restart targeted only `ad-agency-autopilot`; scraper sidecar and other VPS projects were left alone.
+- Deployed container checks passed for `node --check /app/app.js` and `node --check /app/server.js`.
+- `docker compose ps ad-agency-autopilot` reported the app container healthy on `127.0.0.1:3100->3000`.
+- Public URL check returned `401`, expected because production/admin Basic auth is enabled.
 - Do not copy ignored runtime files or local DB/log/smoke artifacts.
 
 ## Next Steps
 
 - Browser-check a real/generated AI video draft on desktop and mobile to confirm the portrait preview and wrapped buttons match the expected card layout.
-- Push and deploy the preview fix if the local changes are accepted for release.
 - Add a valid physical mailing address to local and VPS `OUTBOUND_POSTAL_ADDRESS`, then run a safe test campaign send.
 - Add smoke/integration tests for CRM lead scrape, campaign approval/send, DNC block, inbound reply pause, manual lead pause, and manual lead delete.
 - Still needed for a full agency: direct ad-platform integrations, platform analytics, client reporting, billing/contracts, calendar booking, multi-client isolation, and durable server-side content scheduling.

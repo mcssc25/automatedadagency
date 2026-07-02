@@ -41,9 +41,9 @@ Last updated: 2026-07-02
 
 - 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
 - Hardening deployment commit: `c35051f`; async lead scrape commit: `43c3054`; realtor directory commit: `0ae31d0`; brokerage roster commit: `4946727`; CRM auto-approve commit: `2b33db0`.
-- Latest local update fixes social post media card previews: video cards render in a portrait `9 / 16` frame with `object-fit: contain`, image cards stay `16 / 9`, and action buttons wrap inside cards.
-- Local verification for latest update: `node --check app.js`, `node --check server.js`, temporary `PORT=3132` server returned 200; in-app browser visual seeding was blocked by the browser sandbox, so no live visual card screenshot was captured.
-- Social video preview layout commit message: `Fix social video preview layout`.
+- Latest deployed update fixes social post media card previews: video cards render in a portrait `9 / 16` frame with `object-fit: contain`, image cards stay `16 / 9`, and action buttons wrap inside cards.
+- Verification for latest update: `node --check app.js`, `node --check server.js`, temporary `PORT=3132` server returned 200; deployed container is healthy and deployed checks for `/app/app.js` and `/app/server.js` passed. In-app browser visual seeding was blocked by the browser sandbox, so no live visual card screenshot was captured.
+- Social video preview layout code commit `13ab621` (`Fix social video preview layout`) was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T164205Z-video-preview-layout`.
 - Lead-management code commit `2e0a824` (`Add CRM lead management controls`) was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T160315Z-lead-management`.
 
 ## Working Agreements
