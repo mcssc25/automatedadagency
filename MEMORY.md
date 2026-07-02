@@ -54,6 +54,7 @@ Last updated: 2026-07-02
 - 2026-07-02 lead scrape fix: async job polling prevents Cloudflare/browser request timeouts from surfacing as raw HTML during long scrape/enrichment runs.
 - `OUTBOUND_POSTAL_ADDRESS` is still blank, so outbound Mailgun sends fail closed until the user supplies a valid physical mailing address.
 - Hardening deployment code commit: `c35051f` (`Harden agency app deployment`).
+- Async lead scrape commit `43c3054` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T092935Z-async-lead-scrape`.
 - Latest code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.
 - Commit `2b33db0` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
 

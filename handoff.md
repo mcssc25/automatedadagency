@@ -42,6 +42,10 @@ Last updated: 2026-07-02
 - Temporary local smoke server on `PORT=3333` verified:
   - `POST /api/scrape-leads` returned a queued job id immediately.
   - `GET /api/scrape-leads/jobs/:id` returned running status and then failed status/details on a deliberately disabled scraper/Gemini setup.
+- VPS deployment verification after async scrape update:
+  - `ad-agency-autopilot` rebuilt and restarted healthy; `ad-agency-lead-scraper` and `ad-agency-autopilot-tunnel` remained running.
+  - Public-safe `/api/app-config` returned 200.
+  - Authenticated container smoke: empty scrape post returned 400 JSON, missing scrape job returned 404 JSON, and deployed `/app.js` includes `waitForLeadScrapeJob` plus `Lead scrape job queued`.
 - Production log check on 2026-07-02:
   - `ad-agency-autopilot`, `ad-agency-lead-scraper`, and `ad-agency-autopilot-tunnel` were running.
   - App log showed `[Scraper] Looking for up to 30 public contacts for: "realtors in crystal lake, il"...`.
@@ -71,14 +75,17 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
-- Async lead scrape update is implemented locally; deployment status should be updated after the VPS copy/rebuild step.
+- Async lead scrape implementation commit pushed and deployed: `43c3054` (`Make lead scraping async`).
+- Post-deploy documentation has been updated to reflect the async scrape release and VPS smoke checks.
 - Latest hardening code/config commit pushed: `c35051f` (`Harden agency app deployment`).
 - A post-deploy handoff/memory documentation sync was pushed after the hardening commit.
 - Local repo status after the documentation sync: clean on `main...origin/main`.
 - Live hardening deployment completed on `/opt/ad-agency-autopilot`.
+- Live async scrape deployment completed on `/opt/ad-agency-autopilot`.
 - VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
 - VPS env backup: `/opt/ad-agency-autopilot/data/backups/env-20260702T090811Z/.env.before-hardening`.
 - VPS post-deploy file snapshot: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T090955Z-hardening-post`.
+- VPS async scrape backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T092935Z-async-lead-scrape`.
 - Runtime secrets/data remain uncommitted.
 
 ## Live Verification
@@ -100,7 +107,7 @@ Last updated: 2026-07-02
 
 ## Next Steps
 
-- Deploy async scrape update to `/opt/ad-agency-autopilot`, rebuild `ad-agency-autopilot`, and smoke test the public authenticated scrape job flow.
+- Run one authenticated real lead scrape from the browser when ready to confirm end-to-end UX with live progress messages; no fake production scrape was started during deployment smoke.
 - Add a valid physical mailing address to local and VPS `OUTBOUND_POSTAL_ADDRESS`, then run a safe test campaign send.
 - Reconcile local vs public runtime data before launch if the local desktop DB is still expected to mirror production.
 - Move Make/webhook credentials from `credentials.json` to env/secret storage or a protected persistent volume.
