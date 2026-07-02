@@ -1559,6 +1559,43 @@ body {
     transform: translateY(-2px);
 }
 
+.post-media-preview {
+    width: 100%;
+    max-width: 100%;
+    margin-top: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #05070b;
+    position: relative;
+}
+
+.post-media-preview.media-image {
+    aspect-ratio: 16 / 9;
+}
+
+.post-media-preview.media-video {
+    aspect-ratio: 9 / 16;
+    width: min(100%, 220px);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.post-media-preview img,
+.post-media-preview video {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.post-media-preview img {
+    object-fit: cover;
+}
+
+.post-media-preview video {
+    object-fit: contain;
+}
+
 .post-meta {
     display: flex;
     justify-content: space-between;
@@ -2183,6 +2220,7 @@ body {
 /* Card Action Badges */
 .card-actions-row {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     margin-top: 15px;
@@ -2199,6 +2237,14 @@ body {
     font-weight: 600;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    min-height: 36px;
+    min-width: 0;
+    flex: 1 1 72px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
 }
 
 .card-action-btn.btn-post {

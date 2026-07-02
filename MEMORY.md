@@ -41,8 +41,9 @@ Last updated: 2026-07-02
 
 - 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
 - Hardening deployment commit: `c35051f`; async lead scrape commit: `43c3054`; realtor directory commit: `0ae31d0`; brokerage roster commit: `4946727`; CRM auto-approve commit: `2b33db0`.
-- Latest update adds lead-detail controls for `Pause Campaign` and `Delete Lead`, plus `POST /api/leads/:id/pause-campaign` and `DELETE /api/leads/:id`.
-- Local verification for latest update: `node --check db.js`, `node --check server.js`, `node --check app.js`, `db.initDb()` module load, and temporary smoke on `PORT=3131` for `/api/crm-state` plus 404 pause/delete routes passed.
+- Latest local update fixes social post media card previews: video cards render in a portrait `9 / 16` frame with `object-fit: contain`, image cards stay `16 / 9`, and action buttons wrap inside cards.
+- Local verification for latest update: `node --check app.js`, `node --check server.js`, temporary `PORT=3132` server returned 200; in-app browser visual seeding was blocked by the browser sandbox, so no live visual card screenshot was captured.
+- Social video preview layout commit message: `Fix social video preview layout`.
 - Lead-management code commit `2e0a824` (`Add CRM lead management controls`) was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T160315Z-lead-management`.
 
 ## Working Agreements

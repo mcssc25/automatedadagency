@@ -2971,12 +2971,12 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
                 <div class="post-body" style="font-size:0.85rem; line-height:1.5; color:var(--text-secondary); text-align:left;">${this.formatPostBody(p.body)}</div>
                 `}
                 ${p.mediaUrl ? `
-                <div class="post-media-preview" id="media-preview-${p.id}" style="margin-top: 12px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); max-height: 180px; position: relative;">
+                <div class="post-media-preview ${p.mediaUrl.includes('.mp4') || p.mediaUrl.includes('.webm') ? 'media-video' : 'media-image'}" id="media-preview-${p.id}">
                     ${p.mediaUrl.includes('.mp4') || p.mediaUrl.includes('.webm') ? `
-                        <video id="video-${p.id}" src="${p.mediaUrl}" controls playsinline preload="metadata" style="width: 100%; height: 100%; object-fit: cover; display:block;"></video>
+                        <video id="video-${p.id}" src="${p.mediaUrl}" controls playsinline preload="metadata"></video>
                         <div id="captions-${p.id}" class="reels-captions-overlay" style="position: absolute; bottom: 15px; left: 10px; right: 10px; text-align: center; pointer-events: none; text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 2px 0 #000, 0 -2px 0 #000, 2px 0 0 #000, -2px 0 0 #000; font-family: 'Outfit', 'Inter', sans-serif; font-weight: 800; font-size: 1.15rem; color: #fff; text-transform: uppercase; z-index: 10; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px;"></div>
                     ` : `
-                        <img src="${p.mediaUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+                        <img src="${p.mediaUrl}" />
                     `}
                     ${!isEditing ? `
                     <button onclick="App.removePostImage('${p.id}', 'socialPosts')" style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; z-index: 15;"><i class="fa-solid fa-times"></i></button>
@@ -3061,11 +3061,11 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
                 <div class="post-body" style="font-size:0.85rem; line-height:1.5; color:var(--text-secondary); text-align:left;">${this.formatPostBody(p.body)}</div>
                 `}
                 ${p.mediaUrl ? `
-                <div class="post-media-preview" style="margin-top: 12px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); max-height: 180px; margin-bottom: 12px; position: relative;">
+                <div class="post-media-preview ${p.mediaUrl.includes('.mp4') || p.mediaUrl.includes('.webm') ? 'media-video' : 'media-image'}" style="margin-bottom: 12px;">
                     ${p.mediaUrl.includes('.mp4') || p.mediaUrl.includes('.webm') ? `
-                        <video src="${p.mediaUrl}" controls playsinline preload="metadata" style="width: 100%; height: 100%; object-fit: cover; display:block;"></video>
+                        <video src="${p.mediaUrl}" controls playsinline preload="metadata"></video>
                     ` : `
-                        <img src="${p.mediaUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+                        <img src="${p.mediaUrl}" />
                     `}
                     ${!isEditing ? `
                     <button onclick="App.removePostImage('${p.id}', 'scheduledPosts')" style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; z-index: 15;"><i class="fa-solid fa-times"></i></button>
@@ -3115,11 +3115,11 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
                 </div>
                 <div class="post-body" style="font-size:0.85rem; line-height:1.5; color:var(--text-secondary); text-align:left;">${this.formatPostBody(p.body)}</div>
                 ${p.mediaUrl ? `
-                <div class="post-media-preview" style="margin-top: 12px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); max-height: 180px; margin-bottom: 12px;">
+                <div class="post-media-preview ${p.mediaUrl.includes('.mp4') || p.mediaUrl.includes('.webm') ? 'media-video' : 'media-image'}" style="margin-bottom: 12px;">
                     ${p.mediaUrl.includes('.mp4') || p.mediaUrl.includes('.webm') ? `
-                        <video src="${p.mediaUrl}" controls playsinline preload="metadata" style="width: 100%; height: 100%; object-fit: cover; display:block;"></video>
+                        <video src="${p.mediaUrl}" controls playsinline preload="metadata"></video>
                     ` : `
-                        <img src="${p.mediaUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+                        <img src="${p.mediaUrl}" />
                     `}
                 </div>` : ''}
                 <div class="post-actions">

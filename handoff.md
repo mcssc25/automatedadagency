@@ -14,42 +14,28 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
-- Added manual CRM lead-management controls to the selected lead panel:
-  - `Pause Campaign` appears when the selected lead has an active campaign enrollment.
-  - `Delete Lead` is always available for the selected lead.
-- Added backend routes:
-  - `POST /api/leads/:id/pause-campaign` pauses active enrollments for one lead, clears current campaign pointers, and writes a timeline note.
-  - `DELETE /api/leads/:id` removes one lead from the pipeline.
-- Added `db.deleteLead(id)`, which deletes the lead's campaign enrollment rows before deleting the lead record.
-- Important behavior distinction:
-  - Pause stops one lead's drip outreach.
-  - Delete removes the lead/prospect record and enrollment history.
-  - DNC/blacklist remains the permanent "never contact again" path and is unchanged.
+- Fixed social post media previews so AI video assets display as portrait previews instead of being cropped into the old short landscape frame.
+- `app.js` now assigns media previews a `media-video` or `media-image` class and removes inline `max-height: 180px` / `object-fit: cover` rules from draft, scheduled, and sent-log cards.
+- `index.css` now gives video previews a centered `9 / 16` frame using `object-fit: contain`, image previews a `16 / 9` frame using `object-fit: cover`, and card action rows `flex-wrap: wrap`.
+- The generation request path already sends `aspectRatio: "9:16"` to `/api/generate-video`; no backend aspect-ratio change was needed.
 
 ## Verification
 
-- `node --check db.js` passed.
-- `node --check server.js` passed.
 - `node --check app.js` passed.
-- `node -e "const db=require('./db'); db.initDb(); console.log(typeof db.deleteLead, typeof db.pauseLeadEnrollments);"` passed and confirmed both helpers export as functions.
-- Temporary local smoke server on `PORT=3131` with auth disabled verified:
-  - `GET /api/crm-state` returned 200.
-  - `POST /api/leads/999999999/pause-campaign` returned 404.
-  - `DELETE /api/leads/999999999` returned 404.
-- Smoke did not mutate any real lead records.
-- No real campaign send was triggered.
-- VPS deployment verification:
-  - Backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260702T160315Z-lead-management`.
-  - `ad-agency-autopilot` rebuilt and restarted healthy.
-  - Deployed container checks passed for `node --check /app/db.js`, `/app/server.js`, and `/app/app.js`.
-  - Deployed files include `pause-campaign`, `pauseLeadCampaign`, and `deleteLead`.
+- `node --check server.js` passed.
+- Temporary local smoke server on `PORT=3132` with auth disabled returned 200 for `/`.
+- Temporary local server was stopped after the check.
+- In-app browser was connected and viewport reset afterward, but its sandbox blocked synthetic draft/card seeding (`data:` URLs and storage/DOM writes), so no browser screenshot of a seeded video card was captured.
+- No AI image/video generation, real publish, campaign send, or production mutation was triggered.
 
 ## Repo / Deployment Status
 
-- Lead-management code commit pushed and deployed: `2e0a824` (`Add CRM lead management controls`).
-- This handoff includes the post-deploy documentation sync for that release.
+- Social video preview layout commit created locally with message `Fix social video preview layout`.
+- Not yet pushed or deployed for this video-preview fix.
+- Last pushed/deployed commit remains `2e0a824` (`Add CRM lead management controls`).
 - Runtime secrets/data remain uncommitted.
 - Previously deployed commits:
+  - `2e0a824` (`Add CRM lead management controls`)
   - `c35051f` (`Harden agency app deployment`)
   - `43c3054` (`Make lead scraping async`)
   - `0ae31d0` (`Add realtor directory lead discovery`)
@@ -58,13 +44,14 @@ Last updated: 2026-07-02
 
 ## Deployment Notes
 
-- Latest deployment copied only `app.js`, `db.js`, `index.css`, `server.js`, `MEMORY.md`, and `handoff.md`.
-- Rebuild/restart targeted only `ad-agency-autopilot`; scraper sidecar was left running.
+- If deploying this fix, copy only `app.js`, `index.css`, `MEMORY.md`, and `handoff.md`.
+- Rebuild/restart should target only `ad-agency-autopilot`; leave scraper sidecar and other VPS projects alone.
 - Do not copy ignored runtime files or local DB/log/smoke artifacts.
 
 ## Next Steps
 
-- Browser-check the selected lead panel on desktop and mobile after deploy to confirm the new controls sit cleanly under the lead metadata.
+- Browser-check a real/generated AI video draft on desktop and mobile to confirm the portrait preview and wrapped buttons match the expected card layout.
+- Push and deploy the preview fix if the local changes are accepted for release.
 - Add a valid physical mailing address to local and VPS `OUTBOUND_POSTAL_ADDRESS`, then run a safe test campaign send.
 - Add smoke/integration tests for CRM lead scrape, campaign approval/send, DNC block, inbound reply pause, manual lead pause, and manual lead delete.
 - Still needed for a full agency: direct ad-platform integrations, platform analytics, client reporting, billing/contracts, calendar booking, multi-client isolation, and durable server-side content scheduling.
