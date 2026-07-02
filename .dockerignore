@@ -7,7 +7,9 @@ server.out.log
 .cloudflared.env
 mailgun api.txt
 credentials.json
+tokens.json
 .DS_Store
 *.tmp
-data/backups
+data
+downloads
 lead-scraper-data

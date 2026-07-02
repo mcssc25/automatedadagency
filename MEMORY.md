@@ -41,8 +41,16 @@ Last updated: 2026-07-02
 
 ## Current Local Status
 
-- Local server on port 3000 was restarted on 2026-07-02 after CRM auto-approve changes.
-- `/api/crm-state` is SQLite-backed after restart and currently reports 1 Scraped lead, 2 DNC entries, 0 campaigns, and auto-approve/auto-follow-up off.
+- 2026-07-02 dev hardening update: `server.js` now serves only allowlisted root frontend files plus `/downloads`; source, DB, credentials, logs, and runtime files are no longer static assets.
+- Production/container mode now requires `ADMIN_PASSWORD` unless `ADMIN_AUTH_ENABLED=false`; Basic auth protects dashboard/API while `/api/app-config`, `/api/unsubscribe`, `/api/webhooks/inbound-email`, and `/downloads/*` remain public.
+- CORS is restricted to `PUBLIC_APP_URL` / `CORS_ALLOWED_ORIGINS` instead of wildcard.
+- Mailgun inbound webhook now verifies timestamp/token/signature HMAC and supports urlencoded or multipart fields via `multer`.
+- Outbound Mailgun sends now require `PUBLIC_APP_URL` and `OUTBOUND_POSTAL_ADDRESS` by default, append unsubscribe/mailing-address footer, and set `List-Unsubscribe` headers.
+- Scheduled post "Post Now" from the scheduled queue now passes `'scheduledPosts'` correctly.
+- Current local/Docker state checked on 2026-07-02: 3 leads, 1 Scraped lead, 2 DNC entries, 0 campaigns, auto-approve/auto-follow-up off.
+- Hardening update was deployed to VPS on 2026-07-02 with `ADMIN_PASSWORD`, `PUBLIC_APP_URL`, `MAILGUN_WEBHOOK_SIGNING_KEY`, auth enabled, and restricted CORS.
+- Public verification after deploy: unauthenticated dashboard/API/source/DB requests are blocked; authenticated dashboard/CRM works; source/DB paths return 404 even with auth; Mailgun unsigned webhook rejects and valid signed webhook passes.
+- `OUTBOUND_POSTAL_ADDRESS` is still blank, so outbound Mailgun sends fail closed until the user supplies a valid physical mailing address.
 - Latest code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.
 - Commit `2b33db0` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
 

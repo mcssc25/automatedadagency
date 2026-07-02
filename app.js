@@ -3082,7 +3082,7 @@ Do not write the post. Return only the topic as one sentence, no numbering, no q
                 </div>
                 ` : `
                 <div class="card-actions-row" style="margin-top:12px;">
-                    <button class="card-action-btn btn-post" onclick="App.publishPostNow(${p.id}, true)">
+                    <button class="card-action-btn btn-post" onclick="App.publishPostNow('${p.id}', 'scheduledPosts')">
                         <i class="fa-solid fa-paper-plane"></i> Post Now
                     </button>
                     <button class="card-action-btn btn-del" onclick="App.deleteSocialPost(${p.id}, 'scheduledPosts')">

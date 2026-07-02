@@ -4,8 +4,10 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // Load environment variables
 dotenv.config();
@@ -23,13 +25,36 @@ const GEMINI_RESEARCH_MODEL = process.env.GEMINI_RESEARCH_MODEL || 'gemini-3.5-f
 const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-lite-image';
 const GEMINI_VIDEO_MODEL = process.env.GEMINI_VIDEO_MODEL || 'gemini-omni-flash-preview';
 const DATA_DIR = path.join(__dirname, 'data');
+const downloadsDir = path.join(__dirname, 'downloads');
 const CRM_STATE_FILE = path.join(DATA_DIR, 'crm-state.json');
 const CRM_SETTINGS_FILE = path.join(DATA_DIR, 'crm-settings.json');
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const PUBLIC_APP_URL = String(process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+const ADMIN_AUTH_ENABLED = process.env.ADMIN_AUTH_ENABLED === 'true' || (NODE_ENV === 'production' && process.env.ADMIN_AUTH_ENABLED !== 'false');
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const MAILGUN_WEBHOOK_SIGNING_KEY = process.env.MAILGUN_WEBHOOK_SIGNING_KEY || '';
+const REQUIRE_MAILGUN_WEBHOOK_SIGNATURE = process.env.REQUIRE_MAILGUN_WEBHOOK_SIGNATURE !== 'false';
+const EMAIL_COMPLIANCE_REQUIRED = process.env.EMAIL_COMPLIANCE_REQUIRED !== 'false';
+const OUTBOUND_POSTAL_ADDRESS = String(process.env.OUTBOUND_POSTAL_ADDRESS || '').trim();
 const SCRAPER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
 };
 let pipelineWorkerRunning = false;
+const webhookReplayTokens = new Map();
+const mailgunUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        files: 10,
+        fileSize: 5 * 1024 * 1024,
+        fieldSize: 2 * 1024 * 1024
+    }
+});
+
+if (ADMIN_AUTH_ENABLED && !ADMIN_PASSWORD) {
+    throw new Error('ADMIN_PASSWORD must be configured when admin authentication is enabled.');
+}
 
 function ensureDataDir() {
     if (!fs.existsSync(DATA_DIR)) {
@@ -191,20 +216,118 @@ function attachEnrollmentSummaries(leads = []) {
     }));
 }
 
+function getAllowedCorsOrigins() {
+    const configured = String(process.env.CORS_ALLOWED_ORIGINS || '')
+        .split(',')
+        .map(origin => origin.trim().replace(/\/+$/, ''))
+        .filter(Boolean);
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
-app.use(express.static(__dirname, {
-    setHeaders: (res, filePath) => {
-        if (/\.(html|js|css)$/i.test(filePath)) {
-            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-            res.setHeader('Pragma', 'no-cache');
-            res.setHeader('Expires', '0');
+    if (PUBLIC_APP_URL) configured.push(PUBLIC_APP_URL);
+
+    if (NODE_ENV !== 'production') {
+        configured.push(
+            `http://localhost:${PORT}`,
+            `http://127.0.0.1:${PORT}`,
+            'http://localhost:3000',
+            'http://127.0.0.1:3000'
+        );
+    }
+
+    return [...new Set(configured)];
+}
+
+const allowedCorsOrigins = getAllowedCorsOrigins();
+
+function corsOrigin(origin, callback) {
+    if (!origin) return callback(null, true);
+    const normalized = origin.replace(/\/+$/, '');
+    if (allowedCorsOrigins.includes(normalized)) return callback(null, true);
+    return callback(null, false);
+}
+
+function timingSafeEqualString(a, b) {
+    const left = Buffer.from(String(a || ''), 'utf8');
+    const right = Buffer.from(String(b || ''), 'utf8');
+    if (left.length !== right.length) return false;
+    return crypto.timingSafeEqual(left, right);
+}
+
+function isAuthExemptPath(req) {
+    return req.path === '/api/app-config'
+        || req.path === '/api/unsubscribe'
+        || req.path === '/api/webhooks/inbound-email'
+        || req.path.startsWith('/downloads/');
+}
+
+function requireAdminAuth(req, res, next) {
+    if (!ADMIN_AUTH_ENABLED || isAuthExemptPath(req)) return next();
+
+    const header = req.headers.authorization || '';
+    const match = header.match(/^Basic\s+(.+)$/i);
+    if (match) {
+        try {
+            const decoded = Buffer.from(match[1], 'base64').toString('utf8');
+            const separator = decoded.indexOf(':');
+            const username = separator >= 0 ? decoded.slice(0, separator) : '';
+            const password = separator >= 0 ? decoded.slice(separator + 1) : '';
+            if (timingSafeEqualString(username, ADMIN_USERNAME) && timingSafeEqualString(password, ADMIN_PASSWORD)) {
+                return next();
+            }
+        } catch (error) {
+            // Fall through to the authentication challenge.
         }
     }
-})); // Serve the frontend from Express
+
+    res.setHeader('WWW-Authenticate', 'Basic realm="Ad Agency Autopilot"');
+    return res.status(401).send('Authentication required');
+}
+
+function noCacheStaticHeaders(res, filePath) {
+    if (/\.(html|js|css)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+    }
+}
+
+function serveRootFile(fileName) {
+    return (req, res) => {
+        res.sendFile(path.join(__dirname, fileName), {
+            dotfiles: 'deny',
+            headers: /\.(html|js|css)$/i.test(fileName)
+                ? {
+                    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+                : undefined
+        });
+    };
+}
+
+
+// Middleware
+app.use(cors({
+    origin: corsOrigin,
+    credentials: ADMIN_AUTH_ENABLED
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+app.use('/downloads', express.static(downloadsDir, {
+    dotfiles: 'deny',
+    index: false,
+    fallthrough: false,
+    setHeaders: noCacheStaticHeaders
+}));
+
+app.use(requireAdminAuth);
+
+app.get('/', serveRootFile('index.html'));
+app.get('/index.html', serveRootFile('index.html'));
+app.get('/app.js', serveRootFile('app.js'));
+app.get('/index.css', serveRootFile('index.css'));
+app.get('/config.js', serveRootFile('config.js'));
 
 app.get('/api/app-config', (req, res) => {
     res.json({
@@ -1741,7 +1864,6 @@ Return only a 3-4 word search query (no quotes, no punctuation) optimized for sh
 });
 
 // Create downloads directory on startup for static media files
-const downloadsDir = path.join(__dirname, 'downloads');
 if (!fs.existsSync(downloadsDir)) {
     fs.mkdirSync(downloadsDir);
 }
@@ -2388,6 +2510,36 @@ app.post('/api/gemini-proxy', async (req, res) => {
 });
 
 // Mailgun outbound sender utility
+function getPublicAppUrl() {
+    if (!PUBLIC_APP_URL) {
+        if (EMAIL_COMPLIANCE_REQUIRED) {
+            throw new Error('PUBLIC_APP_URL is required before outbound email can be sent.');
+        }
+        return '';
+    }
+    return PUBLIC_APP_URL;
+}
+
+function buildUnsubscribeUrl(email) {
+    const baseUrl = getPublicAppUrl();
+    if (!baseUrl) return '';
+    return `${baseUrl}/api/unsubscribe?email=${encodeURIComponent(String(email || '').trim().toLowerCase())}`;
+}
+
+function appendEmailComplianceFooter(text, recipientEmail) {
+    if (EMAIL_COMPLIANCE_REQUIRED && !OUTBOUND_POSTAL_ADDRESS) {
+        throw new Error('OUTBOUND_POSTAL_ADDRESS is required before outbound email can be sent.');
+    }
+
+    const unsubscribeUrl = buildUnsubscribeUrl(recipientEmail);
+    const footerLines = [];
+    if (unsubscribeUrl) footerLines.push(`Unsubscribe: ${unsubscribeUrl}`);
+    if (OUTBOUND_POSTAL_ADDRESS) footerLines.push(`Mailing address: ${OUTBOUND_POSTAL_ADDRESS}`);
+
+    if (footerLines.length === 0) return String(text || '');
+    return `${String(text || '').trim()}\n\n--\n${footerLines.join('\n')}`;
+}
+
 async function sendMailgunEmail({ to, subject, text }) {
     const apiKey = process.env.MAILGUN_API_KEY;
     const domain = process.env.MAILGUN_DOMAIN;
@@ -2405,6 +2557,9 @@ async function sendMailgunEmail({ to, subject, text }) {
     if (!apiKey || !domain) {
         throw new Error('Mailgun API key or domain is not configured. Email was not sent.');
     }
+
+    const unsubscribeUrl = buildUnsubscribeUrl(recipientEmail);
+    const finalText = appendEmailComplianceFooter(text, recipientEmail);
     
     const url = `https://api.mailgun.net/v3/${domain}/messages`;
     const auth = Buffer.from(`api:${apiKey}`).toString('base64');
@@ -2413,7 +2568,11 @@ async function sendMailgunEmail({ to, subject, text }) {
     params.append('from', from);
     params.append('to', recipientEmail);
     params.append('subject', subject);
-    params.append('text', text);
+    params.append('text', finalText);
+    if (unsubscribeUrl) {
+        params.append('h:List-Unsubscribe', `<${unsubscribeUrl}>`);
+        params.append('h:List-Unsubscribe-Post', 'List-Unsubscribe=One-Click');
+    }
     
     const response = await axios.post(url, params, {
         headers: {
@@ -2685,8 +2844,59 @@ app.get('/api/unsubscribe', (req, res) => {
     }
 });
 
+function getMailgunSignatureFields(body = {}) {
+    const signatureBlock = body.signature && typeof body.signature === 'object' ? body.signature : {};
+    return {
+        timestamp: String(signatureBlock.timestamp || body.timestamp || '').trim(),
+        token: String(signatureBlock.token || body.token || '').trim(),
+        signature: String(signatureBlock.signature || body.signature || '').trim()
+    };
+}
+
+function cleanupWebhookReplayTokens(nowMs = Date.now()) {
+    for (const [token, expiresAt] of webhookReplayTokens.entries()) {
+        if (expiresAt <= nowMs) webhookReplayTokens.delete(token);
+    }
+}
+
+function verifyMailgunWebhook(req, res, next) {
+    if (!REQUIRE_MAILGUN_WEBHOOK_SIGNATURE) return next();
+
+    if (!MAILGUN_WEBHOOK_SIGNING_KEY) {
+        console.error('[Inbound Webhook] MAILGUN_WEBHOOK_SIGNING_KEY is not configured.');
+        return res.status(503).json({ error: 'Webhook verification is not configured.' });
+    }
+
+    const { timestamp, token, signature } = getMailgunSignatureFields(req.body || {});
+    if (!timestamp || !token || !signature) {
+        return res.status(401).json({ error: 'Missing Mailgun webhook signature.' });
+    }
+
+    const timestampMs = Number(timestamp) * 1000;
+    if (!Number.isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > 15 * 60 * 1000) {
+        return res.status(401).json({ error: 'Expired Mailgun webhook signature.' });
+    }
+
+    cleanupWebhookReplayTokens();
+    if (webhookReplayTokens.has(token)) {
+        return res.status(401).json({ error: 'Replay webhook token rejected.' });
+    }
+
+    const expected = crypto
+        .createHmac('sha256', MAILGUN_WEBHOOK_SIGNING_KEY)
+        .update(`${timestamp}${token}`)
+        .digest('hex');
+
+    if (!timingSafeEqualString(signature, expected)) {
+        return res.status(401).json({ error: 'Invalid Mailgun webhook signature.' });
+    }
+
+    webhookReplayTokens.set(token, Date.now() + 15 * 60 * 1000);
+    return next();
+}
+
 // Mailgun Inbound Webhook
-app.post('/api/webhooks/inbound-email', async (req, res) => {
+app.post('/api/webhooks/inbound-email', mailgunUpload.any(), verifyMailgunWebhook, async (req, res) => {
     try {
         const extractEmail = (value) => {
             if (!value) return null;

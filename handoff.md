@@ -14,53 +14,71 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
-- Added a CRM **Auto-Approve New Campaigns** toggle in CRM Autopilot Settings.
-- Renamed the older Settings checkbox copy from bypass verification to Auto-Approve New CRM Campaigns.
-- Added `autoApproveCampaigns` to frontend/backend CRM settings while preserving legacy `bypassEmailVerification` compatibility.
-- Auto-approved generated campaigns now become `Active` and call the normal Mailgun launch path immediately for Step 1.
-- Fixed the fallback campaign-generation path so it also honors auto-approve instead of always staying `Awaiting Launch`.
-- Campaign creation now reports how many Step 1 emails were sent/failed when auto-approve runs.
-- Auto-follow-up timing remains controlled by the existing **Auto-Send Due Follow-Up Steps** toggle. Delayed steps are processed by the backend worker every 5 minutes when enabled.
+- Implemented the first development-hardening pass from the audit.
+- Replaced broad `express.static(__dirname)` with an allowlist for `/`, `/index.html`, `/app.js`, `/index.css`, `/config.js`, and `/downloads/*`.
+- Added production/admin Basic auth. In production, the server now refuses to start without `ADMIN_PASSWORD` unless `ADMIN_AUTH_ENABLED=false` is deliberately set.
+- Restricted CORS to `PUBLIC_APP_URL` / `CORS_ALLOWED_ORIGINS` instead of wildcard.
+- Added Mailgun webhook HMAC verification with timestamp freshness and replay-token protection.
+- Added `multer` so Mailgun inbound fields can be parsed from multipart posts as well as urlencoded posts.
+- Added outbound email compliance safety: sends require `PUBLIC_APP_URL` and `OUTBOUND_POSTAL_ADDRESS` by default, append unsubscribe/mailing-address footer, and set `List-Unsubscribe` headers.
+- Fixed scheduled queue "Post Now" to call `publishPostNow(id, 'scheduledPosts')`.
+- Updated `.env.example`, `.gitignore`, and `.dockerignore` so new runtime secrets and local data are handled intentionally.
 
 ## Verification
 
-- `node --check app.js` passed.
-- `node --check server.js` passed.
+- `node --version`: `v24.13.0`.
+- `node --check server.js`, `node --check db.js`, and `node --check app.js` passed.
+- `npm audit --omit=dev` reported 0 vulnerabilities.
+- `npm ls --depth=0` includes `multer@2.2.0`.
 - `git diff --check` passed with only normal Windows CRLF warnings.
-- Local server on port 3000 was restarted from current `server.js`.
-- Local `/api/app-config` returned `geminiConfigured: true`.
-- Local `/api/crm-state` returned the SQLite-backed shape and reported:
-  - `campaignsListCount: 0`
-  - `verificationQueueCount: 0`
-  - `autoApproveCampaigns: false`
-  - `bypassEmailVerification: false`
-  - `autoAdvanceCampaigns: false`
-  - `scrapedCount: 1`
-  - `dncCount: 2`
-- No test campaign was generated and no email send was triggered during verification.
+- Temporary production-mode smoke server with test auth:
+  - unauthenticated `/`, `/app.js`, `/server.js`, `/db.js`, `/data/crm.db`, and `/credentials.json` returned 401 except public `/api/app-config` and `/downloads/fallback_agent.jpg`.
+  - authenticated `/` and `/app.js` returned 200.
+  - authenticated `/server.js` and `/data/crm.db` returned 404.
+- Production-mode startup without `ADMIN_PASSWORD` fails fast with `ADMIN_PASSWORD must be configured when admin authentication is enabled.`
+- Temporary dev-mode smoke server without auth:
+  - `/` and `/app.js` returned 200.
+  - `/server.js`, `/db.js`, `/data/crm.db`, and `/credentials.json` returned 404.
+  - `/downloads/fallback_agent.jpg` and `/api/app-config` returned 200.
+- Mailgun webhook checks on temporary production-mode server:
+  - unsigned urlencoded post returned 401.
+  - valid signed urlencoded post returned 200 with `Sender not found in CRM`.
+  - valid signed multipart post returned 200 with `Sender not found in CRM`.
+- Local and VPS `.env` now have generated admin auth, `PUBLIC_APP_URL`, restricted CORS, and Mailgun webhook signing configured.
+- `OUTBOUND_POSTAL_ADDRESS` is present but blank; outbound email sends intentionally fail closed until a valid physical mailing address is supplied.
+- No real campaign was generated, no email send was triggered, and no records were intentionally mutated. Live webhook verification used an unknown sender and did not modify CRM records.
 
 ## Repo / Deployment Status
 
 - Git commit pushed: `2b33db0` (`Add CRM campaign auto-approve toggle`).
-- Local repo status was clean after commit/push before this final documentation refresh.
-- Live deployment completed on `/opt/ad-agency-autopilot`.
+- Local repo currently has uncommitted post-deploy documentation updates plus the hardening changes pending commit.
+- Live hardening deployment completed on `/opt/ad-agency-autopilot`.
 - VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
-- Rebuilt only the `ad-agency-autopilot` service; tunnel and lead scraper stayed running.
+- VPS env backup: `/opt/ad-agency-autopilot/data/backups/env-20260702T090811Z/.env.before-hardening`.
+- VPS post-deploy file snapshot: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T090955Z-hardening-post`.
 - Runtime secrets/data remain uncommitted.
 
 ## Live Verification
 
-- VPS `docker compose ps ad-agency-autopilot` reported healthy.
-- Public `/api/app-config` returned `geminiConfigured: true`.
-- Public `/api/crm-state` returned:
-  - `campaignsListCount: 0`
-  - `verificationQueueCount: 1`
-  - `autoApproveCampaigns: false`
-  - `bypassEmailVerification: false`
-  - `autoAdvanceCampaigns: false`
-  - `dncCount: 0`
-- Public HTML contains `crm-auto-approve-campaigns`, `Auto-Approve New Campaigns`, and `Auto-Approve New CRM Campaigns`.
+- VPS `docker compose ps ad-agency-autopilot` reported healthy after rebuild.
+- Public unauthenticated:
+  - `/api/app-config` returned 200.
+  - `/`, `/app.js`, `/api/crm-state`, `/server.js`, `/db.js`, `/package.json`, `/data/crm.db`, and `/credentials.json` returned 401.
+  - `/downloads/fallback_agent.jpg` returned 200 as public media.
+- Public authenticated:
+  - `/`, `/app.js`, and `/api/crm-state` returned 200.
+  - `/server.js` and `/data/crm.db` returned 404.
+- Public CORS:
+  - evil origin did not receive `Access-Control-Allow-Origin`.
+  - `https://agents.realestatecrmpro.com` received the expected allowed origin.
+- Public Mailgun webhook:
+  - unsigned urlencoded post returned 401.
+  - valid signed urlencoded post returned 200 with `Sender not found in CRM`.
 
 ## Next Steps
 
-- To fully exercise the drip, use a safe test lead/domain, enable Auto-Approve plus Auto-Send Due Follow-Up Steps, generate a campaign, then verify Step 1 sends and `campaign_enrollments.nextActionAt` is populated for Step 2.
+- Add a valid physical mailing address to local and VPS `OUTBOUND_POSTAL_ADDRESS`, then run a safe test campaign send.
+- Reconcile local vs public runtime data before launch if the local desktop DB is still expected to mirror production.
+- Move Make/webhook credentials from `credentials.json` to env/secret storage or a protected persistent volume.
+- Add smoke/integration tests for CRM lead scrape, campaign approval/send, DNC block, inbound reply pause, and content publish queue.
+- Still needed for a full agency: direct ad-platform integrations, platform analytics, client reporting, billing/contracts, calendar booking, multi-client isolation, and durable server-side content scheduling.
