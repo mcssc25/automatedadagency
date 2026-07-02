@@ -43,6 +43,7 @@ Last updated: 2026-07-02
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
 - Missing-script smoke with `LAST30DAYS_SCRIPT_PATH` pointed at a nonexistent file returned 12 trend cards, 12 keyword targets, and 4 searched queries, confirming the production fallback path works without `py`.
+- Production `/api/trends` smoke from inside the deployed container returned 6 trend cards, 12 keyword targets, and 12 searched queries.
 - Bounded local smoke request to `/api/trends` for `Real Estate CRM Pro` with `TREND_RESEARCH_MAX_QUERIES=4` returned:
   - 12 trend cards
   - 12 keyword targets
@@ -57,9 +58,11 @@ Last updated: 2026-07-02
 
 - Files changed for lead-intelligence work: `Dockerfile`, `db.js`, `docker-compose.yml`, `package.json`, `package-lock.json`, `server.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
-- Lead-intelligence code is local and pending commit/deployment.
-- Last completed code commit pushed to `main`: `8eb10bd` (`Preserve trend cards on empty refresh`).
-- Deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
+- Lead-intelligence code commit on `main`: `a91eb02` (`Add brokerage lead intelligence engine`); browser harvesting/production verification is still called out separately above.
+- Latest code commit pushed to `main`: `8eb10bd` (`Preserve trend cards on empty refresh`).
+- Refresh-preservation deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T202056Z-trend-refresh-preserve`.
+- Deployed `ad-agency-autopilot` container is healthy.
+- Trend refresh preservation deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
 - Deployment copied only `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.
 - `ad-agency-autopilot` was rebuilt/restarted only for that service; the lead scraper sidecar remained running.
