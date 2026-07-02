@@ -29,7 +29,8 @@ Last updated: 2026-07-02
 - DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients.
 - DNC removal is disabled unless `ALLOW_DNC_REMOVAL=true` is intentionally set for admin recovery.
 - Mailgun inbound replies post to `/api/webhooks/inbound-email`; CRM polls on `#crm`.
-- Lead scraping prefers `LEAD_SCRAPER_URL=http://lead-scraper:8080`; if Maps has a website but no email, the backend crawls homepage/contact-style pages for public emails before Gemini fallback.
+- Lead scraping prefers `LEAD_SCRAPER_URL=http://lead-scraper:8080`; `/api/scrape-leads` now starts an async in-memory job, `/api/scrape-leads/jobs/:id` polls status, and completed jobs insert/dedupe leads.
+- If Maps has a website but no email, the backend crawls homepage/contact-style pages for public emails before Gemini fallback.
 - Lead records support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
 - Sales asset settings persist in CRM settings: booking/calendar link, sales page URL, default demo YouTube video, and YouTube page/channel.
 - Campaign copy can use `[CTA Link]`, `[Booking Link]`, `[Demo Link]`, `[YouTube Link]`, `[Sales Page]`, and `[Website]`.
@@ -50,6 +51,7 @@ Last updated: 2026-07-02
 - Current local/Docker state checked on 2026-07-02: 3 leads, 1 Scraped lead, 2 DNC entries, 0 campaigns, auto-approve/auto-follow-up off.
 - Hardening update was deployed to VPS on 2026-07-02 with `ADMIN_PASSWORD`, `PUBLIC_APP_URL`, `MAILGUN_WEBHOOK_SIGNING_KEY`, auth enabled, and restricted CORS.
 - Public verification after deploy: unauthenticated dashboard/API/source/DB requests are blocked; authenticated dashboard/CRM works; source/DB paths return 404 even with auth; Mailgun unsigned webhook rejects and valid signed webhook passes.
+- 2026-07-02 lead scrape fix: async job polling prevents Cloudflare/browser request timeouts from surfacing as raw HTML during long scrape/enrichment runs.
 - `OUTBOUND_POSTAL_ADDRESS` is still blank, so outbound Mailgun sends fail closed until the user supplies a valid physical mailing address.
 - Hardening deployment code commit: `c35051f` (`Harden agency app deployment`).
 - Latest code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.

@@ -14,6 +14,15 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Implemented async CRM lead scraping to prevent Cloudflare/browser request timeouts.
+- `POST /api/scrape-leads` now starts an in-memory lead scrape job and returns `202` with a `job.id` immediately.
+- Added `GET /api/scrape-leads/jobs/:id` so the UI can poll `queued` / `running` / `completed` / `failed` status.
+- The previous synchronous scrape body is now shared by `runLeadScrape()`, preserving Maps sidecar -> Gemini fallback -> insert/dedupe behavior.
+- The CRM scrape button now queues a job, polls every 4 seconds, logs progress, refreshes CRM state on completion, and converts HTML proxy/auth/timeout responses into a readable error.
+- Diagnosed the original `"realtors in crystal lake, il"` popup: the sidecar found 20 Maps places and inserted 5 `Scraped` leads after the public browser request had already received an HTML timeout/error page.
+
+## Previous Update
+
 - Implemented the first development-hardening pass from the audit.
 - Replaced broad `express.static(__dirname)` with an allowlist for `/`, `/index.html`, `/app.js`, `/index.css`, `/config.js`, and `/downloads/*`.
 - Added production/admin Basic auth. In production, the server now refuses to start without `ADMIN_PASSWORD` unless `ADMIN_AUTH_ENABLED=false` is deliberately set.
@@ -26,6 +35,18 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- Local code checks for async scrape update:
+  - `node --check server.js` passed.
+  - `node --check app.js` passed.
+  - `git diff --check` passed with normal Windows CRLF warnings only.
+- Temporary local smoke server on `PORT=3333` verified:
+  - `POST /api/scrape-leads` returned a queued job id immediately.
+  - `GET /api/scrape-leads/jobs/:id` returned running status and then failed status/details on a deliberately disabled scraper/Gemini setup.
+- Production log check on 2026-07-02:
+  - `ad-agency-autopilot`, `ad-agency-lead-scraper`, and `ad-agency-autopilot-tunnel` were running.
+  - App log showed `[Scraper] Looking for up to 30 public contacts for: "realtors in crystal lake, il"...`.
+  - Sidecar log showed 20 Maps places found and final `scraped successfully`.
+  - DB check showed 7 total leads, 6 `Scraped`, with 5 latest leads from `realtors in crystal lake, il` created at `2026-07-02 14:20:36` UTC.
 - `node --version`: `v24.13.0`.
 - `node --check server.js`, `node --check db.js`, and `node --check app.js` passed.
 - `npm audit --omit=dev` reported 0 vulnerabilities.
@@ -50,6 +71,7 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
+- Async lead scrape update is implemented locally; deployment status should be updated after the VPS copy/rebuild step.
 - Latest hardening code/config commit pushed: `c35051f` (`Harden agency app deployment`).
 - A post-deploy handoff/memory documentation sync was pushed after the hardening commit.
 - Local repo status after the documentation sync: clean on `main...origin/main`.
@@ -78,6 +100,7 @@ Last updated: 2026-07-02
 
 ## Next Steps
 
+- Deploy async scrape update to `/opt/ad-agency-autopilot`, rebuild `ad-agency-autopilot`, and smoke test the public authenticated scrape job flow.
 - Add a valid physical mailing address to local and VPS `OUTBOUND_POSTAL_ADDRESS`, then run a safe test campaign send.
 - Reconcile local vs public runtime data before launch if the local desktop DB is still expected to mirror production.
 - Move Make/webhook credentials from `credentials.json` to env/secret storage or a protected persistent volume.

@@ -3925,6 +3925,52 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         }
     }
 
+    async parseApiError(response, fallbackMessage = "Request failed") {
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+            const errData = await response.json().catch(() => ({}));
+            const details = errData.details ? ` Details: ${errData.details}` : "";
+            return `${errData.error || fallbackMessage}${details}`;
+        }
+
+        const rawError = await response.text().catch(() => "");
+        const cleaned = rawError.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+        if (rawError.trim().startsWith("<!DOCTYPE html") || rawError.trim().startsWith("<html")) {
+            return `${fallbackMessage}. The server returned an HTML error page instead of JSON, usually from an auth, proxy, or timeout layer.`;
+        }
+        return cleaned.slice(0, 400) || fallbackMessage;
+    }
+
+    async waitForLeadScrapeJob(jobId, niche) {
+        const startedAt = Date.now();
+        const maxWaitMs = 30 * 60 * 1000;
+        let lastMessage = "";
+
+        while (Date.now() - startedAt < maxWaitMs) {
+            await new Promise(resolve => setTimeout(resolve, 4000));
+
+            const response = await fetch(`/api/scrape-leads/jobs/${encodeURIComponent(jobId)}`);
+            if (!response.ok) {
+                throw new Error(await this.parseApiError(response, "Could not check lead scrape status"));
+            }
+
+            const data = await response.json();
+            const job = data.job || {};
+            if (job.message && job.message !== lastMessage) {
+                lastMessage = job.message;
+                this.appendConsoleLine('system', `Lead scrape status for "${niche}": ${job.message}`);
+            }
+
+            if (job.status === "completed") return job.result || {};
+            if (job.status === "failed") {
+                const details = job.details ? ` Details: ${job.details}` : "";
+                throw new Error(`${job.error || "Lead scraping failed"}${details}`);
+            }
+        }
+
+        throw new Error("Lead scraping is still running after 30 minutes. Refresh CRM state later or check server logs.");
+    }
+
     // CRM Lead Scraper Execution
     async handleCrmScrape() {
         const niche = this.dom.crmScrapeNiche.value.trim();
@@ -3947,24 +3993,24 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             });
 
             if (!response.ok) {
-                const contentType = response.headers.get("content-type") || "";
-                let errData = {};
-                if (contentType.includes("application/json")) {
-                    errData = await response.json().catch(() => ({}));
-                } else {
-                    const rawError = await response.text().catch(() => "");
-                    errData.error = rawError.trim().slice(0, 400);
-                }
-                const details = errData.details ? ` Details: ${errData.details}` : "";
-                throw new Error(`${errData.error || "Lead scraping failed"}${details}`);
+                throw new Error(await this.parseApiError(response, "Lead scraping failed"));
             }
-            const data = await response.json();
+            const initialData = await response.json();
+            const job = initialData.job || {};
+            this.appendConsoleLine('system', `Lead scrape job queued${job.id ? ` (${job.id})` : ''}. You can keep using the CRM while it runs.`);
+
+            const data = job.id
+                ? await this.waitForLeadScrapeJob(job.id, niche)
+                : initialData;
             
             if (data.leads && data.leads.length > 0) {
                 this.state.leadsPage = 1;
                 await this.loadCrmStateFromServer();
                 
                 let logMsg = `Scraped and loaded ${data.leads.length} leads for "${niche}" into pipeline via ${data.source || 'lead scraper'}.`;
+                if (data.warnings && data.warnings.length) {
+                    logMsg += ` Warnings: ${data.warnings.join(' | ')}`;
+                }
                 this.appendConsoleLine('agent-sales', logMsg);
                 
                 alert(`Successfully scraped and added ${data.leads.length} new leads!`);

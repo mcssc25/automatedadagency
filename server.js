@@ -42,6 +42,7 @@ const SCRAPER_HEADERS = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
 };
 let pipelineWorkerRunning = false;
+const leadScrapeJobs = new Map();
 const webhookReplayTokens = new Map();
 const mailgunUpload = multer({
     storage: multer.memoryStorage(),
@@ -1488,6 +1489,147 @@ function insertLeadCandidates(candidates, discoveryQuery) {
     }
 
     return { insertedLeads, skipped };
+}
+
+function formatErrorMessage(error, fallback = 'unknown error') {
+    return error && (error.message || error.code || String(error)) || fallback;
+}
+
+async function runLeadScrape(niche, count, onProgress = () => {}) {
+    console.log(`[Scraper] Looking for up to ${count} public contacts for: "${niche}"...`);
+
+    let candidates = [];
+    let source = 'maps-sidecar';
+    const errors = [];
+
+    try {
+        onProgress('maps-sidecar', 'Searching Google Maps and enriching public website emails...');
+        candidates = await scrapeLeadCandidatesWithMapsSidecar(niche, count);
+    } catch (error) {
+        const message = formatErrorMessage(error);
+        errors.push(`maps-sidecar: ${message}`);
+        console.warn(`[Maps Scraper Error] ${message}`);
+    }
+
+    if (candidates.length === 0) {
+        try {
+            source = 'gemini-search';
+            onProgress('gemini-search', 'Maps did not return usable name + email leads; trying Gemini grounded search...');
+            candidates = await scrapeLeadCandidatesWithGemini(niche, count);
+        } catch (error) {
+            const message = formatErrorMessage(error);
+            errors.push(`gemini-search: ${message}`);
+            console.error(`[Gemini Lead Search Error] ${message}`);
+        }
+    }
+
+    if (candidates.length === 0) {
+        const error = new Error('Lead scraping failed before any leads were inserted.');
+        error.details = errors.join(' | ');
+        throw error;
+    }
+
+    onProgress('inserting', `Found ${candidates.length} candidate(s). Inserting new valid leads...`);
+    const { insertedLeads, skipped } = insertLeadCandidates(candidates.slice(0, count), niche);
+
+    return {
+        leads: insertedLeads,
+        skipped,
+        source,
+        candidateCount: candidates.length,
+        warnings: errors
+    };
+}
+
+function serializeLeadScrapeJob(job) {
+    return {
+        id: job.id,
+        niche: job.niche,
+        count: job.count,
+        status: job.status,
+        phase: job.phase,
+        message: job.message,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        result: job.result,
+        error: job.error,
+        details: job.details
+    };
+}
+
+function updateLeadScrapeJob(job, changes) {
+    Object.assign(job, changes, { updatedAt: new Date().toISOString() });
+    return job;
+}
+
+function cleanupLeadScrapeJobs() {
+    const cutoffMs = Date.now() - (2 * 60 * 60 * 1000);
+    for (const [id, job] of leadScrapeJobs.entries()) {
+        const updatedAt = Date.parse(job.updatedAt || job.createdAt || '');
+        if (Number.isFinite(updatedAt) && updatedAt < cutoffMs) {
+            leadScrapeJobs.delete(id);
+        }
+    }
+}
+
+function startLeadScrapeJob(niche, count) {
+    cleanupLeadScrapeJobs();
+
+    const now = new Date().toISOString();
+    const job = {
+        id: crypto.randomUUID(),
+        niche,
+        count,
+        status: 'queued',
+        phase: 'queued',
+        message: 'Queued lead scrape job.',
+        createdAt: now,
+        updatedAt: now,
+        startedAt: null,
+        completedAt: null,
+        result: null,
+        error: null,
+        details: null
+    };
+
+    leadScrapeJobs.set(job.id, job);
+
+    setImmediate(async () => {
+        try {
+            updateLeadScrapeJob(job, {
+                status: 'running',
+                phase: 'starting',
+                message: `Starting lead scrape for "${niche}".`,
+                startedAt: new Date().toISOString()
+            });
+
+            const result = await runLeadScrape(niche, count, (phase, message) => {
+                updateLeadScrapeJob(job, { phase, message });
+            });
+
+            updateLeadScrapeJob(job, {
+                status: 'completed',
+                phase: 'completed',
+                message: `Scrape complete. Added ${result.leads.length} new lead(s).`,
+                completedAt: new Date().toISOString(),
+                result
+            });
+        } catch (error) {
+            const message = formatErrorMessage(error, 'Lead scrape failed.');
+            updateLeadScrapeJob(job, {
+                status: 'failed',
+                phase: 'failed',
+                message,
+                completedAt: new Date().toISOString(),
+                error: message,
+                details: error.details || null
+            });
+        }
+    });
+
+    return job;
 }
 
 // 1. Web Scraper & Profile Summarizer Endpoint
@@ -3048,7 +3190,16 @@ Otherwise, set "requiresHandoff" to false. Ensure the response is valid JSON onl
 });
 
 // 6. Lead Scraper Endpoint (Search-grounded contact discovery)
-app.post('/api/scrape-leads', async (req, res) => {
+app.get('/api/scrape-leads/jobs/:id', (req, res) => {
+    const job = leadScrapeJobs.get(req.params.id);
+    if (!job) {
+        return res.status(404).json({ error: 'Lead scrape job not found. It may have expired or the server restarted.' });
+    }
+
+    res.json({ job: serializeLeadScrapeJob(job) });
+});
+
+app.post('/api/scrape-leads', (req, res) => {
     const niche = String(req.body.niche || '').trim();
     const count = Math.min(Math.max(parseInt(req.body.count, 10) || 25, 1), 100);
 
@@ -3056,45 +3207,8 @@ app.post('/api/scrape-leads', async (req, res) => {
         return res.status(400).json({ error: 'Target city and niche is required.' });
     }
 
-    console.log(`[Scraper] Looking for up to ${count} public contacts for: "${niche}"...`);
-
-    let candidates = [];
-    let source = 'maps-sidecar';
-    const errors = [];
-
-    try {
-        candidates = await scrapeLeadCandidatesWithMapsSidecar(niche, count);
-    } catch (error) {
-        errors.push(`maps-sidecar: ${error.message}`);
-        console.warn(`[Maps Scraper Error] ${error.message}`);
-    }
-
-    if (candidates.length === 0) {
-        try {
-            source = 'gemini-search';
-            candidates = await scrapeLeadCandidatesWithGemini(niche, count);
-        } catch (error) {
-            errors.push(`gemini-search: ${error.message}`);
-            console.error(`[Gemini Lead Search Error] ${error.message}`);
-        }
-    }
-
-    if (candidates.length === 0) {
-        return res.status(502).json({
-            error: 'Lead scraping failed before any leads were inserted.',
-            details: errors.join(' | ')
-        });
-    }
-
-    const { insertedLeads, skipped } = insertLeadCandidates(candidates.slice(0, count), niche);
-
-    res.json({
-        leads: insertedLeads,
-        skipped,
-        source,
-        candidateCount: candidates.length,
-        warnings: errors
-    });
+    const job = startLeadScrapeJob(niche, count);
+    res.status(202).json({ job: serializeLeadScrapeJob(job) });
 });
 
 // Approve and Launch Campaign Endpoint
