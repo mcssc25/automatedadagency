@@ -1963,12 +1963,29 @@ function formatErrorMessage(error, fallback = 'unknown error') {
     return error && (error.message || error.code || String(error)) || fallback;
 }
 
+async function withTimeout(promise, timeoutMs, label) {
+    let timeoutId;
+    const timeoutPromise = new Promise((resolve, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds`));
+        }, timeoutMs);
+    });
+
+    try {
+        return await Promise.race([promise, timeoutPromise]);
+    } finally {
+        clearTimeout(timeoutId);
+        Promise.resolve(promise).catch(() => {});
+    }
+}
+
 async function runLeadScrape(niche, count, onProgress = () => {}) {
     console.log(`[Scraper] Looking for up to ${count} public contacts for: "${niche}"...`);
 
     let candidates = [];
     let source = 'maps-sidecar';
     const errors = [];
+    const realtorQuery = isRealtorLeadQuery(niche);
 
     try {
         onProgress('maps-sidecar', 'Searching Google Maps and enriching public website emails...');
@@ -1979,11 +1996,16 @@ async function runLeadScrape(niche, count, onProgress = () => {}) {
         console.warn(`[Maps Scraper Error] ${message}`);
     }
 
-    if (isRealtorLeadQuery(niche) && candidates.length < count) {
+    if (realtorQuery && candidates.length < count && process.env.LEAD_REALTOR_DIRECTORY_FALLBACK !== 'false') {
         try {
             const remaining = Math.max(count - candidates.length, 1);
             onProgress('real-estate-directories', `Searching public realtor directory/profile signals for ${remaining} more verified email lead(s)...`);
-            const directoryCandidates = await scrapeRealtorDirectoryLeadCandidates(niche, Math.min(Math.max(remaining * 2, 10), count));
+            const timeoutMs = Math.min(Math.max(parseInt(process.env.LEAD_REALTOR_DIRECTORY_TIMEOUT_MS, 10) || 45000, 10000), 120000);
+            const directoryCandidates = await withTimeout(
+                scrapeRealtorDirectoryLeadCandidates(niche, Math.min(Math.max(remaining * 2, 10), count)),
+                timeoutMs,
+                'Realtor directory fallback'
+            );
             const previousCount = candidates.length;
             candidates = mergeLeadCandidatesByEmail(candidates, directoryCandidates).slice(0, count);
             if (candidates.length > previousCount) {
@@ -1996,7 +2018,7 @@ async function runLeadScrape(niche, count, onProgress = () => {}) {
         }
     }
 
-    if (candidates.length === 0) {
+    if (candidates.length === 0 && (!realtorQuery || process.env.LEAD_GENERIC_GEMINI_FALLBACK_FOR_REALTORS === 'true')) {
         try {
             source = 'gemini-search';
             onProgress('gemini-search', 'Maps did not return usable name + email leads; trying Gemini grounded search...');
@@ -2009,9 +2031,14 @@ async function runLeadScrape(niche, count, onProgress = () => {}) {
     }
 
     if (candidates.length === 0) {
-        const error = new Error('Lead scraping failed before any leads were inserted.');
-        error.details = errors.join(' | ');
-        throw error;
+        const realtorMessage = 'No public individual agent emails were found on brokerage rosters or allowed profile/contact pages.';
+        return {
+            leads: [],
+            skipped: { dnc: 0, duplicate: 0, invalid: 0 },
+            source,
+            candidateCount: 0,
+            warnings: realtorQuery ? [realtorMessage, ...errors] : errors
+        };
     }
 
     onProgress('inserting', `Found ${candidates.length} candidate(s). Inserting new valid leads...`);

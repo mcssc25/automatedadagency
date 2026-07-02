@@ -14,6 +14,15 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Fixed a realtor scrape UX failure where a Gulf Shores scrape could keep spinning without an obvious completed/error result.
+- Production logs showed Maps found 20 places, stricter brokerage/business filters rejected the Maps business rows, several brokerage websites returned 403/500/timeouts, the directory fallback timed out after 120 seconds, and then generic Gemini fallback kept the job waiting.
+- Realtor scrape jobs now use a bounded `LEAD_REALTOR_DIRECTORY_TIMEOUT_MS` fallback timeout, default 45 seconds.
+- Generic Gemini fallback is skipped for realtor queries unless `LEAD_GENERIC_GEMINI_FALLBACK_FOR_REALTORS=true` is explicitly set.
+- If no public individual agent emails are found, the job completes with 0 leads plus warnings instead of failing silently or waiting through long fallbacks.
+- The CRM UI now logs and alerts the warning text when a scrape completes with no imported leads.
+
+## Previous Update
+
 - Fixed realtor scrape lead quality and count behavior after a Gulf Shores scrape inserted brokerage/business rows.
 - Root cause: Maps/business website enrichment was creating candidates before brokerage roster scraping, using the Maps place title as the lead name; then candidate slicing happened before duplicate/invalid filtering, so asking for 5 could insert only 4.
 - Realtor queries now crawl brokerage roster/team/agent pages first from Maps-discovered brokerage websites.
@@ -31,6 +40,10 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- Production investigation showed no new rows inserted for the latest Gulf Shores scrape; lead count remained 2, with only the old scraped Dave/Kelly lead plus the hot test lead.
+- `docker logs ad-agency-autopilot` showed the scrape reached directory/Gemini fallback after roster/site failures, explaining the no-result/no-error perception.
+- `node --check server.js` and `node --check app.js` passed after the bounded-fallback/no-leads-warning fix.
+- `git diff --check` passed with normal Windows CRLF warnings only.
 - Production investigation showed the Gulf Shores scrape created business-name leads from Maps rows (`Coastal Resort Realty`, `Kim Ward Realty, LLC`, `Living My Best Life Realty`, `Realty Executives Gulf Coast`) and inserted 4 because one candidate email was duplicate-filtered.
 - `node --check server.js` passed after the realtor scrape filter/order/count fix.
 - Cheerio selector smoke for case-insensitive class/aria selectors passed.

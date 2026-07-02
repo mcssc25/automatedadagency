@@ -4076,7 +4076,9 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
                 alert(`Successfully scraped and added ${data.leads.length} new leads!`);
             } else {
                 const skipped = data.skipped ? ` Skipped: ${JSON.stringify(data.skipped)}` : '';
-                alert(`No new name + email leads found for that query.${skipped}`);
+                const warnings = data.warnings && data.warnings.length ? ` Warnings: ${data.warnings.join(' | ')}` : '';
+                this.appendConsoleLine('system', `No new name + email leads found for "${niche}".${skipped}${warnings}`);
+                alert(`No new name + email leads found for that query.${skipped}${warnings}`);
             }
         } catch (error) {
             console.error("CRM Lead Scrape failed:", error);

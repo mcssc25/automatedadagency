@@ -28,6 +28,7 @@ Last updated: 2026-07-02
 - `OUTBOUND_POSTAL_ADDRESS` is still blank, so outbound Mailgun sends fail closed until the user supplies a valid physical mailing address.
 - Lead scraping uses async jobs: `POST /api/scrape-leads` starts a job, `/api/scrape-leads/jobs/:id` polls status, and completed jobs insert/dedupe leads.
 - Preferred realtor scraping route is brokerage-first: Maps finds local brokerages, then the backend crawls public roster/team/agent pages for visible agent emails; Maps business/brokerage names and generic office/admin emails should not be inserted as agent leads, and insertion continues past skips to fill the requested count when possible.
+- Realtor scrapes should complete with warnings when no public individual agent emails are found; do not let long Gemini fallback calls make the UI spin indefinitely.
 - Realtor directory discovery uses Zillow/Realtor.com/Redfin/Homes.com as profile-discovery signals only; do not bypass robots, logins, CAPTCHAs, paywalls, or private APIs.
 - Lead records support optional `phone`, `website`, `address`, `sourceUrl`, and `discoveryQuery`.
 - CRM has a persistent `campaign_enrollments` ledger so campaign progress is separate from lead pipeline stage.
