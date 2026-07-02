@@ -1216,6 +1216,7 @@ function isUsefulLeadEmail(email) {
 
     const [local, domain] = normalized.split('@');
     if (!local || !domain) return false;
+    if (/^(admin|billing|bookings?|bugreport|careers?|contact|customerservice|hello|help|info|inquiries|marketing|media|office|sales|service|support|team|webmaster)$/i.test(local)) return false;
     if (domain.includes('example.') || domain === 'domain.com' || domain === 'email.com') return false;
     if (/\.(png|jpe?g|gif|webp|svg|css|js|ico|woff2?|ttf|eot)$/i.test(domain)) return false;
     return true;
@@ -1306,6 +1307,14 @@ function isPlausibleAgentName(value, brokerageName = '') {
     if (brokerageName && text.toLowerCase() === cleanLeadText(brokerageName).toLowerCase()) return false;
     if (/\b(contact|email|phone|office|search|language|agents?|realtors?|brokerage|properties|listings|buy|sell|home)\b/i.test(text)) return false;
     return /^[A-Za-z][A-Za-z .,'-]+$/.test(text);
+}
+
+function isLikelyIndividualAgentLeadName(value = '') {
+    const name = cleanLeadText(value);
+    if (!isPlausibleAgentName(name)) return false;
+    if (/\b(real(ty| estate)|properties?|brokerage|company|group|team|llc|inc|ltd|coastal|resort|executives|office|homes?|partners?|associates?)\b/i.test(name)) return false;
+    const words = name.split(/\s+/).filter(Boolean);
+    return words.length >= 2 && words.length <= 4;
 }
 
 function normalizeAgentName(value) {
@@ -1671,7 +1680,12 @@ async function scrapeBrokerageRosterCandidatesFromMapsRow(row, discoveryQuery) {
     return candidates;
 }
 
-function normalizeMapsCsvRow(row, discoveryQuery, extraEmails = []) {
+function normalizeMapsCsvRow(row, discoveryQuery, extraEmails = [], options = {}) {
+    const name = getMapsRowValue(row, 'title', 'name', 'business name', 'business_name');
+    if (options.realtorContactsOnly && !isLikelyIndividualAgentLeadName(name)) {
+        return [];
+    }
+
     const emails = [
         ...parseEmailListFromCsvValue(getMapsRowValue(row, 'emails', 'email')),
         ...extraEmails
@@ -1680,8 +1694,8 @@ function normalizeMapsCsvRow(row, discoveryQuery, extraEmails = []) {
     const uniqueEmails = [...new Set(emails.filter(isUsefulLeadEmail))];
 
     return normalizeLeadCandidate({
-        name: getMapsRowValue(row, 'title', 'name', 'business name', 'business_name'),
-        company: getMapsRowValue(row, 'title', 'name', 'business name', 'business_name'),
+        name,
+        company: name,
         emails: uniqueEmails,
         phone: getMapsRowValue(row, 'phone', 'telephone'),
         website: getMapsRowValue(row, 'website', 'web_site', 'web site'),
@@ -1690,8 +1704,8 @@ function normalizeMapsCsvRow(row, discoveryQuery, extraEmails = []) {
     }, discoveryQuery, getMapsRowValue(row, 'link'));
 }
 
-async function normalizeMapsCsvRowWithWebsiteEnrichment(row, discoveryQuery) {
-    const candidates = normalizeMapsCsvRow(row, discoveryQuery);
+async function normalizeMapsCsvRowWithWebsiteEnrichment(row, discoveryQuery, options = {}) {
+    const candidates = normalizeMapsCsvRow(row, discoveryQuery, [], options);
     if (candidates.length > 0) return candidates;
 
     const website = getMapsRowValue(row, 'website', 'web_site', 'web site');
@@ -1703,7 +1717,7 @@ async function normalizeMapsCsvRowWithWebsiteEnrichment(row, discoveryQuery) {
         console.log(`[Lead Enrichment] Found ${websiteEmails.length} public email(s) on ${website} for ${name}.`);
     }
 
-    return normalizeMapsCsvRow(row, discoveryQuery, websiteEmails);
+    return normalizeMapsCsvRow(row, discoveryQuery, websiteEmails, options);
 }
 
 async function mapWithConcurrency(items, limit, mapper) {
@@ -1771,14 +1785,10 @@ async function scrapeLeadCandidatesWithMapsSidecar(niche, count) {
 
     const rows = parseCsvRows(csvRes.data);
     const rowsToEnrich = rows.slice(0, Math.min(rows.length, Math.max(count, 50)));
-    const rowCandidates = await mapWithConcurrency(
-        rowsToEnrich,
-        4,
-        row => normalizeMapsCsvRowWithWebsiteEnrichment(row, niche)
-    );
-    let candidates = rowCandidates.flat();
+    const realtorQuery = isRealtorLeadQuery(niche);
+    let candidates = [];
 
-    if (isRealtorLeadQuery(niche) && candidates.length < count) {
+    if (realtorQuery) {
         const maxBrokerages = Math.min(Math.max(parseInt(process.env.LEAD_ROSTER_MAX_BROKERAGES, 10) || 8, 1), 25);
         const brokerageRows = rowsToEnrich
             .filter(row => getMapsRowValue(row, 'website', 'web_site', 'web site'))
@@ -1790,8 +1800,17 @@ async function scrapeLeadCandidatesWithMapsSidecar(niche, count) {
                 2,
                 row => scrapeBrokerageRosterCandidatesFromMapsRow(row, niche)
             );
-            candidates = mergeLeadCandidatesByEmail(candidates, rosterCandidateGroups.flat());
+            candidates = mergeLeadCandidatesByEmail(rosterCandidateGroups.flat());
         }
+    }
+
+    if (candidates.length < count) {
+        const rowCandidates = await mapWithConcurrency(
+            rowsToEnrich,
+            4,
+            row => normalizeMapsCsvRowWithWebsiteEnrichment(row, niche, { realtorContactsOnly: realtorQuery })
+        );
+        candidates = mergeLeadCandidatesByEmail(candidates, rowCandidates.flat());
     }
 
     return candidates.slice(0, count);
@@ -1889,11 +1908,14 @@ Return ONLY valid JSON. No markdown blocks, no formatting.`;
     return (data.leads || []).flatMap(lead => normalizeLeadCandidate(lead, niche));
 }
 
-function insertLeadCandidates(candidates, discoveryQuery) {
+function insertLeadCandidates(candidates, discoveryQuery, options = {}) {
     const insertedLeads = [];
     const skipped = { dnc: 0, duplicate: 0, invalid: 0 };
+    const limit = Math.min(Math.max(parseInt(options.limit, 10) || candidates.length || 0, 0), 1000);
 
     for (const lead of candidates) {
+        if (limit && insertedLeads.length >= limit) break;
+
         if (!lead.name || !isLikelyEmail(lead.email)) {
             skipped.invalid++;
             continue;
@@ -1993,7 +2015,7 @@ async function runLeadScrape(niche, count, onProgress = () => {}) {
     }
 
     onProgress('inserting', `Found ${candidates.length} candidate(s). Inserting new valid leads...`);
-    const { insertedLeads, skipped } = insertLeadCandidates(candidates.slice(0, count), niche);
+    const { insertedLeads, skipped } = insertLeadCandidates(candidates, niche, { limit: count });
 
     return {
         leads: insertedLeads,

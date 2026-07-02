@@ -14,6 +14,16 @@ Last updated: 2026-07-02
 
 ## Latest Update
 
+- Fixed realtor scrape lead quality and count behavior after a Gulf Shores scrape inserted brokerage/business rows.
+- Root cause: Maps/business website enrichment was creating candidates before brokerage roster scraping, using the Maps place title as the lead name; then candidate slicing happened before duplicate/invalid filtering, so asking for 5 could insert only 4.
+- Realtor queries now crawl brokerage roster/team/agent pages first from Maps-discovered brokerage websites.
+- Maps-derived row candidates are only allowed for realtor queries when the Maps title looks like an individual agent name, not a brokerage/business/team name.
+- Generic office/admin-style emails such as `admin@`, `info@`, `office@`, `sales@`, `support@`, and `bugreport@` are filtered from lead insertion.
+- Insert logic now continues past duplicate/DNC/invalid candidates until it inserts up to the requested count when enough valid candidates exist.
+- Existing production leads were inspected but not deleted; the bad Gulf Shores business-name rows remain until the user chooses to delete/purge them.
+
+## Previous Update
+
 - Fixed social post media previews so AI video assets display as portrait previews instead of being cropped into the old short landscape frame.
 - `app.js` now assigns media previews a `media-video` or `media-image` class and removes inline `max-height: 180px` / `object-fit: cover` rules from draft, scheduled, and sent-log cards.
 - `index.css` now gives video previews a centered `9 / 16` frame using `object-fit: contain`, image previews a `16 / 9` frame using `object-fit: cover`, and card action rows `flex-wrap: wrap`.
@@ -21,6 +31,10 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- Production investigation showed the Gulf Shores scrape created business-name leads from Maps rows (`Coastal Resort Realty`, `Kim Ward Realty, LLC`, `Living My Best Life Realty`, `Realty Executives Gulf Coast`) and inserted 4 because one candidate email was duplicate-filtered.
+- `node --check server.js` passed after the realtor scrape filter/order/count fix.
+- Cheerio selector smoke for case-insensitive class/aria selectors passed.
+- `git diff --check` passed with normal Windows CRLF warnings only.
 - `node --check app.js` passed.
 - `node --check server.js` passed.
 - Temporary local smoke server on `PORT=3132` with auth disabled returned 200 for `/`.
