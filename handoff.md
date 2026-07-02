@@ -57,6 +57,10 @@ Last updated: 2026-07-02
   - `node --check server.js` passed.
   - Cheerio selector smoke confirmed case-insensitive class/aria email selectors work.
   - `git diff --check` passed with normal Windows CRLF warnings only.
+- VPS deployment verification after brokerage-roster update:
+  - `ad-agency-autopilot` rebuilt and restarted healthy; scraper sidecar and tunnel remained running.
+  - `docker exec ad-agency-autopilot node --check /app/server.js` passed.
+  - Deployed `/app/server.js` contains `BROKERAGE_ROSTER_KEYWORDS`, `scrapeBrokerageRosterCandidatesFromWebsite`, and `LEAD_ROSTER_MAX_BROKERAGES`.
 - Local code checks for realtor directory update:
   - `node --check server.js` passed.
   - `git diff --check` passed with normal Windows CRLF warnings only.
@@ -108,7 +112,8 @@ Last updated: 2026-07-02
 
 - Async lead scrape implementation commit pushed and deployed: `43c3054` (`Make lead scraping async`).
 - Realtor directory discovery commit pushed and deployed: `0ae31d0` (`Add realtor directory lead discovery`).
-- Post-deploy documentation has been updated to reflect the async scrape and realtor directory releases plus VPS smoke checks.
+- Brokerage roster scraping commit pushed and deployed: `4946727` (`Add brokerage roster lead scraping`).
+- Post-deploy documentation has been updated to reflect the async scrape, realtor directory, and brokerage roster releases plus VPS smoke checks.
 - Latest hardening code/config commit pushed: `c35051f` (`Harden agency app deployment`).
 - A post-deploy handoff/memory documentation sync was pushed after the hardening commit.
 - Local repo status after the documentation sync: clean on `main...origin/main`.
@@ -119,6 +124,7 @@ Last updated: 2026-07-02
 - VPS post-deploy file snapshot: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T090955Z-hardening-post`.
 - VPS async scrape backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T092935Z-async-lead-scrape`.
 - VPS realtor directory discovery backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T095955Z-realtor-directory-discovery`.
+- VPS brokerage roster backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T101539Z-brokerage-roster-scrape`.
 - Runtime secrets/data remain uncommitted.
 
 ## Live Verification

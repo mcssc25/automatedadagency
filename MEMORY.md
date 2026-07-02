@@ -58,6 +58,7 @@ Last updated: 2026-07-02
 - Hardening deployment code commit: `c35051f` (`Harden agency app deployment`).
 - Async lead scrape commit `43c3054` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T092935Z-async-lead-scrape`.
 - Realtor directory discovery commit `0ae31d0` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T095955Z-realtor-directory-discovery`.
+- Brokerage roster scraping commit `4946727` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T101539Z-brokerage-roster-scrape`.
 - Latest code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.
 - Commit `2b33db0` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
 
