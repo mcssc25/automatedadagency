@@ -50,8 +50,9 @@ Last updated: 2026-07-02
 
 ## Repo / Deployment Status
 
-- Git commit pushed: `2b33db0` (`Add CRM campaign auto-approve toggle`).
-- Local repo currently has uncommitted post-deploy documentation updates plus the hardening changes pending commit.
+- Latest hardening code/config commit pushed: `c35051f` (`Harden agency app deployment`).
+- A post-deploy handoff/memory documentation sync was pushed after the hardening commit.
+- Local repo status after the documentation sync: clean on `main...origin/main`.
 - Live hardening deployment completed on `/opt/ad-agency-autopilot`.
 - VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
 - VPS env backup: `/opt/ad-agency-autopilot/data/backups/env-20260702T090811Z/.env.before-hardening`.

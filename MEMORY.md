@@ -51,6 +51,7 @@ Last updated: 2026-07-02
 - Hardening update was deployed to VPS on 2026-07-02 with `ADMIN_PASSWORD`, `PUBLIC_APP_URL`, `MAILGUN_WEBHOOK_SIGNING_KEY`, auth enabled, and restricted CORS.
 - Public verification after deploy: unauthenticated dashboard/API/source/DB requests are blocked; authenticated dashboard/CRM works; source/DB paths return 404 even with auth; Mailgun unsigned webhook rejects and valid signed webhook passes.
 - `OUTBOUND_POSTAL_ADDRESS` is still blank, so outbound Mailgun sends fail closed until the user supplies a valid physical mailing address.
+- Hardening deployment code commit: `c35051f` (`Harden agency app deployment`).
 - Latest code adds `autoApproveCampaigns` while keeping legacy `bypassEmailVerification` as a compatibility alias.
 - Commit `2b33db0` was pushed and deployed live on 2026-07-02; VPS backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T080357Z-crm-auto-approve`.
 
