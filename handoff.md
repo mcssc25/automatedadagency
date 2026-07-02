@@ -32,13 +32,14 @@ Last updated: 2026-07-02
 
 - Files changed: `server.js`, `app.js`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted.
+- Code commit pushed to `main`: `a89a729` (`Improve trend keyword research`).
 - Deployed live to `/opt/ad-agency-autopilot` on 2026-07-02.
 - Deployment copied only `server.js`, `app.js`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260702T193828Z-trend-keywords`.
 - `ad-agency-autopilot` was rebuilt/restarted only for that service; the lead scraper sidecar remained running.
 - Production container is healthy on `127.0.0.1:3100->3000`.
 - Public URL returned `401`, expected because production/admin Basic auth is enabled.
-- Commit/push is the remaining repo step for this deployed update.
+- Documentation was updated after push to record the final commit/deploy status.
 
 ## Deployment Notes
 
