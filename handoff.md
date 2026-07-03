@@ -7,6 +7,7 @@ Last updated: 2026-07-03
 - Hotfix after browser Run Now showed an HTML/proxy timeout alert while the backend worker was actually running.
 - `POST /api/lead-intelligence/run-once?async=true` now accepts a background worker start and returns immediately with `202` instead of holding the browser request open for the full harvest.
 - Dashboard Run Now now uses the async path, shows accepted/running status, and polls `/api/lead-intelligence/status` for completion.
+- Async Run Now hotfix commit pushed/deployed: `9eb2921` (`Make lead intelligence run asynchronous`).
 
 ## Previous Update
 
@@ -91,6 +92,7 @@ Last updated: 2026-07-03
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
 - Before the hotfix, production status showed the user's browser click started run `33`, harvesting `Fathom Realty` in Birmingham, AL. It completed with 0 contacts and warning `Invalid response format received from Gemini API`, but the browser saw an HTML timeout/proxy error because the request waited too long.
+- Production verification after async hotfix: authenticated async Run Now returned `202` in about 2 seconds and started run `Realty Executives in Birmingham, AL`; follow-up status showed the worker still running normally in the background.
 - `node --check server.js` passed after Lead Intelligence dashboard/onboarding controls.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
@@ -134,11 +136,12 @@ Last updated: 2026-07-03
 
 ## Repo / Deployment Status
 
-- Latest pushed commit: `8f25386` (`Harden lead intelligence roster discovery`).
-- Current live deployment includes dashboard controls and the roster-discovery guard.
+- Latest pushed commit: `9eb2921` (`Make lead intelligence run asynchronous`).
+- Current live deployment includes dashboard controls, the roster-discovery guard, and async Run Now behavior.
 - Deployment backups:
   - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T103159-lead-intelligence-dashboard`
   - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T103959-lead-intelligence-discovery-guard`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T105721-lead-intelligence-async-run`
 
 - Files changed for OpenRouter Integrations UI/model rotation: `server.js`, `app.js`, `index.html`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
