@@ -335,11 +335,16 @@ function parseCsvList(value) {
         .filter(Boolean);
 }
 
+function isFreeOpenRouterModelId(model) {
+    const value = String(model || '').trim();
+    return value === 'openrouter/free' || value.endsWith(':free');
+}
+
 function normalizeOpenRouterModelOrder(value) {
     const configured = Array.isArray(value)
         ? value.map(item => String(item || '').trim()).filter(Boolean)
         : parseCsvList(value);
-    return [...new Set([...configured, ...DEFAULT_OPENROUTER_FREE_MODELS])];
+    return [...new Set([...configured, ...DEFAULT_OPENROUTER_FREE_MODELS].filter(isFreeOpenRouterModelId))];
 }
 
 function getOpenRouterIntegrationSettings() {
@@ -365,7 +370,9 @@ function getOpenRouterIntegrationSettings() {
         configured: !!apiKey,
         enabled: enabled && !!apiKey,
         source: creds.openRouterApiKey ? 'integrations' : (OPENROUTER_ENV_API_KEY ? 'env' : ''),
-        defaultModel: creds.openRouterDefaultModel || OPENROUTER_DEFAULT_MODEL,
+        defaultModel: isFreeOpenRouterModelId(creds.openRouterDefaultModel || OPENROUTER_DEFAULT_MODEL)
+            ? (creds.openRouterDefaultModel || OPENROUTER_DEFAULT_MODEL)
+            : 'openrouter/free',
         researchModel: modelOrder[0] || OPENROUTER_RESEARCH_MODEL,
         modelOrder,
         webSearchEnabled,
