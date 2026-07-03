@@ -17,12 +17,13 @@ Last updated: 2026-07-03
 - Latest brokerage research-signals commit: `17dddd4 Improve brokerage research signals`, pushed to `origin/main` and deployed live.
 - Latest Lead Communication response-inbox commit: `e4d8392 Filter CRM communications to responded leads`, pushed to `origin/main` and deployed live.
 - Latest activity/log visibility commit: `561c0ed Show real CRM work activity`, pushed to `origin/main` and deployed live.
-- Latest stale brokerage research refresh work is local pending deploy: old/current CRM brokerages without `researchVersion=brokerage-agent-chatter-v2` are now eligible for automatic refresh.
+- Latest stale brokerage research refresh commit: `3124543 Refresh stale brokerage research automatically`, pushed to `origin/main` and deployed live.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
 - Response-inbox deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T213224Z-responded-lead-inbox`.
 - Real-activity deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T214733Z-real-activity-log`.
+- Stale brokerage research refresh deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T215355Z-stale-brokerage-research-refresh`.
 - Production container was healthy after the Coldwell Banker raw-email extractor deployments.
 - Runtime secrets/data are ignored and must stay out of git: `.env`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
 - OpenRouter and Make.com webhook settings persist in production runtime `data/credentials.json` on the mounted `/opt/ad-agency-autopilot/data` volume.
@@ -115,6 +116,7 @@ Last updated: 2026-07-03
 - Production response-inbox deploy checks passed: container healthy, in-container syntax checks passed for `/app/app.js`, `/app/db.js`, and `/app/server.js`, and authenticated `/api/leads?respondedOnly=1&limit=5` smoke returned `1` responded lead out of `6` total production leads.
 - Production real-activity deploy checks passed: container healthy, in-container `node --check /app/app.js` and `/app/server.js`; authenticated smoke showed `/api/crm-intelligence` returned `running:false` and `64` contacts; `/api/activity-log` post/read/clear worked.
 - Latest local stale-research refresh checks passed: `node --check server.js`, `node --check db.js`, `node --check app.js`, `git diff --check` with only CRLF warnings, and a direct DB selector smoke returned an eligible profile (`Keller Williams`, `Pending`) for refresh.
+- Production stale-research refresh deploy checks passed: container healthy, in-container `node --check /app/server.js`, `/app/db.js`, and `/app/app.js`; authenticated `/api/lead-intelligence/status` returned `researchTechStack:true`, `maxProfileResearchPerCycle:2`, `running:false`, and `64` contacts.
 - Production research-signals deploy checks passed: container healthy, in-container `node --check /app/server.js` and `/app/app.js`, authenticated `/api/crm-intelligence` smoke returned `64` roster contacts and brokerage `techStack`.
 - Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.
 - HTTP smoke passed on `PORT=3133` with admin auth disabled for the local test: `/api/crm-intelligence?brokerageLimit=3&rosterLimit=3` returned brokerages, roster fields, totals, and status.
