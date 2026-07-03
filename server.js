@@ -2921,6 +2921,15 @@ function shouldSuppressBrokerageBrandAfterResult(office, status, harvest) {
     return /invalid response format|could not discover|roster url|not found|forbidden|blocked|captcha|cloudflare|security verification/i.test(String(harvest && harvest.warning || ''));
 }
 
+function shouldMarkBrokerageDoNotScrapeAfterResult(office, status, harvest) {
+    if (!office || !office.brokerageName) return false;
+    if (status === 'Blocked' || status === 'No Contacts') return true;
+    if (status !== 'Failed') return false;
+    const warning = String(harvest && harvest.warning || '');
+    if (!warning) return true;
+    return /timeout|invalid response format|could not discover|roster url|not found|forbidden|blocked|captcha|cloudflare|security verification|certificate|name_not_resolved/i.test(warning);
+}
+
 function seedLeadIntelligenceDefaults() {
     const cityChanges = db.seedMarketCities(LEAD_INTELLIGENCE_SEED_CITIES);
     let officeChanges = 0;
@@ -3570,12 +3579,6 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
             });
 
             const harvest = await harvestBrokerageOfficeRoster(office);
-            const profile = LEAD_INTELLIGENCE_RESEARCH_TECH_STACK
-                ? db.getBrokerageProfileByName(office.brokerageName)
-                : null;
-            if (profile && !hasCurrentBrokerageTechResearch(profile)) {
-                await researchBrokerageTechStack(profile);
-            }
 
             let insertedOrUpdated = 0;
             for (const contact of harvest.contacts) {
@@ -3594,20 +3597,65 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                 if (saved) insertedOrUpdated++;
             }
 
-            const status = insertedOrUpdated > 0 ? 'Harvested' : harvest.blocked ? 'Blocked' : harvest.warning ? 'Failed' : 'No Contacts';
+            const harvestStatus = insertedOrUpdated > 0 ? 'Harvested' : harvest.blocked ? 'Blocked' : harvest.warning ? 'Failed' : 'No Contacts';
+            let status = harvestStatus;
+            let suppressed = 0;
+            let skippedProfileResearch = false;
+            let doNotScrapeReason = '';
+            const brandContactCount = db.getBrokerageRosterContactCount(office.brokerageName);
+            const noUsableRosterForBrand = brandContactCount === 0 && shouldMarkBrokerageDoNotScrapeAfterResult(office, harvestStatus, harvest);
+
+            if (noUsableRosterForBrand) {
+                status = 'Do Not Scrape';
+                doNotScrapeReason = `${office.brokerageName} marked do not scrape after ${harvestStatus.toLowerCase()} result in ${office.city}, ${office.state}: ${harvest.warning || 'No harvestable public roster contacts.'}`;
+                skippedProfileResearch = true;
+                db.upsertBrokerageProfile({
+                    name: office.brokerageName,
+                    researchStatus: 'Do Not Scrape',
+                    notes: doNotScrapeReason,
+                    techStack: {
+                        researchVersion: 'roster-gated-v1',
+                        doNotScrape: true,
+                        reason: doNotScrapeReason,
+                        lastRosterStatus: harvestStatus,
+                        lastRosterCity: office.city,
+                        lastRosterState: office.state
+                    }
+                });
+            }
+
             db.updateBrokerageOffice(office.id, {
                 status,
                 lastHarvestAt: new Date().toISOString(),
-                lastError: harvest.warning || '',
+                lastError: doNotScrapeReason || harvest.warning || '',
                 rosterPageCount: harvest.pagesScanned || 0,
                 contactCount: insertedOrUpdated
             });
 
-            let suppressed = 0;
-            if (shouldSuppressBrokerageBrandAfterResult(office, status, harvest)) {
-                const reason = `${office.brokerageName} skipped after ${status.toLowerCase()} result in ${office.city}, ${office.state}: ${harvest.warning || 'No harvestable public roster contacts.'}`;
-                suppressed = db.suppressQueuedBrokerageBrand(office.brokerageName, reason, office.id);
+            if (doNotScrapeReason) {
+                suppressed = db.suppressQueuedBrokerageBrand(office.brokerageName, doNotScrapeReason, office.id, 'Do Not Scrape');
                 suppressedBrandOffices += suppressed;
+                appendActivityLog('system-line', `${office.brokerageName} marked Do Not Scrape; skipped systems research because no usable roster contacts were found.`, {
+                    workflow: 'lead-intelligence',
+                    runId,
+                    phase: 'do-not-scrape',
+                    brokerage: office.brokerageName,
+                    city: office.city,
+                    state: office.state,
+                    harvestStatus,
+                    suppressedBrandOffices: suppressed
+                });
+            } else if (shouldSuppressBrokerageBrandAfterResult(office, status, harvest)) {
+                const reason = `${office.brokerageName} skipped after ${status.toLowerCase()} result in ${office.city}, ${office.state}: ${harvest.warning || 'No harvestable public roster contacts.'}`;
+                suppressed = db.suppressQueuedBrokerageBrand(office.brokerageName, reason, office.id, 'Skipped Brand');
+                suppressedBrandOffices += suppressed;
+            }
+
+            if (!skippedProfileResearch && LEAD_INTELLIGENCE_RESEARCH_TECH_STACK && db.getBrokerageRosterContactCount(office.brokerageName) > 0) {
+                const profile = db.getBrokerageProfileByName(office.brokerageName);
+                if (profile && !hasCurrentBrokerageTechResearch(profile)) {
+                    await researchBrokerageTechStack(profile);
+                }
             }
 
             const attempt = {
@@ -3615,10 +3663,12 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                 city: office.city,
                 state: office.state,
                 status,
+                harvestStatus,
                 contacts: insertedOrUpdated,
                 pagesScanned: harvest.pagesScanned || 0,
                 warning: harvest.warning || '',
-                suppressedBrandOffices: suppressed
+                suppressedBrandOffices: suppressed,
+                skippedProfileResearch
             };
             attempts.push(attempt);
             totalContacts += insertedOrUpdated;

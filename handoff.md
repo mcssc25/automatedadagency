@@ -19,6 +19,7 @@ Last updated: 2026-07-03
 - Latest activity/log visibility commit: `561c0ed Show real CRM work activity`, pushed to `origin/main` and deployed live.
 - Latest stale brokerage research refresh commit: `3124543 Refresh stale brokerage research automatically`, pushed to `origin/main` and deployed live.
 - Latest OpenRouter free-model guard commit: `7ddf483 Enforce free OpenRouter models`, pushed to `origin/main` and deployed live.
+- Latest roster-gated brokerage research commit: `3a6f5c4 Gate brokerage research on roster success`, pushed to `origin/main` and deployed live.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
@@ -26,6 +27,7 @@ Last updated: 2026-07-03
 - Real-activity deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T214733Z-real-activity-log`.
 - Stale brokerage research refresh deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T215355Z-stale-brokerage-research-refresh`.
 - OpenRouter free-model guard deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T220115Z-openrouter-free-model-guard`.
+- Roster-gated brokerage research deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T221747Z-roster-gated-research`.
 - Production container was healthy after the Coldwell Banker raw-email extractor deployments.
 - Runtime secrets/data are ignored and must stay out of git: `.env`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
 - OpenRouter and Make.com webhook settings persist in production runtime `data/credentials.json` on the mounted `/opt/ad-agency-autopilot/data` volume.
@@ -58,7 +60,7 @@ Last updated: 2026-07-03
   - Dashboard Workflow Status lists the worker, shows hidden DB counts, and has a Run Now button.
 - Main endpoints: `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/settings`, `POST /api/lead-intelligence/seed`, `POST /api/lead-intelligence/run-once`.
 - Run Now uses the async path `/api/lead-intelligence/run-once?async=true` to avoid Cloudflare/proxy timeout alerts.
-- Existing brokerage profiles are refreshed automatically after roster harvest work when `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true`: `db.getNextBrokerageProfileForResearch()` now treats old `Complete` records without `brokerage-agent-chatter-v2` as stale, and each cycle researches up to `LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE` profiles, default `2`.
+- Brokerage systems research is gated behind roster success when `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true`: the worker saves roster contacts first, only researches brokerages with at least one roster contact, and marks zero-contact/unharvestable brokerages `Do Not Scrape` so queued same-name offices are skipped before more scrape or AI spend.
 - Production worker config:
   - `LEAD_INTELLIGENCE_ENABLED=true`
   - `LEAD_INTELLIGENCE_INTERVAL_MS=3600000`
@@ -121,6 +123,8 @@ Last updated: 2026-07-03
 - Latest local stale-research refresh checks passed: `node --check server.js`, `node --check db.js`, `node --check app.js`, `git diff --check` with only CRLF warnings, and a direct DB selector smoke returned an eligible profile (`Keller Williams`, `Pending`) for refresh.
 - Production stale-research refresh deploy checks passed: container healthy, in-container `node --check /app/server.js`, `/app/db.js`, and `/app/app.js`; authenticated `/api/lead-intelligence/status` returned `researchTechStack:true`, `maxProfileResearchPerCycle:2`, `running:false`, and `64` contacts.
 - Latest local OpenRouter guard checks passed: `node --check server.js`, `node --check app.js`, `node --check db.js`, `git diff --check` with only CRLF warnings, and a filter smoke dropped `openai/gpt-5` while keeping `openrouter/free` and `:free` models.
+- Latest local roster-gated research checks passed: `node --check server.js`, `node --check db.js`, `node --check app.js`, `git diff --check` with only CRLF warnings, and a direct DB smoke returned no brokerage research candidate when the local DB had no roster contacts.
+- Production roster-gated research deploy checks passed: container healthy, in-container `node --check /app/server.js`, `/app/db.js`, and `/app/app.js`; authenticated `/api/lead-intelligence/status` returned `running:false`, `enabled:true`, `contacts:64`; deployed DB selector smoke returned `Coldwell Banker` as the next research profile with `23` roster contacts.
 - Production OpenRouter guard deploy checks passed: container healthy, in-container `node --check /app/server.js`, and authenticated `/api/openrouter-settings` smoke returned `defaultModel:"openrouter/free"`, `15` model-order entries, and `0` unsafe/paid model IDs.
 - Production research-signals deploy checks passed: container healthy, in-container `node --check /app/server.js` and `/app/app.js`, authenticated `/api/crm-intelligence` smoke returned `64` roster contacts and brokerage `techStack`.
 - Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.

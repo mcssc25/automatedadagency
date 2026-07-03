@@ -723,7 +723,12 @@ function upsertBrokerageProfile(profile = {}) {
             videoEmail = COALESCE(excluded.videoEmail, brokerage_profiles.videoEmail),
             techStackJson = CASE WHEN excluded.techStackJson <> '{}' THEN excluded.techStackJson ELSE brokerage_profiles.techStackJson END,
             notes = COALESCE(excluded.notes, brokerage_profiles.notes),
-            researchStatus = COALESCE(excluded.researchStatus, brokerage_profiles.researchStatus),
+            researchStatus = CASE
+                WHEN brokerage_profiles.researchStatus = 'Do Not Scrape'
+                  AND excluded.researchStatus = 'Pending'
+                THEN brokerage_profiles.researchStatus
+                ELSE COALESCE(excluded.researchStatus, brokerage_profiles.researchStatus)
+            END,
             researchedAt = COALESCE(excluded.researchedAt, brokerage_profiles.researchedAt),
             updatedAt = CURRENT_TIMESTAMP
     `);
@@ -776,7 +781,7 @@ function getBrokerageResearch({ search = '', limit = 30 } = {}) {
             COUNT(DISTINCT o.id) AS officesCount,
             SUM(CASE WHEN o.status = 'Harvested' THEN 1 ELSE 0 END) AS harvestedOffices,
             SUM(CASE WHEN o.status IN ('Pending', 'Discovered', 'Retry') THEN 1 ELSE 0 END) AS queuedOffices,
-            SUM(CASE WHEN o.status = 'Blocked' THEN 1 ELSE 0 END) AS blockedOffices,
+            SUM(CASE WHEN o.status IN ('Blocked', 'Do Not Scrape', 'Skipped Brand') THEN 1 ELSE 0 END) AS blockedOffices,
             MAX(o.updatedAt) AS lastOfficeUpdate,
             COALESCE(rc.contactsCount, 0) AS contactsCount
         FROM brokerage_profiles p
@@ -803,7 +808,7 @@ function getBrokerageResearch({ search = '', limit = 30 } = {}) {
         FROM brokerage_offices
         WHERE LOWER(brokerageName) = LOWER(?)
         ORDER BY
-            CASE status WHEN 'Harvested' THEN 0 WHEN 'Pending' THEN 1 WHEN 'Discovered' THEN 2 WHEN 'Blocked' THEN 3 ELSE 4 END,
+            CASE status WHEN 'Harvested' THEN 0 WHEN 'Pending' THEN 1 WHEN 'Discovered' THEN 2 WHEN 'Blocked' THEN 3 WHEN 'Do Not Scrape' THEN 4 ELSE 5 END,
             updatedAt DESC
         LIMIT 5
     `);
@@ -824,18 +829,25 @@ function getNextBrokerageProfileForResearch() {
     const row = db.prepare(`
         SELECT *
         FROM brokerage_profiles
-        WHERE researchStatus IN ('Pending', 'Needs Research')
-           OR (
-                researchStatus = 'Complete'
-                AND (
-                    techStackJson IS NULL
-                    OR techStackJson = ''
-                    OR (
-                        techStackJson NOT LIKE '%"researchVersion":"brokerage-agent-chatter-v2"%'
-                        AND techStackJson NOT LIKE '%"researchVersion": "brokerage-agent-chatter-v2"%'
+        WHERE EXISTS (
+                SELECT 1
+                FROM roster_contacts rc
+                WHERE LOWER(rc.brokerageName) = LOWER(brokerage_profiles.name)
+            )
+          AND (
+                researchStatus IN ('Pending', 'Needs Research')
+                OR (
+                    researchStatus = 'Complete'
+                    AND (
+                        techStackJson IS NULL
+                        OR techStackJson = ''
+                        OR (
+                            techStackJson NOT LIKE '%"researchVersion":"brokerage-agent-chatter-v2"%'
+                            AND techStackJson NOT LIKE '%"researchVersion": "brokerage-agent-chatter-v2"%'
+                        )
                     )
                 )
-           )
+          )
         ORDER BY
             CASE
                 WHEN researchStatus IN ('Pending', 'Needs Research') THEN 0
@@ -872,7 +884,7 @@ function upsertBrokerageOffice(office = {}) {
             sourceUrl = COALESCE(NULLIF(excluded.sourceUrl, ''), brokerage_offices.sourceUrl),
             status = CASE
                 WHEN excluded.status = 'Pending' THEN brokerage_offices.status
-                WHEN brokerage_offices.status = 'Harvested' THEN brokerage_offices.status
+                WHEN brokerage_offices.status IN ('Harvested', 'Do Not Scrape', 'Skipped Brand') THEN brokerage_offices.status
                 ELSE COALESCE(NULLIF(excluded.status, ''), brokerage_offices.status)
             END,
             updatedAt = CASE
@@ -913,6 +925,15 @@ function getNextBrokerageOfficeForHarvest() {
     `).get();
 }
 
+function getBrokerageRosterContactCount(brokerageName) {
+    const row = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM roster_contacts
+        WHERE LOWER(brokerageName) = LOWER(?)
+    `).get(normalizeText(brokerageName));
+    return row ? row.count : 0;
+}
+
 function updateBrokerageOffice(id, changes = {}) {
     const allowed = ['website', 'rosterUrl', 'sourceUrl', 'status', 'lastHarvestAt', 'nextHarvestAt', 'lastError', 'rosterPageCount', 'contactCount'];
     const keys = allowed.filter(key => Object.prototype.hasOwnProperty.call(changes, key));
@@ -924,7 +945,7 @@ function updateBrokerageOffice(id, changes = {}) {
     return db.prepare(`UPDATE brokerage_offices SET ${assignments}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`).run(...values).changes;
 }
 
-function suppressQueuedBrokerageBrand(brokerageName, reason = '', exceptOfficeId = null) {
+function suppressQueuedBrokerageBrand(brokerageName, reason = '', exceptOfficeId = null, status = 'Do Not Scrape') {
     const name = normalizeText(brokerageName);
     if (!name) return 0;
 
@@ -941,11 +962,11 @@ function suppressQueuedBrokerageBrand(brokerageName, reason = '', exceptOfficeId
 
     return db.prepare(`
         UPDATE brokerage_offices
-        SET status = 'Skipped Brand',
+        SET status = ?,
             lastError = ?,
             updatedAt = CURRENT_TIMESTAMP
         WHERE ${clauses.join(' AND ')}
-    `).run(...values).changes;
+    `).run(normalizeText(status || 'Do Not Scrape'), ...values).changes;
 }
 
 function upsertRosterContact(contact = {}) {
@@ -1152,6 +1173,7 @@ module.exports = {
     getNextBrokerageProfileForResearch,
     upsertBrokerageOffice,
     getNextBrokerageOfficeForHarvest,
+    getBrokerageRosterContactCount,
     updateBrokerageOffice,
     suppressQueuedBrokerageBrand,
     upsertRosterContact,

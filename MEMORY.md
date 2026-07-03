@@ -33,7 +33,7 @@ Last updated: 2026-07-03
 - Lead Intelligence Run Now uses the async browser path (`/api/lead-intelligence/run-once?async=true`) so Cloudflare/proxy timeouts do not produce HTML error alerts while a long harvest is still running; deployed hotfix commit `9eb2921`.
 - Lead Intelligence URL-discovery model failures should mark only that brokerage office as failed instead of killing the whole worker cycle; deployed resilience fix commit `8f25386`.
 - Lead Intelligence cycles should process multiple queued offices per run, not one per hour. Current behavior checks up to 8 offices per cycle, stops early after contacts, and can mark remaining queued offices for the same seeded national brand as `Skipped Brand` after blocked/failed results.
-- Lead Intelligence prioritizes email harvesting before brokerage tech-stack research. `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true` by default; after contact harvest, each cycle refreshes up to 2 stale/old brokerage profiles lacking `researchVersion=brokerage-agent-chatter-v2` unless env override disables/changes it.
+- Lead Intelligence is roster-gated for AI research: it harvests agent emails first, only researches brokerage systems after that brokerage has at least one roster contact, and marks zero-contact/unharvestable brokerages `Do Not Scrape` so future cycles skip them instead of spending AI on research.
 - Coldwell Banker rosters are deterministic and email-rich: URL pattern `https://www.coldwellbanker.com/city/{state}/{city}/agents`; raw HTML embeds agent JSON fields like `fullName`, `emailAddress`, `businessPhoneNumber`, and profile `url`. Static raw extraction harvested 12 Huntsville contacts and 11 Knoxville contacts in seconds.
 - Lead-intelligence research can prefer OpenRouter with free-model rotation and Gemini fallback. OpenRouter model routing is constrained to `openrouter/free` or model IDs ending in `:free`; web search is opt-in and may use credits.
 - OpenRouter 429/rate-limit failures should fall back quickly instead of stalling a harvest. Production roster challenge detection includes Cloudflare, reCAPTCHA, Burrow, "Please Verify You Are Human", and similar blocked-page text.
@@ -68,7 +68,7 @@ Last updated: 2026-07-03
 - 2026-07-03 multi-office production test checked 8 offices in one run, harvested 0 new contacts, and skipped 54 same-brand queued offices after bad franchise-brand results. Coldwell Banker was later restored from `Skipped Brand` after raw HTML extraction proved it works; RE/MAX remains skipped/blocked.
 - Research & Trends is onboarding-aware and should not invent engagement numbers.
 - Latest production container was healthy after the Coldwell Banker raw-email extractor deployment.
-- CRM rework commit `4b7b1a2`, brokerage research-signals commit `17dddd4`, response-inbox commit `e4d8392`, real activity log commit `561c0ed`, stale research refresh commit `3124543`, and OpenRouter free-model guard commit `7ddf483` were pushed/deployed live on 2026-07-03.
+- CRM rework commit `4b7b1a2`, brokerage research-signals commit `17dddd4`, response-inbox commit `e4d8392`, real activity log commit `561c0ed`, stale research refresh commit `3124543`, OpenRouter free-model guard commit `7ddf483`, and roster-gated research commit `3a6f5c4` were pushed/deployed live on 2026-07-03.
 
 ## Working Agreements
 
