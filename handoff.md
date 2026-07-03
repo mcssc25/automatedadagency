@@ -20,6 +20,7 @@ Last updated: 2026-07-03
 - Latest stale brokerage research refresh commit: `3124543 Refresh stale brokerage research automatically`, pushed to `origin/main` and deployed live.
 - Latest OpenRouter free-model guard commit: `7ddf483 Enforce free OpenRouter models`, pushed to `origin/main` and deployed live.
 - Latest roster-gated brokerage research code commit: `32f654f Gate brokerage research on roster success`, pushed to `origin/main` and deployed live.
+- Latest OpenRouter-only/first-zero-contact suppression change: pending commit, not deployed yet.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
@@ -60,7 +61,8 @@ Last updated: 2026-07-03
   - Dashboard Workflow Status lists the worker, shows hidden DB counts, and has a Run Now button.
 - Main endpoints: `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/settings`, `POST /api/lead-intelligence/seed`, `POST /api/lead-intelligence/run-once`.
 - Run Now uses the async path `/api/lead-intelligence/run-once?async=true` to avoid Cloudflare/proxy timeout alerts.
-- Brokerage systems research is gated behind roster success when `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true`: the worker saves roster contacts first, only researches brokerages with at least one roster contact, and marks zero-contact/unharvestable brokerages `Do Not Scrape` so queued same-name offices are skipped before more scrape or AI spend.
+- Brokerage systems research is gated behind roster success when `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true`: the worker saves roster contacts first, only researches brokerages with at least one roster contact, and marks zero-contact/unharvestable brokerages `Do Not Scrape` after the first zero-contact result so queued same-name offices are skipped before more scrape or AI spend.
+- Lead Intelligence is explicitly OpenRouter-only for research. `LEAD_INTELLIGENCE_RESEARCH_PROVIDER` defaults to `openrouter`; OpenRouter failures/caps now fail closed for Lead Intelligence research and JSON repair instead of falling back to Gemini.
 - Production worker config:
   - `LEAD_INTELLIGENCE_ENABLED=true`
   - `LEAD_INTELLIGENCE_INTERVAL_MS=3600000`

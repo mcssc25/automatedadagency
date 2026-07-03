@@ -383,7 +383,7 @@ function getOpenRouterIntegrationSettings() {
 
 function getLeadIntelligenceResearchProvider() {
     const openRouterEnabled = getOpenRouterIntegrationSettings().enabled;
-    if (LEAD_INTELLIGENCE_RESEARCH_PROVIDER === 'openrouter') return openRouterEnabled ? 'openrouter' : 'gemini';
+    if (LEAD_INTELLIGENCE_RESEARCH_PROVIDER === 'openrouter') return 'openrouter';
     if (LEAD_INTELLIGENCE_RESEARCH_PROVIDER) return LEAD_INTELLIGENCE_RESEARCH_PROVIDER;
     return openRouterEnabled ? 'openrouter' : 'gemini';
 }
@@ -1004,19 +1004,19 @@ async function queryOpenRouterWithModelFallback(promptText, options = {}) {
 }
 
 async function queryLeadIntelligenceResearch(promptText, options = {}) {
-    if (getLeadIntelligenceResearchProvider() === 'openrouter' && getOpenRouterIntegrationSettings().enabled) {
-        try {
-            const result = await queryOpenRouterWithModelFallback(promptText, {
-                json: options.json,
-                modelOrder: options.modelOrder,
-                webSearch: getOpenRouterIntegrationSettings().webSearchEnabled,
-                maxModels: options.maxModels || 3,
-                timeoutMs: options.timeoutMs || 120000
-            });
-            return result.text;
-        } catch (error) {
-            console.warn(`[Lead Intelligence] OpenRouter research failed; falling back to Gemini grounding: ${error.message}`);
+    if (getLeadIntelligenceResearchProvider() === 'openrouter') {
+        const settings = getOpenRouterIntegrationSettings();
+        if (!settings.enabled) {
+            throw new Error('Lead Intelligence is configured for OpenRouter, but OpenRouter is not enabled or no API key is configured.');
         }
+        const result = await queryOpenRouterWithModelFallback(promptText, {
+            json: options.json,
+            modelOrder: options.modelOrder,
+            webSearch: settings.webSearchEnabled,
+            maxModels: options.maxModels || 3,
+            timeoutMs: options.timeoutMs || 120000
+        });
+        return result.text;
     }
 
     return queryGeminiWithSearch(promptText, {
@@ -1025,7 +1025,7 @@ async function queryLeadIntelligenceResearch(promptText, options = {}) {
     });
 }
 
-async function queryJsonRepairModel(promptText) {
+async function queryJsonRepairModel(promptText, options = {}) {
     if (getOpenRouterIntegrationSettings().enabled && canUseOpenRouter()) {
         try {
             const result = await queryOpenRouterWithModelFallback(promptText, {
@@ -1037,8 +1037,14 @@ async function queryJsonRepairModel(promptText) {
             });
             return result.text;
         } catch (error) {
+            if (options.allowGeminiFallback === false) {
+                throw new Error(`OpenRouter JSON repair failed and Gemini fallback is disabled: ${error.message}`);
+            }
             console.warn(`[JSON Repair] OpenRouter repair failed; falling back to Gemini: ${error.message}`);
         }
+    }
+    if (options.allowGeminiFallback === false) {
+        throw new Error('OpenRouter JSON repair is unavailable and Gemini fallback is disabled.');
     }
     return queryGemini(promptText);
 }
@@ -1334,7 +1340,7 @@ Return ONLY valid JSON:
 }`;
 
     const raw = await queryGeminiWithSearch(prompt, { json: true, model: GEMINI_RESEARCH_MODEL });
-    const data = await parseModelJsonWithRepair(raw);
+    const data = await parseModelJsonWithRepair(raw, { allowGeminiFallback: false });
     return Array.isArray(data.competitorProfiles) ? data.competitorProfiles : [];
 }
 
@@ -1358,11 +1364,11 @@ async function ensureMinimumCompetitorProfiles({ profiles, competitorDomains = [
     return merged;
 }
 
-async function parseModelJsonWithRepair(rawText) {
+async function parseModelJsonWithRepair(rawText, options = {}) {
     try {
         return parseModelJson(rawText);
     } catch (parseError) {
-        console.warn(`[JSON Repair] Model returned invalid JSON. Asking Gemini to repair it: ${parseError.message}`);
+        console.warn(`[JSON Repair] Model returned invalid JSON. Asking repair model to fix it: ${parseError.message}`);
         const repairPrompt = `Repair the invalid JSON below so it becomes valid JSON.
 Rules:
 - Return ONLY the repaired JSON object.
@@ -1379,7 +1385,7 @@ Invalid JSON:
 ${cleanModelJson(rawText)}
 -----------------`;
 
-        const repaired = await queryJsonRepairModel(repairPrompt);
+        const repaired = await queryJsonRepairModel(repairPrompt, options);
         return parseModelJson(repaired);
     }
 }
@@ -2984,7 +2990,7 @@ Return ONLY valid JSON:
 }`;
 
     const raw = await queryLeadIntelligenceResearch(prompt, { json: true });
-    const data = await parseModelJsonWithRepair(raw);
+    const data = await parseModelJsonWithRepair(raw, { allowGeminiFallback: false });
     const brokerages = Array.isArray(data.brokerages) ? data.brokerages : [];
     const seen = new Set();
 
@@ -3126,7 +3132,7 @@ Return ONLY valid JSON:
 
     try {
         const raw = await queryLeadIntelligenceResearch(prompt, { json: true });
-        const data = await parseModelJsonWithRepair(raw);
+        const data = await parseModelJsonWithRepair(raw, { allowGeminiFallback: false });
         const techStack = {
             ...(data.techStack || {}),
             researchVersion: 'brokerage-agent-chatter-v2',
@@ -3603,25 +3609,28 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
             let skippedProfileResearch = false;
             let doNotScrapeReason = '';
             const brandContactCount = db.getBrokerageRosterContactCount(office.brokerageName);
-            const noUsableRosterForBrand = brandContactCount === 0 && shouldMarkBrokerageDoNotScrapeAfterResult(office, harvestStatus, harvest);
+            const shouldStopBrokerageAfterZeroContactResult = insertedOrUpdated === 0 && shouldMarkBrokerageDoNotScrapeAfterResult(office, harvestStatus, harvest);
+            const noUsableRosterForBrand = brandContactCount === 0 && shouldStopBrokerageAfterZeroContactResult;
 
-            if (noUsableRosterForBrand) {
+            if (shouldStopBrokerageAfterZeroContactResult) {
                 status = 'Do Not Scrape';
                 doNotScrapeReason = `${office.brokerageName} marked do not scrape after ${harvestStatus.toLowerCase()} result in ${office.city}, ${office.state}: ${harvest.warning || 'No harvestable public roster contacts.'}`;
                 skippedProfileResearch = true;
-                db.upsertBrokerageProfile({
-                    name: office.brokerageName,
-                    researchStatus: 'Do Not Scrape',
-                    notes: doNotScrapeReason,
-                    techStack: {
-                        researchVersion: 'roster-gated-v1',
-                        doNotScrape: true,
-                        reason: doNotScrapeReason,
-                        lastRosterStatus: harvestStatus,
-                        lastRosterCity: office.city,
-                        lastRosterState: office.state
-                    }
-                });
+                if (noUsableRosterForBrand) {
+                    db.upsertBrokerageProfile({
+                        name: office.brokerageName,
+                        researchStatus: 'Do Not Scrape',
+                        notes: doNotScrapeReason,
+                        techStack: {
+                            researchVersion: 'roster-gated-v1',
+                            doNotScrape: true,
+                            reason: doNotScrapeReason,
+                            lastRosterStatus: harvestStatus,
+                            lastRosterCity: office.city,
+                            lastRosterState: office.state
+                        }
+                    });
+                }
             }
 
             db.updateBrokerageOffice(office.id, {
