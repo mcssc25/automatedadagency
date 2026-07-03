@@ -103,6 +103,7 @@ const LEAD_INTELLIGENCE_START_DELAY_MS = Math.min(Math.max(parseInt(process.env.
 const LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE = Math.min(Math.max(parseInt(process.env.LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE, 10) || 8, 1), 25);
 const LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS = process.env.LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS !== 'false';
 const LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE = process.env.LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE !== 'false';
+const LEAD_INTELLIGENCE_RESEARCH_TECH_STACK = process.env.LEAD_INTELLIGENCE_RESEARCH_TECH_STACK === 'true';
 const ROSTER_BROWSER_MAX_PAGES = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_MAX_PAGES, 10) || 40, 1), 100);
 const ROSTER_BROWSER_MAX_CONTACTS = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_MAX_CONTACTS, 10) || 250, 10), 1000);
 const ROSTER_BROWSER_TIMEOUT_MS = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_TIMEOUT_MS, 10) || 45000, 10000), 120000);
@@ -1602,6 +1603,132 @@ function extractPublicEmailsFromHtml(html) {
     return parseEmailListFromCsvValue(emailText.join('\n'));
 }
 
+function extractEmbeddedAgentObjectsFromHtml(html, brokerageName = '', discoveryQuery = '', pageUrl = '') {
+    const source = String(html || '');
+    const objectPattern = /\{[^{}]*"(?:emailAddress|email|email_address)"\s*:\s*"[^"]+@[^"]+"[^{}]*\}/gi;
+    const candidates = [];
+    const seen = new Set();
+
+    function decodeJsonString(value = '') {
+        return String(value || '')
+            .replace(/\\u0026/g, '&')
+            .replace(/\\\//g, '/')
+            .replace(/\\"/g, '"')
+            .replace(/\\n/g, ' ')
+            .replace(/\\r/g, ' ')
+            .replace(/\\t/g, ' ')
+            .trim();
+    }
+
+    function fieldFromObjectText(objectText, names = []) {
+        for (const name of names) {
+            const pattern = new RegExp(`"${name}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i');
+            const match = objectText.match(pattern);
+            if (match) return decodeJsonString(match[1]);
+        }
+        return '';
+    }
+
+    for (const match of source.matchAll(objectPattern)) {
+        const objectText = match[0];
+        const email = fieldFromObjectText(objectText, ['emailAddress', 'email', 'email_address']);
+        if (!isUsefulLeadEmail(email)) continue;
+
+        const name = normalizeAgentName(fieldFromObjectText(objectText, [
+            'fullName',
+            'displayName',
+            'name',
+            'agentName',
+            'firstLastName'
+        ]));
+        if (!isLikelyIndividualAgentLeadName(name)) continue;
+
+        const relativeUrl = fieldFromObjectText(objectText, ['url', 'profileUrl', 'profileURL', 'agentUrl', 'agentURL']);
+        const sourceUrl = relativeUrl
+            ? new URL(relativeUrl, pageUrl || 'https://example.com').href
+            : pageUrl;
+        const phone = fieldFromObjectText(objectText, [
+            'cellPhoneNumber',
+            'mobilePhoneNumber',
+            'businessPhoneNumber',
+            'phoneNumber',
+            'phone'
+        ]);
+        const company = cleanLeadText(fieldFromObjectText(objectText, ['companyName', 'brokerageName', 'officeName']) || brokerageName);
+        const key = `${name.toLowerCase()}|${email.toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        candidates.push({
+            name,
+            company: company || brokerageName || name,
+            email,
+            phone: phone ? cleanLeadText(phone) : '',
+            website: sourceUrl || pageUrl,
+            sourceUrl: sourceUrl || pageUrl,
+            discoveryQuery
+        });
+    }
+
+    const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+    for (const match of source.matchAll(emailPattern)) {
+        const email = String(match[0] || '').toLowerCase();
+        if (!isUsefulLeadEmail(email)) continue;
+
+        const fallbackStart = Math.max(0, match.index - 6000);
+        const fallbackEnd = Math.min(source.length, match.index + 3000);
+        const nearestAgentMarker = source.lastIndexOf('"agentMasterId"', match.index);
+        const objectStart = nearestAgentMarker >= 0 ? Math.max(0, source.lastIndexOf('{', nearestAgentMarker)) : fallbackStart;
+        const nextAgentMarker = source.indexOf('"agentMasterId"', match.index + email.length);
+        const objectEnd = nextAgentMarker > match.index ? Math.max(match.index + email.length, source.lastIndexOf('{', nextAgentMarker)) : fallbackEnd;
+        const windowText = source.slice(objectStart, objectEnd);
+        const beforeEmail = source.slice(objectStart, match.index);
+
+        const name = normalizeAgentName(fieldFromObjectText(windowText, [
+            'fullName',
+            'displayName',
+            'agentName',
+            'name',
+            'firstLastName'
+        ]) || (() => {
+            const nameMatches = [...beforeEmail.matchAll(/"(?:fullName|displayName|agentName|name)"\s*:\s*"((?:\\.|[^"\\])*)"/gi)];
+            const lastNameMatch = nameMatches[nameMatches.length - 1];
+            return lastNameMatch ? decodeJsonString(lastNameMatch[1]) : '';
+        })());
+        if (!isLikelyIndividualAgentLeadName(name)) continue;
+
+        const phone = fieldFromObjectText(windowText, [
+            'cellPhoneNumber',
+            'mobilePhoneNumber',
+            'businessPhoneNumber',
+            'phoneNumber',
+            'phone'
+        ]);
+        const afterEmailText = source.slice(match.index, objectEnd);
+        const relativeUrl = fieldFromObjectText(afterEmailText, ['url', 'profileUrl', 'profileURL', 'agentUrl', 'agentURL'])
+            || fieldFromObjectText(windowText, ['profileUrl', 'profileURL', 'agentUrl', 'agentURL', 'url']);
+        const sourceUrl = relativeUrl
+            ? new URL(relativeUrl, pageUrl || 'https://example.com').href
+            : pageUrl;
+        const company = fieldFromObjectText(windowText, ['companyName', 'brokerageName', 'officeName']) || brokerageName;
+        const key = `${name.toLowerCase()}|${email}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        candidates.push({
+            name,
+            company: cleanLeadText(company) || brokerageName || name,
+            email,
+            phone: phone ? cleanLeadText(phone) : '',
+            website: sourceUrl || pageUrl,
+            sourceUrl: sourceUrl || pageUrl,
+            discoveryQuery
+        });
+    }
+
+    return mergeLeadCandidatesByEmail(candidates);
+}
+
 function cleanLeadText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -1768,8 +1895,16 @@ function extractBrokerageAgentCandidatesFromHtml(html, pageUrl, brokerageName, b
     if (isDisallowedLeadSourceUrl(pageUrl)) return [];
 
     const $ = cheerio.load(String(html || ''));
-    const candidates = [];
+    const candidates = [
+        ...extractEmbeddedAgentObjectsFromHtml(html, brokerageName, discoveryQuery, pageUrl)
+    ];
     const seenEmails = new Set();
+    for (const candidate of candidates) {
+        if (candidate.email) seenEmails.add(String(candidate.email).toLowerCase());
+        if (Array.isArray(candidate.emails)) {
+            candidate.emails.forEach(email => seenEmails.add(String(email).toLowerCase()));
+        }
+    }
 
     function pushCandidate(email, scope, defaultName = '') {
         const normalizedEmail = String(email || '').trim().toLowerCase();
@@ -2646,6 +2781,33 @@ const LEAD_INTELLIGENCE_SUPPRESSIBLE_BRANDS = new Set(
     LEAD_INTELLIGENCE_BROKERAGE_BRAND_SEEDS.map(brand => brand.name.toLowerCase())
 );
 
+function slugifyBrokeragePathPart(value = '') {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/&/g, ' and ')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+function getDeterministicRosterUrlForOffice(office = {}) {
+    const brokerageName = String(office.brokerageName || '').trim().toLowerCase();
+    const city = slugifyBrokeragePathPart(office.city);
+    const state = slugifyBrokeragePathPart(office.state);
+    if (!city || !state) return null;
+
+    if (brokerageName === 'coldwell banker') {
+        const rosterUrl = `https://www.coldwellbanker.com/city/${state}/${city}/agents`;
+        return {
+            website: 'https://www.coldwellbanker.com',
+            rosterUrl,
+            sourceUrl: rosterUrl
+        };
+    }
+
+    return null;
+}
+
 function shouldSuppressBrokerageBrandAfterResult(office, status, harvest) {
     if (!LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE) return false;
     if (!office || !office.brokerageName) return false;
@@ -2735,6 +2897,14 @@ Return ONLY valid JSON:
 
 async function discoverSpecificBrokerageOfficeUrl(office) {
     if (office.website || office.rosterUrl) return office;
+
+    const deterministic = getDeterministicRosterUrlForOffice(office);
+    if (deterministic) {
+        return {
+            ...office,
+            ...deterministic
+        };
+    }
 
     const query = office.searchQuery || `${office.brokerageName} ${office.city} ${office.state}`;
     const prompt = `Find the official public website and agent roster page for this brokerage office search: "${query}".
@@ -3083,6 +3253,26 @@ async function harvestBrokerageOfficeRoster(office) {
     };
 
     try {
+        const staticCandidates = await scrapeBrokerageRosterCandidatesFromWebsite(
+            harvestOffice.website,
+            harvestOffice.brokerageName,
+            `${harvestOffice.brokerageName} ${harvestOffice.city} ${harvestOffice.state}`,
+            [harvestOffice.rosterUrl, harvestOffice.sourceUrl].filter(Boolean)
+        );
+        if (staticCandidates.length > 0) {
+            return {
+                contacts: staticCandidates,
+                pagesScanned: 0,
+                warning: '',
+                blocked: false,
+                method: 'static-html'
+            };
+        }
+    } catch (staticError) {
+        console.warn(`[Lead Intelligence] Static roster harvest failed for ${office.brokerageName}: ${staticError.message}. Continuing to browser parser.`);
+    }
+
+    try {
         return await harvestRosterWithBrowser(harvestOffice);
     } catch (browserError) {
         console.warn(`[Lead Intelligence] Browser roster harvest failed for ${office.brokerageName}: ${browserError.message}. Falling back to HTTP parser.`);
@@ -3152,7 +3342,9 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                 message: `Harvesting ${office.brokerageName} in ${office.city}, ${office.state} (${cycleIndex + 1}/${LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE})`
             });
 
-            const profile = db.getBrokerageProfileByName(office.brokerageName);
+            const profile = LEAD_INTELLIGENCE_RESEARCH_TECH_STACK
+                ? db.getBrokerageProfileByName(office.brokerageName)
+                : null;
             if (profile && profile.researchStatus !== 'Complete') {
                 await researchBrokerageTechStack(profile);
             }
@@ -5405,6 +5597,7 @@ app.get('/api/lead-intelligence/status', (req, res) => {
         maxOfficesPerCycle: LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE,
         stopAfterContacts: LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS,
         suppressBrandAfterFailure: LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE,
+        researchTechStack: LEAD_INTELLIGENCE_RESEARCH_TECH_STACK,
         browserMode: true,
         researchProvider: getLeadIntelligenceResearchProvider(),
         openRouter: {
@@ -5433,6 +5626,7 @@ app.post('/api/lead-intelligence/settings', (req, res) => {
         maxOfficesPerCycle: LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE,
         stopAfterContacts: LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS,
         suppressBrandAfterFailure: LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE,
+        researchTechStack: LEAD_INTELLIGENCE_RESEARCH_TECH_STACK,
         browserMode: true,
         researchProvider: getLeadIntelligenceResearchProvider(),
         openRouter: {
