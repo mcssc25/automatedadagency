@@ -26,8 +26,9 @@ Last updated: 2026-07-03
   - Warning/error: none
 - Hidden SQLite status after cleanup:
   - `roster_contacts`: `31`
-  - `brokerage_offices`: `1 Harvested`, `4 Blocked`, `3 Failed`, `21 No Contacts`, `265 Pending`
+  - `brokerage_offices`: `1 Harvested`, `5 Blocked`, `3 Failed`, `21 No Contacts`, `264 Pending`
 - Successful contact rows were renamed from the temporary controlled-test label to real brokerage name `Pointe South Realty`.
+- The next scheduled run correctly marked `RE/MAX` in Huntsville, AL as blocked by browser verification instead of misclassifying it as no-contact.
 - The app container was healthy after deployment.
 
 ## Verification
