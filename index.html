@@ -185,7 +185,11 @@
                                             <h4>Ad Strategy Agent</h4>
                                             <p id="agent-ad-task">Ad platform not connected</p>
                                         </div>
-                                        <div class="agent-status">
+                                        <div class="agent-status agent-control">
+                                            <label class="toggle-switch mini-toggle" title="Turn Ad Strategy Agent on or off">
+                                                <input type="checkbox" id="dashboard-toggle-ad-agent" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
                                             <span class="status-indicator idling" id="status-ad-agent"></span>
                                         </div>
                                     </div>
@@ -197,7 +201,11 @@
                                             <h4>Social Media Content Agent</h4>
                                             <p id="agent-content-task">Ready to draft approved posts</p>
                                         </div>
-                                        <div class="agent-status">
+                                        <div class="agent-status agent-control">
+                                            <label class="toggle-switch mini-toggle" title="Turn Content Creator Agent on or off">
+                                                <input type="checkbox" id="dashboard-toggle-content-agent" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
                                             <span class="status-indicator idling" id="status-content-agent"></span>
                                         </div>
                                     </div>
@@ -209,7 +217,11 @@
                                             <h4>24/7 Support Agent</h4>
                                             <p id="agent-support-task">Chat widget not installed</p>
                                         </div>
-                                        <div class="agent-status">
+                                        <div class="agent-status agent-control">
+                                            <label class="toggle-switch mini-toggle" title="Turn Support Agent on or off">
+                                                <input type="checkbox" id="dashboard-toggle-support-agent" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
                                             <span class="status-indicator idling" id="status-support-agent"></span>
                                         </div>
                                     </div>
@@ -221,8 +233,32 @@
                                             <h4>Outbound Sales Agent</h4>
                                             <p id="agent-sales-task">Waiting for CRM automation events</p>
                                         </div>
-                                        <div class="agent-status">
+                                        <div class="agent-status agent-control">
+                                            <label class="toggle-switch mini-toggle" title="Turn Sales CRM Agent on or off">
+                                                <input type="checkbox" id="dashboard-toggle-sales-agent" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
                                             <span class="status-indicator idling" id="status-sales-agent"></span>
+                                        </div>
+                                    </div>
+                                    <div class="agent-item">
+                                        <div class="agent-avatar teal-bg">
+                                            <i class="fa-solid fa-database"></i>
+                                        </div>
+                                        <div class="agent-details">
+                                            <h4>Lead Intelligence Worker</h4>
+                                            <p id="agent-intelligence-task">Checking hidden database status</p>
+                                            <small id="lead-intelligence-meta" class="agent-meta-line">Queued 0 | Harvested 0 | Blocked 0</small>
+                                        </div>
+                                        <div class="agent-status agent-control">
+                                            <button type="button" class="icon-button-small" id="btn-run-lead-intelligence" title="Run one hidden lead intelligence cycle now">
+                                                <i class="fa-solid fa-play"></i>
+                                            </button>
+                                            <label class="toggle-switch mini-toggle" title="Turn Lead Intelligence Worker on or off">
+                                                <input type="checkbox" id="dashboard-toggle-leadIntelligence-agent">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                            <span class="status-indicator idling" id="status-intelligence-agent"></span>
                                         </div>
                                     </div>
                                 </div>
@@ -532,6 +568,28 @@
                                         <div class="workflow-step"><i class="fa-solid fa-handshake"></i><span>Books meetings</span></div>
                                     </div>
                                     <p class="agent-card-desc">Captures leads from ad campaigns, sends personalized email drip sequences, tracks engagement signals, and auto-books demo meetings when intent is high.</p>
+                                </div>
+
+                                <!-- Lead Intelligence Worker -->
+                                <div class="agent-workflow-card" data-agent="leadIntelligence">
+                                    <div class="agent-card-header">
+                                        <div class="agent-card-identity">
+                                            <i class="fa-solid fa-database text-cyan"></i>
+                                            <h4>Lead Intelligence Worker</h4>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="toggle-leadIntelligence-agent">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="agent-card-workflow">
+                                        <div class="workflow-step"><i class="fa-solid fa-city"></i><span>Seeds target markets</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-users-viewfinder"></i><span>Finds brokerage rosters</span></div>
+                                        <div class="workflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                                        <div class="workflow-step"><i class="fa-solid fa-database"></i><span>Builds hidden contacts</span></div>
+                                    </div>
+                                    <p class="agent-card-desc">Runs quietly on the Hetzner backend to discover public brokerage roster pages and store individual agent contacts in the hidden intelligence database.</p>
                                 </div>
                             </div>
                         </div>

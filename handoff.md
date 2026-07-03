@@ -1,8 +1,24 @@
 # Handoff
 
-Last updated: 2026-07-02
+Last updated: 2026-07-03
 
 ## Latest Update
+
+- Added browser controls for the hidden Lead Intelligence Worker.
+- Agency Onboarding now includes a fifth worker card, `Lead Intelligence Worker`, with a toggle that persists to the backend.
+- Dashboard Workflow Status now lists `Lead Intelligence Worker` with its own toggle, a Run Now button, hidden DB count summary, and live status text.
+- Dashboard agent rows now include toggles for Ad Strategy, Content Creator, Support, Sales CRM, and Lead Intelligence so the user can turn agents on/off from the dashboard instead of only during onboarding.
+- Backend now persists the lead-intelligence on/off state in ignored runtime `data/lead-intelligence-settings.json`.
+- The hourly worker now checks that persisted setting before startup/interval runs; `POST /api/lead-intelligence/run-once` refuses to run when the worker is off.
+- Added `POST /api/lead-intelligence/settings` for browser toggle updates.
+
+## Previous Update
+
+- Clarified operating context after user correction: the real app is the Hetzner/VPS production deployment at `https://agents.realestatecrmpro.com`, running from `/opt/ad-agency-autopilot`, not a local-only service.
+- Future work should treat the browser dashboard and production Docker container as the normal runtime. Local workspace checks are only development diagnostics unless explicitly requested.
+- Hidden lead-intelligence worker status before this update: production Docker config already enabled the hourly worker with `LEAD_INTELLIGENCE_ENABLED=true`; backend endpoints existed for status/seed/run-once, but there was no visible browser dashboard control to start or inspect this worker.
+
+## Previous Update
 
 - Added OpenRouter API key management to the Integrations/API Configuration screen.
 - The UI now has an OpenRouter key field, enable toggle, web-search toggle, daily request cap, and editable free-model rotation list.
@@ -62,6 +78,14 @@ Last updated: 2026-07-02
 
 ## Verification
 
+- `node --check server.js` passed after Lead Intelligence dashboard/onboarding controls.
+- `node --check app.js` passed.
+- `git diff --check` passed with normal Windows CRLF warnings only.
+- Temporary local API smoke on port `3997` verified `/api/lead-intelligence/status` returned enabled/running/openRouter/status shape with 20 cities, 280 offices, 14 profiles, and 0 contacts.
+- Temporary local API smoke verified `POST /api/lead-intelligence/settings` can turn the worker on and off.
+- Browser UI smoke verified Dashboard renders five toggles, Lead Intelligence shows `Queued 280 | Harvested 0 | Blocked 0`, dashboard toggle enables the Run Now button, and the Agency Onboarding Lead Intelligence toggle stays synced.
+- Browser console check returned no errors.
+- A local Run Now request accidentally started one test harvest while enabled; the temporary server was stopped and the ignored local DB run row was marked `Interrupted`. No production run was triggered by this local test.
 - `node --check server.js` passed after the OpenRouter Integrations UI and model-rotation update.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.

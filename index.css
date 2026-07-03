@@ -548,6 +548,27 @@ body {
     font-size: 1.1rem;
 }
 
+.agent-avatar.purple-bg {
+    background: rgba(156, 39, 176, 0.15);
+    color: var(--purple);
+}
+
+.agent-avatar.cyan-bg,
+.agent-avatar.teal-bg {
+    background: rgba(0, 229, 255, 0.15);
+    color: var(--accent);
+}
+
+.agent-avatar.green-bg {
+    background: rgba(0, 230, 118, 0.15);
+    color: var(--green);
+}
+
+.agent-avatar.orange-bg {
+    background: rgba(255, 145, 0, 0.15);
+    color: var(--orange);
+}
+
 .agent-details {
     flex-grow: 1;
 }
@@ -566,6 +587,57 @@ body {
 .agent-status {
     display: flex;
     align-items: center;
+}
+
+.agent-control {
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.agent-meta-line {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+}
+
+.mini-toggle {
+    width: 36px;
+    height: 20px;
+}
+
+.mini-toggle .toggle-slider::before {
+    width: 14px;
+    height: 14px;
+}
+
+.mini-toggle input:checked + .toggle-slider::before {
+    transform: translateX(16px);
+}
+
+.icon-button-small {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.icon-button-small:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: rgba(0, 229, 255, 0.08);
+}
+
+.icon-button-small:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    filter: grayscale(0.4);
 }
 
 .status-indicator {

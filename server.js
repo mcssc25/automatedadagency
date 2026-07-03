@@ -29,6 +29,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const downloadsDir = path.join(__dirname, 'downloads');
 const CRM_STATE_FILE = path.join(DATA_DIR, 'crm-state.json');
 const CRM_SETTINGS_FILE = path.join(DATA_DIR, 'crm-settings.json');
+const LEAD_INTELLIGENCE_SETTINGS_FILE = path.join(DATA_DIR, 'lead-intelligence-settings.json');
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const PUBLIC_APP_URL = String(process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || '').replace(/\/+$/, '');
 const OPENROUTER_ENV_API_KEY = process.env.OPENROUTER_API_KEY || '';
@@ -218,6 +219,33 @@ function writeCrmSettings(settings) {
 
 function shouldAutoApproveCampaigns(settings = readCrmSettings()) {
     return settings.autoApproveCampaigns === true || settings.bypassEmailVerification === true;
+}
+
+function defaultLeadIntelligenceSettings() {
+    return {
+        enabled: LEAD_INTELLIGENCE_ENABLED
+    };
+}
+
+function readLeadIntelligenceSettings() {
+    const settings = {
+        ...defaultLeadIntelligenceSettings(),
+        ...readJsonFile(LEAD_INTELLIGENCE_SETTINGS_FILE, defaultLeadIntelligenceSettings())
+    };
+    settings.enabled = settings.enabled === true;
+    return settings;
+}
+
+function writeLeadIntelligenceSettings(settings = {}) {
+    writeJsonFile(LEAD_INTELLIGENCE_SETTINGS_FILE, {
+        ...defaultLeadIntelligenceSettings(),
+        ...settings,
+        enabled: settings.enabled === true
+    });
+}
+
+function isLeadIntelligenceEnabled() {
+    return readLeadIntelligenceSettings().enabled === true;
 }
 
 function normalizeCrmState(input = {}) {
@@ -5261,8 +5289,35 @@ app.post('/api/scrape-leads', (req, res) => {
 
 app.get('/api/lead-intelligence/status', (req, res) => {
     const openRouterSettings = getOpenRouterIntegrationSettings();
+    const settings = readLeadIntelligenceSettings();
     res.json({
-        enabled: LEAD_INTELLIGENCE_ENABLED,
+        enabled: settings.enabled,
+        configuredDefault: LEAD_INTELLIGENCE_ENABLED,
+        running: leadIntelligenceWorkerRunning,
+        intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
+        browserMode: true,
+        researchProvider: getLeadIntelligenceResearchProvider(),
+        openRouter: {
+            configured: openRouterSettings.enabled,
+            source: openRouterSettings.source,
+            defaultModel: openRouterSettings.defaultModel,
+            researchModel: openRouterSettings.researchModel,
+            modelOrder: openRouterSettings.modelOrder,
+            webSearchEnabled: openRouterSettings.webSearchEnabled,
+            dailyRequestLimit: openRouterSettings.dailyRequestLimit,
+            dailyRequestsUsed: openRouterUsageState.requests
+        },
+        status: db.getLeadIntelligenceStatus()
+    });
+});
+
+app.post('/api/lead-intelligence/settings', (req, res) => {
+    const enabled = req.body?.enabled === true;
+    writeLeadIntelligenceSettings({ enabled });
+    const openRouterSettings = getOpenRouterIntegrationSettings();
+    res.json({
+        success: true,
+        enabled,
         running: leadIntelligenceWorkerRunning,
         intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
         browserMode: true,
@@ -5287,6 +5342,9 @@ app.post('/api/lead-intelligence/seed', (req, res) => {
 });
 
 app.post('/api/lead-intelligence/run-once', async (req, res) => {
+    if (!isLeadIntelligenceEnabled()) {
+        return res.status(400).json({ error: 'Lead Intelligence is turned off. Enable it before running.' });
+    }
     const result = await runLeadIntelligenceCycle('manual-api');
     res.json({ success: !result.error, result, status: db.getLeadIntelligenceStatus() });
 });
@@ -5930,16 +5988,17 @@ setInterval(() => {
     });
 }, 5 * 60 * 1000);
 
-try {
-    const seeded = seedLeadIntelligenceDefaults();
-    if (seeded) console.log(`[Lead Intelligence] Seeded/updated ${seeded} market city row(s).`);
-} catch (error) {
-    console.error('[Lead Intelligence] Failed to seed market cities:', error.message);
-}
+if (isLeadIntelligenceEnabled()) {
+    try {
+        const seeded = seedLeadIntelligenceDefaults();
+        if (seeded) console.log(`[Lead Intelligence] Seeded/updated ${seeded} market city row(s).`);
+    } catch (error) {
+        console.error('[Lead Intelligence] Failed to seed market cities:', error.message);
+    }
 
-if (LEAD_INTELLIGENCE_ENABLED) {
     console.log(`[Lead Intelligence] Hourly worker enabled. First run in ${Math.round(LEAD_INTELLIGENCE_START_DELAY_MS / 1000)} seconds.`);
     setTimeout(() => {
+        if (!isLeadIntelligenceEnabled()) return;
         runLeadIntelligenceCycle('startup-delay').then(result => {
             console.log(`[Lead Intelligence] Startup cycle result: ${JSON.stringify(result)}`);
         }).catch(error => {
@@ -5947,14 +6006,16 @@ if (LEAD_INTELLIGENCE_ENABLED) {
         });
     }, LEAD_INTELLIGENCE_START_DELAY_MS);
 
-    setInterval(() => {
-        runLeadIntelligenceCycle('interval').then(result => {
-            console.log(`[Lead Intelligence] Interval cycle result: ${JSON.stringify(result)}`);
-        }).catch(error => {
-            console.error('[Lead Intelligence] Interval cycle error:', error.message);
-        });
-    }, LEAD_INTELLIGENCE_INTERVAL_MS);
 }
+
+setInterval(() => {
+    if (!isLeadIntelligenceEnabled()) return;
+    runLeadIntelligenceCycle('interval').then(result => {
+        console.log(`[Lead Intelligence] Interval cycle result: ${JSON.stringify(result)}`);
+    }).catch(error => {
+        console.error('[Lead Intelligence] Interval cycle error:', error.message);
+    });
+}, LEAD_INTELLIGENCE_INTERVAL_MS);
 
 app.listen(PORT, () => {
     console.log(`==================================================`);

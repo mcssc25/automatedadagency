@@ -23,7 +23,13 @@ class AutopilotApp {
             conversionRate: 10,
             competitorUrls: [],
             competitorProfiles: {},
-            enabledAgents: { ad: false, content: false, support: false, sales: false },
+            enabledAgents: { ad: false, content: false, support: false, sales: false, leadIntelligence: false },
+            leadIntelligence: {
+                enabled: false,
+                running: false,
+                intervalMs: 3600000,
+                status: null
+            },
             contentAutopilot: {
                 enabled: false,
                 publishMode: 'draft', // 'draft' or 'publish'
@@ -140,6 +146,7 @@ class AutopilotApp {
         this.renderLeadsList();
         this.updateVerificationBadge();
         this.drawPerformanceChart();
+        this.renderLeadIntelligenceStatus();
         
         // Load integrations credentials and statuses
         this.loadWebhookSettings();
@@ -290,6 +297,8 @@ class AutopilotApp {
         this.dom.btnCrmDncAdd = document.getElementById("btn-add-dnc");
         this.dom.crmDncListBody = document.getElementById("crm-dnc-list-body");
         this.dom.crmDncCount = document.getElementById("crm-dnc-count");
+        this.dom.btnRunLeadIntelligence = document.getElementById("btn-run-lead-intelligence");
+        this.dom.leadIntelligenceMeta = document.getElementById("lead-intelligence-meta");
 
         // Asset Downloader DOM
         this.dom.downloaderUrlInput = document.getElementById("downloader-url-input");
@@ -326,13 +335,15 @@ class AutopilotApp {
             'agent-ad': document.getElementById("agent-ad-task"),
             'agent-content': document.getElementById("agent-content-task"),
             'agent-support': document.getElementById("agent-support-task"),
-            'agent-sales': document.getElementById("agent-sales-task")
+            'agent-sales': document.getElementById("agent-sales-task"),
+            'agent-intelligence': document.getElementById("agent-intelligence-task")
         };
         this.dom.agentStatusDots = {
             'agent-ad': document.getElementById("status-ad-agent"),
             'agent-content': document.getElementById("status-content-agent"),
             'agent-support': document.getElementById("status-support-agent"),
-            'agent-sales': document.getElementById("status-sales-agent")
+            'agent-sales': document.getElementById("status-sales-agent"),
+            'agent-intelligence': document.getElementById("status-intelligence-agent")
         };
     }
 
@@ -485,13 +496,18 @@ class AutopilotApp {
         });
 
         // Agent toggle change handlers
-        ['ad', 'content', 'support', 'sales'].forEach(agentKey => {
-            const checkbox = document.getElementById(`toggle-${agentKey}-agent`);
-            checkbox.addEventListener('change', () => this.handleAgentToggle(agentKey, checkbox.checked));
+        this.getAgentKeys().forEach(agentKey => {
+            const setupCheckbox = document.getElementById(`toggle-${agentKey}-agent`);
+            const dashboardCheckbox = document.getElementById(`dashboard-toggle-${agentKey}-agent`);
+            if (setupCheckbox) setupCheckbox.addEventListener('change', () => this.handleAgentToggle(agentKey, setupCheckbox.checked));
+            if (dashboardCheckbox) dashboardCheckbox.addEventListener('change', () => this.handleAgentToggle(agentKey, dashboardCheckbox.checked));
         });
+        if (this.dom.btnRunLeadIntelligence) {
+            this.dom.btnRunLeadIntelligence.addEventListener('click', () => this.runLeadIntelligenceNow());
+        }
 
         // Onboarding Form Submit
-        this.dom.onboardingForm.addEventListener("submit", (e) => {
+        this.dom.onboardingForm.addEventListener("submit", async (e) => {
             e.preventDefault();
             this.state.bizName = document.getElementById("biz-name").value;
             let websiteVal = document.getElementById("biz-website").value.trim();
@@ -518,10 +534,11 @@ class AutopilotApp {
                 ad: document.getElementById('toggle-ad-agent').checked,
                 content: document.getElementById('toggle-content-agent').checked,
                 support: document.getElementById('toggle-support-agent').checked,
-                sales: document.getElementById('toggle-sales-agent').checked
+                sales: document.getElementById('toggle-sales-agent').checked,
+                leadIntelligence: document.getElementById('toggle-leadIntelligence-agent').checked
             };
-            
             this.saveState();
+            await this.saveLeadIntelligenceEnabled(this.state.enabledAgents.leadIntelligence);
             
             // Sync Onboarding Details to Previews
             this.dom.previewBizName.innerText = this.state.bizName;
@@ -825,7 +842,22 @@ class AutopilotApp {
         
         // Ensure enabledAgents exists
         if (!this.state.enabledAgents || typeof this.state.enabledAgents !== 'object') {
-            this.state.enabledAgents = { ad: false, content: false, support: false, sales: false };
+            this.state.enabledAgents = { ad: false, content: false, support: false, sales: false, leadIntelligence: false };
+        }
+        this.state.enabledAgents = {
+            ad: this.state.enabledAgents.ad !== false,
+            content: this.state.enabledAgents.content !== false,
+            support: this.state.enabledAgents.support !== false,
+            sales: this.state.enabledAgents.sales !== false,
+            leadIntelligence: this.state.enabledAgents.leadIntelligence === true
+        };
+        if (!this.state.leadIntelligence || typeof this.state.leadIntelligence !== 'object') {
+            this.state.leadIntelligence = {
+                enabled: false,
+                running: false,
+                intervalMs: 3600000,
+                status: null
+            };
         }
 
         // Ensure contentAutopilot settings exist
@@ -901,6 +933,7 @@ class AutopilotApp {
 
         await this.loadServerConfig();
         await this.loadOpenRouterSettings();
+        await this.loadLeadIntelligenceStatus();
         await this.loadCrmStateFromServer();
         
         // Populate inputs
@@ -947,15 +980,8 @@ class AutopilotApp {
         this.renderDncList();
         
         // Restore agent toggle states and card classes
-        ['ad', 'content', 'support', 'sales'].forEach(key => {
-            const isEnabled = this.state.enabledAgents[key] !== false;
-            document.getElementById(`toggle-${key}-agent`).checked = isEnabled;
-            const card = document.querySelector(`.agent-workflow-card[data-agent="${key}"]`);
-            if (card) {
-                card.classList.toggle('agent-active', isEnabled);
-                card.classList.toggle('agent-inactive', !isEnabled);
-            }
-        });
+        this.getAgentKeys().forEach(key => this.syncAgentToggleUI(key));
+        this.renderLeadIntelligenceStatus();
         
         this.dom.settingsApiKey.value = this.state.serverConfig.geminiConfigured ? "Configured on server (.env)" : "";
         this.renderOpenRouterSettings();
@@ -990,6 +1016,165 @@ class AutopilotApp {
             };
         } catch (error) {
             console.warn("Could not load server config:", error.message);
+        }
+    }
+
+    getAgentKeys() {
+        return ['ad', 'content', 'support', 'sales', 'leadIntelligence'];
+    }
+
+    getAgentConsoleId(agentKey) {
+        if (agentKey === 'leadIntelligence') return 'agent-intelligence';
+        return `agent-${agentKey}`;
+    }
+
+    syncAgentToggleUI(agentKey) {
+        const isEnabled = this.state.enabledAgents[agentKey] === true;
+        const setupCheckbox = document.getElementById(`toggle-${agentKey}-agent`);
+        const dashboardCheckbox = document.getElementById(`dashboard-toggle-${agentKey}-agent`);
+        if (setupCheckbox) setupCheckbox.checked = isEnabled;
+        if (dashboardCheckbox) dashboardCheckbox.checked = isEnabled;
+
+        document.querySelectorAll(`.agent-workflow-card[data-agent="${agentKey}"]`).forEach(card => {
+            card.classList.toggle('agent-active', isEnabled);
+            card.classList.toggle('agent-inactive', !isEnabled);
+        });
+
+        const dot = this.dom.agentStatusDots[this.getAgentConsoleId(agentKey)];
+        if (dot && agentKey !== 'leadIntelligence') {
+            dot.className = isEnabled ? 'status-indicator working' : 'status-indicator idling';
+        }
+    }
+
+    async loadLeadIntelligenceStatus() {
+        try {
+            const response = await fetch('/api/lead-intelligence/status');
+            if (!response.ok) throw new Error("Lead intelligence status unavailable");
+            const data = await response.json();
+            this.state.leadIntelligence = {
+                ...this.state.leadIntelligence,
+                ...data
+            };
+            this.state.enabledAgents.leadIntelligence = data.enabled === true;
+            this.saveState();
+            this.syncAgentToggleUI('leadIntelligence');
+            this.renderLeadIntelligenceStatus();
+            return data;
+        } catch (error) {
+            console.warn("Could not load lead intelligence status:", error.message);
+            this.renderLeadIntelligenceStatus(error.message);
+            return null;
+        }
+    }
+
+    summarizeLeadIntelligenceStatus() {
+        const info = this.state.leadIntelligence || {};
+        const status = info.status || {};
+        const countByStatus = (rows = [], name) => {
+            const found = rows.find(row => String(row.status || '').toLowerCase() === String(name).toLowerCase());
+            return found ? Number(found.count || 0) : 0;
+        };
+        const pending = countByStatus(status.offices || [], 'Pending') + countByStatus(status.offices || [], 'Discovered');
+        const harvested = countByStatus(status.offices || [], 'Harvested');
+        const blocked = countByStatus(status.offices || [], 'Blocked');
+        const contacts = Number(status.contacts || 0);
+        return { pending, harvested, blocked, contacts };
+    }
+
+    renderLeadIntelligenceStatus(errorMessage = '') {
+        const info = this.state.leadIntelligence || {};
+        const summary = this.summarizeLeadIntelligenceStatus();
+        const enabled = this.state.enabledAgents.leadIntelligence === true;
+        const dot = this.dom.agentStatusDots['agent-intelligence'];
+        const task = this.dom.agentTasks['agent-intelligence'];
+        const meta = this.dom.leadIntelligenceMeta;
+        const runBtn = this.dom.btnRunLeadIntelligence;
+
+        if (dot) {
+            dot.className = info.running ? 'status-indicator thinking' : enabled ? 'status-indicator working' : 'status-indicator idling';
+        }
+        if (task) {
+            if (errorMessage) {
+                task.innerText = `Status unavailable: ${errorMessage}`;
+            } else if (!enabled) {
+                task.innerText = 'Hidden database worker paused';
+            } else if (info.running) {
+                task.innerText = 'Building brokerage roster database now';
+            } else if (summary.contacts > 0) {
+                task.innerText = `${summary.contacts} hidden contacts found`;
+            } else {
+                task.innerText = `${summary.pending || 0} offices queued for public roster harvest`;
+            }
+        }
+        if (meta) {
+            meta.innerText = `Queued ${summary.pending || 0} | Harvested ${summary.harvested || 0} | Blocked ${summary.blocked || 0}`;
+        }
+        if (runBtn) {
+            runBtn.disabled = !enabled || info.running === true;
+            runBtn.title = enabled ? 'Run one hidden lead intelligence cycle now' : 'Turn on Lead Intelligence first';
+        }
+    }
+
+    async saveLeadIntelligenceEnabled(enabled) {
+        try {
+            const response = await fetch('/api/lead-intelligence/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: enabled === true })
+            });
+            if (!response.ok) throw new Error(await this.parseApiError(response, 'Could not update Lead Intelligence'));
+            const data = await response.json();
+            this.state.leadIntelligence = {
+                ...this.state.leadIntelligence,
+                ...data
+            };
+            this.state.enabledAgents.leadIntelligence = data.enabled === true;
+            this.syncAgentToggleUI('leadIntelligence');
+            this.renderLeadIntelligenceStatus();
+        } catch (error) {
+            this.appendConsoleLine('system', `Lead Intelligence toggle failed: ${error.message}`);
+            this.state.enabledAgents.leadIntelligence = !enabled;
+            this.syncAgentToggleUI('leadIntelligence');
+            this.renderLeadIntelligenceStatus(error.message);
+            alert(`Could not update Lead Intelligence: ${error.message}`);
+        }
+    }
+
+    async runLeadIntelligenceNow() {
+        if (!this.state.enabledAgents.leadIntelligence) return;
+        const btn = this.dom.btnRunLeadIntelligence;
+        const originalHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
+        }
+        this.state.leadIntelligence.running = true;
+        this.renderLeadIntelligenceStatus();
+        this.appendConsoleLine('agent-sales', 'Lead Intelligence Worker started one hidden roster harvest cycle.');
+
+        try {
+            const response = await fetch('/api/lead-intelligence/run-once', { method: 'POST' });
+            if (!response.ok) throw new Error(await this.parseApiError(response, 'Lead Intelligence run failed'));
+            const data = await response.json();
+            this.state.leadIntelligence.status = data.status || this.state.leadIntelligence.status;
+            this.state.leadIntelligence.running = false;
+            const result = data.result || {};
+            if (result.skipped) {
+                this.appendConsoleLine('agent-sales', `Lead Intelligence skipped: ${result.reason || 'nothing queued'}.`);
+            } else {
+                this.appendConsoleLine('agent-sales', `Lead Intelligence finished: ${result.contacts || 0} contact(s), ${result.pagesScanned || 0} page(s) scanned.`);
+            }
+            await this.loadLeadIntelligenceStatus();
+        } catch (error) {
+            this.state.leadIntelligence.running = false;
+            this.renderLeadIntelligenceStatus(error.message);
+            this.appendConsoleLine('system', `Lead Intelligence run failed: ${error.message}`);
+            alert(`Lead Intelligence run failed: ${error.message}`);
+        } finally {
+            if (btn) {
+                btn.innerHTML = originalHtml || `<i class="fa-solid fa-play"></i>`;
+            }
+            this.renderLeadIntelligenceStatus();
         }
     }
 
@@ -1200,7 +1385,7 @@ class AutopilotApp {
         this.state.extraDetails = "";
         this.state.adBudget = 0;
         this.state.competitorUrls = [];
-        this.state.enabledAgents = { ad: false, content: false, support: false, sales: false };
+        this.state.enabledAgents = { ad: false, content: false, support: false, sales: false, leadIntelligence: false };
         this.state.contentAutopilot.enabled = false;
         Object.keys(this.state.contentAutopilot.frequencies || {}).forEach(platform => {
             this.state.contentAutopilot.frequencies[platform].enabled = false;
@@ -1988,24 +2173,22 @@ class AutopilotApp {
     
     // ── Agent Toggle Handler ────────────────────────────────────────────
     
-    handleAgentToggle(agentKey, isEnabled) {
-        this.state.enabledAgents[agentKey] = isEnabled;
-        
-        // Update card visual state
-        const card = document.querySelector(`.agent-workflow-card[data-agent="${agentKey}"]`);
-        if (card) {
-            card.classList.toggle('agent-active', isEnabled);
-            card.classList.toggle('agent-inactive', !isEnabled);
-        }
+    async handleAgentToggle(agentKey, isEnabled) {
+        this.state.enabledAgents[agentKey] = isEnabled === true;
+        this.syncAgentToggleUI(agentKey);
         
         // Persist immediately
         this.saveState();
+
+        if (agentKey === 'leadIntelligence') {
+            await this.saveLeadIntelligenceEnabled(isEnabled === true);
+        }
         
         // Restart local automation timers with updated agent config.
         this.stopAutomationTimers();
         this.startAutomationTimers();
         
-        const agentNames = { ad: 'Ad Strategy', content: 'Content Creator', support: '24/7 Support', sales: 'Sales CRM' };
+        const agentNames = { ad: 'Ad Strategy', content: 'Content Creator', support: '24/7 Support', sales: 'Sales CRM', leadIntelligence: 'Lead Intelligence' };
         this.appendConsoleLine('system', `Agent ${agentNames[agentKey]} ${isEnabled ? 'ACTIVATED' : 'DEACTIVATED'}.`);
     }
 
