@@ -11,6 +11,7 @@ Last updated: 2026-07-03
 - Backend now persists the lead-intelligence on/off state in ignored runtime `data/lead-intelligence-settings.json`.
 - The hourly worker now checks that persisted setting before startup/interval runs; `POST /api/lead-intelligence/run-once` refuses to run when the worker is off.
 - Added `POST /api/lead-intelligence/settings` for browser toggle updates.
+- Follow-up reliability fix: if Gemini/OpenRouter returns an invalid response while discovering a specific brokerage office roster URL, that office returns a failed/no-contact result instead of failing the entire Lead Intelligence worker cycle.
 
 ## Previous Update
 
@@ -86,6 +87,8 @@ Last updated: 2026-07-03
 - Browser UI smoke verified Dashboard renders five toggles, Lead Intelligence shows `Queued 280 | Harvested 0 | Blocked 0`, dashboard toggle enables the Run Now button, and the Agency Onboarding Lead Intelligence toggle stays synced.
 - Browser console check returned no errors.
 - A local Run Now request accidentally started one test harvest while enabled; the temporary server was stopped and the ignored local DB run row was marked `Interrupted`. No production run was triggered by this local test.
+- Production deploy for dashboard controls succeeded: container healthy, deployed `server.js` and `app.js` syntax checks passed, and live `/api/lead-intelligence/status` reported enabled true, 269 pending offices, 19 no-contact offices, 3 blocked offices, 0 contacts, and OpenRouter not configured.
+- Production startup worker ran automatically after deploy; manual Run Now correctly skipped while the scheduled worker was running. The scheduled worker then failed on Gemini invalid response, prompting the roster-discovery resilience fix above.
 - `node --check server.js` passed after the OpenRouter Integrations UI and model-rotation update.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.

@@ -3007,7 +3007,21 @@ async function harvestRosterWithBrowser(office) {
 }
 
 async function harvestBrokerageOfficeRoster(office) {
-    const discoveredOffice = await discoverSpecificBrokerageOfficeUrl(office);
+    let discoveredOffice = office;
+    let discoveryWarning = '';
+    try {
+        discoveredOffice = await discoverSpecificBrokerageOfficeUrl(office);
+    } catch (discoveryError) {
+        discoveryWarning = formatErrorMessage(discoveryError, 'Could not discover brokerage roster URL.');
+        console.warn(`[Lead Intelligence] Roster URL discovery failed for ${office.brokerageName}: ${discoveryWarning}`);
+        return {
+            contacts: [],
+            pagesScanned: 0,
+            warning: discoveryWarning,
+            blocked: false
+        };
+    }
+
     if (discoveredOffice.website || discoveredOffice.rosterUrl) {
         db.updateBrokerageOffice(office.id, {
             website: discoveredOffice.website || office.website || '',
