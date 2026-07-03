@@ -18,13 +18,14 @@ Last updated: 2026-07-03
 - Latest Lead Communication response-inbox commit: `e4d8392 Filter CRM communications to responded leads`, pushed to `origin/main` and deployed live.
 - Latest activity/log visibility commit: `561c0ed Show real CRM work activity`, pushed to `origin/main` and deployed live.
 - Latest stale brokerage research refresh commit: `3124543 Refresh stale brokerage research automatically`, pushed to `origin/main` and deployed live.
-- Latest OpenRouter free-model guard is local pending deploy: lead-intelligence OpenRouter model routing now filters out paid IDs and keeps only `openrouter/free` or model IDs ending in `:free`.
+- Latest OpenRouter free-model guard commit: `7ddf483 Enforce free OpenRouter models`, pushed to `origin/main` and deployed live.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
 - Response-inbox deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T213224Z-responded-lead-inbox`.
 - Real-activity deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T214733Z-real-activity-log`.
 - Stale brokerage research refresh deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T215355Z-stale-brokerage-research-refresh`.
+- OpenRouter free-model guard deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T220115Z-openrouter-free-model-guard`.
 - Production container was healthy after the Coldwell Banker raw-email extractor deployments.
 - Runtime secrets/data are ignored and must stay out of git: `.env`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
 - OpenRouter and Make.com webhook settings persist in production runtime `data/credentials.json` on the mounted `/opt/ad-agency-autopilot/data` volume.
@@ -120,6 +121,7 @@ Last updated: 2026-07-03
 - Latest local stale-research refresh checks passed: `node --check server.js`, `node --check db.js`, `node --check app.js`, `git diff --check` with only CRLF warnings, and a direct DB selector smoke returned an eligible profile (`Keller Williams`, `Pending`) for refresh.
 - Production stale-research refresh deploy checks passed: container healthy, in-container `node --check /app/server.js`, `/app/db.js`, and `/app/app.js`; authenticated `/api/lead-intelligence/status` returned `researchTechStack:true`, `maxProfileResearchPerCycle:2`, `running:false`, and `64` contacts.
 - Latest local OpenRouter guard checks passed: `node --check server.js`, `node --check app.js`, `node --check db.js`, `git diff --check` with only CRLF warnings, and a filter smoke dropped `openai/gpt-5` while keeping `openrouter/free` and `:free` models.
+- Production OpenRouter guard deploy checks passed: container healthy, in-container `node --check /app/server.js`, and authenticated `/api/openrouter-settings` smoke returned `defaultModel:"openrouter/free"`, `15` model-order entries, and `0` unsafe/paid model IDs.
 - Production research-signals deploy checks passed: container healthy, in-container `node --check /app/server.js` and `/app/app.js`, authenticated `/api/crm-intelligence` smoke returned `64` roster contacts and brokerage `techStack`.
 - Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.
 - HTTP smoke passed on `PORT=3133` with admin auth disabled for the local test: `/api/crm-intelligence?brokerageLimit=3&rosterLimit=3` returned brokerages, roster fields, totals, and status.
