@@ -4,6 +4,22 @@ Last updated: 2026-07-03
 
 ## Latest Update
 
+- Tested `D4Vinci/Scrapling` as a possible replacement/fallback scraper using an isolated temporary Python venv on the Hetzner VPS.
+- Scrapling docs say it has Fetcher, DynamicFetcher, and StealthyFetcher modes; the test used normal Dynamic/Stealthy modes without enabling CAPTCHA-solving.
+- Installed temporary Scrapling dependencies and Patchright browser for the test, plus missing host browser libraries; then removed the temporary venv/browser download. The production app container stayed healthy.
+- Result: Scrapling is interesting as a fallback for some soft-blocked pages, but it did not produce more email contacts in this test.
+
+## Scrapling Test Result
+
+- `https://pointesouth.com/our-team/`: Scrapling Dynamic/Stealthy found 39 raw emails, matching the kind of accessible page our current worker can already harvest.
+- `https://www.realtysouth.net/agents.php`: Scrapling Dynamic/Stealthy reached the real `RealtySouth Roster` page where current headless Chromium had previously seen verification, but found 0 raw emails.
+- RealtySouth profile pages exposed names, phone numbers, profile URLs, and `E-mail Me` form anchors, but 0 raw email addresses.
+- `https://www.arcrealtyco.com/real-estate-agents/inoffice-101/messages`: Scrapling still returned `Please Verify You Are Human` / 429.
+- `https://remaxalliancehuntsville.com/agents/` and `https://kwhsv.com/our-agents`: Scrapling browser fetchers still failed with HTTP response-code navigation errors.
+- Recommendation from the experiment: do not replace the current worker with Scrapling yet. If integrated later, use it as a secondary fallback for pages where it can expose names/phones/profile links, or only if we decide to support phone-only hidden contacts.
+
+## Previous Update
+
 - Changed the hidden Lead Intelligence Worker so one failure no longer burns an entire hourly cycle.
 - A worker run now checks up to `LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE` offices per cycle; production default is `8`.
 - The run stops early if it harvests contacts, otherwise it keeps moving through failures/no-contact/blocked offices until the cap is hit.
@@ -32,12 +48,14 @@ Last updated: 2026-07-03
 - Deployed `/app/server.js` and `/app/db.js` syntax checks passed.
 - Production `/api/lead-intelligence/status` exposes `maxOfficesPerCycle: 8`, `stopAfterContacts: true`, and `suppressBrandAfterFailure: true`.
 - Production manual async run completed and recorded structured per-office attempts in `intelligence_runs.statsJson`.
+- Scrapling probe verified the app container remained healthy after the experiment.
 
 ## Repo / Deployment Status
 
 - Current branch: `main`.
 - Runtime data/secrets were not committed.
 - Changed source/docs in this update: `server.js`, `db.js`, `docker-compose.yml`, `.env.example`, `MEMORY.md`, `handoff.md`.
+- Current uncommitted docs-only change records the Scrapling experiment.
 - Deployment backup created:
   - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T1722-lead-intelligence-multi-office-cycle`
 

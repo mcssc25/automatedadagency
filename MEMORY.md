@@ -37,6 +37,7 @@ Last updated: 2026-07-03
 - OpenRouter 429/rate-limit failures should fall back quickly instead of stalling a harvest. Production roster challenge detection includes Cloudflare, reCAPTCHA, Burrow, "Please Verify You Are Human", and similar blocked-page text.
 - Elementor/card-style roster pages need wide ancestor scoping so `mailto:` buttons whose visible text is only "Email" still resolve the actual agent name from the surrounding card.
 - Known limitation: KW/IDX-style protected roster pages can show Cloudflare/security verification to production headless Chromium and should be marked `Blocked`; a managed/stealth browser provider may be needed for those.
+- Scrapling 0.4.9 was tested manually on the VPS on 2026-07-03. Non-solver Dynamic/Stealthy fetchers did improve access to RealtySouth's roster/profile pages and exposed names/phones/profile links, but still found 0 raw emails; RE/MAX/KW still failed and ARC still returned a human-verification page. Scrapling is not integrated.
 - Realtor directory discovery may use Zillow/Realtor.com/Redfin/Homes.com as profile-discovery signals only; do not bypass robots, logins, CAPTCHAs, paywalls, or private APIs.
 
 ## CRM / Email Safeguards
