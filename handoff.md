@@ -19,7 +19,7 @@ Last updated: 2026-07-03
 - Latest activity/log visibility commit: `561c0ed Show real CRM work activity`, pushed to `origin/main` and deployed live.
 - Latest stale brokerage research refresh commit: `3124543 Refresh stale brokerage research automatically`, pushed to `origin/main` and deployed live.
 - Latest OpenRouter free-model guard commit: `7ddf483 Enforce free OpenRouter models`, pushed to `origin/main` and deployed live.
-- Latest roster-gated brokerage research commit: `3a6f5c4 Gate brokerage research on roster success`, pushed to `origin/main` and deployed live.
+- Latest roster-gated brokerage research code commit: `32f654f Gate brokerage research on roster success`, pushed to `origin/main` and deployed live.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
