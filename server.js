@@ -105,6 +105,8 @@ const LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE = Math.min(Math.max(parseInt(proce
 const LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS = process.env.LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS !== 'false';
 const LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE = process.env.LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE !== 'false';
 const LEAD_INTELLIGENCE_RESEARCH_TECH_STACK = process.env.LEAD_INTELLIGENCE_RESEARCH_TECH_STACK === 'true';
+const parsedMaxProfileResearchPerCycle = parseInt(process.env.LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE, 10);
+const LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE = Math.min(Math.max(Number.isFinite(parsedMaxProfileResearchPerCycle) ? parsedMaxProfileResearchPerCycle : 2, 0), 10);
 const ROSTER_BROWSER_MAX_PAGES = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_MAX_PAGES, 10) || 40, 1), 100);
 const ROSTER_BROWSER_MAX_CONTACTS = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_MAX_CONTACTS, 10) || 250, 10), 1000);
 const ROSTER_BROWSER_TIMEOUT_MS = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_TIMEOUT_MS, 10) || 45000, 10000), 120000);
@@ -3142,6 +3144,49 @@ Return ONLY valid JSON:
     }
 }
 
+async function refreshStaleBrokerageResearchProfiles(runId = null) {
+    if (!LEAD_INTELLIGENCE_RESEARCH_TECH_STACK || LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE <= 0) {
+        return { researched: 0, skipped: true };
+    }
+
+    const researched = [];
+    const attemptedIds = new Set();
+    for (let index = 0; index < LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE; index++) {
+        const profile = db.getNextBrokerageProfileForResearch();
+        if (!profile || !profile.id || attemptedIds.has(profile.id)) break;
+        attemptedIds.add(profile.id);
+
+        const message = `Refreshing brokerage systems research for ${profile.name} (${index + 1}/${LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE})`;
+        if (runId) db.updateIntelligenceRun(runId, { message });
+        appendActivityLog('agent-sales', message, {
+            workflow: 'lead-intelligence',
+            runId,
+            phase: 'brokerage-systems-refresh',
+            brokerage: profile.name,
+            researchStatus: profile.researchStatus || ''
+        });
+
+        const updated = await researchBrokerageTechStack(profile);
+        const current = updated && hasCurrentBrokerageTechResearch(updated);
+        researched.push({
+            brokerage: profile.name,
+            status: current ? 'Complete' : 'Needs Research'
+        });
+        appendActivityLog(current ? 'agent-sales' : 'system-line', `${profile.name} systems research ${current ? 'updated with agent chatter/search evidence' : 'still needs research'}.`, {
+            workflow: 'lead-intelligence',
+            runId,
+            phase: 'brokerage-systems-refresh-result',
+            brokerage: profile.name,
+            status: current ? 'Complete' : 'Needs Research'
+        });
+    }
+
+    return {
+        researched: researched.length,
+        profiles: researched
+    };
+}
+
 function loadPlaywrightChromium() {
     try {
         return require('playwright-core').chromium;
@@ -3457,6 +3502,7 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
         let suppressedBrandOffices = 0;
         let lastOffice = null;
         let stopReason = '';
+        let refreshedProfileResearch = { researched: 0, profiles: [] };
 
         for (let cycleIndex = 0; cycleIndex < LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE; cycleIndex++) {
             let office = db.getNextBrokerageOfficeForHarvest();
@@ -3583,21 +3629,38 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
             }
         }
 
+        refreshedProfileResearch = await refreshStaleBrokerageResearchProfiles(runId);
+
         if (attempts.length === 0) {
+            const didRefreshProfiles = refreshedProfileResearch.researched > 0;
             db.updateIntelligenceRun(runId, {
                 status: 'Complete',
                 finishedAt: new Date().toISOString(),
-                message: stopReason || 'No lead intelligence work was available.',
-                stats: { discoveredOffices, contacts: 0, attempts: [] }
+                message: didRefreshProfiles
+                    ? `Updated systems research for ${refreshedProfileResearch.researched} brokerage profile(s).`
+                    : stopReason || 'No lead intelligence work was available.',
+                stats: {
+                    discoveredOffices,
+                    contacts: 0,
+                    attempts: [],
+                    refreshedProfileResearch
+                }
             });
-            appendActivityLog('system-line', `Lead Intelligence found no work to run: ${stopReason || 'no work available'}.`, {
+            appendActivityLog(didRefreshProfiles ? 'agent-sales' : 'system-line', didRefreshProfiles
+                ? `Lead Intelligence updated systems research for ${refreshedProfileResearch.researched} brokerage profile(s).`
+                : `Lead Intelligence found no work to run: ${stopReason || 'no work available'}.`, {
                 workflow: 'lead-intelligence',
                 runId,
                 phase: 'complete',
                 discoveredOffices,
-                contacts: 0
+                contacts: 0,
+                refreshedProfiles: refreshedProfileResearch.researched
             });
-            return { skipped: true, reason: stopReason || 'no work available' };
+            return {
+                skipped: !didRefreshProfiles,
+                reason: didRefreshProfiles ? 'refreshed stale brokerage research' : stopReason || 'no work available',
+                refreshedProfileResearch
+            };
         }
 
         const harvestedAttempts = attempts.filter(item => item.contacts > 0).length;
@@ -3616,6 +3679,7 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                 discoveredOffices,
                 pagesScanned: totalPagesScanned,
                 suppressedBrandOffices,
+                refreshedProfileResearch,
                 stopReason: stopReason || 'max offices per cycle reached',
                 attempts
             }
@@ -3629,6 +3693,7 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
             discoveredOffices,
             pagesScanned: totalPagesScanned,
             suppressedBrandOffices,
+            refreshedProfiles: refreshedProfileResearch.researched,
             stopReason: stopReason || 'max offices per cycle reached'
         });
 
@@ -3639,6 +3704,7 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
             discoveredOffices,
             pagesScanned: totalPagesScanned,
             suppressedBrandOffices,
+            refreshedProfileResearch,
             stopReason: stopReason || 'max offices per cycle reached',
             attempts
         };
@@ -5835,6 +5901,7 @@ app.get('/api/lead-intelligence/status', (req, res) => {
         running: leadIntelligenceWorkerRunning,
         intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
         maxOfficesPerCycle: LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE,
+        maxProfileResearchPerCycle: LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE,
         stopAfterContacts: LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS,
         suppressBrandAfterFailure: LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE,
         researchTechStack: LEAD_INTELLIGENCE_RESEARCH_TECH_STACK,
@@ -5864,6 +5931,7 @@ app.post('/api/lead-intelligence/settings', (req, res) => {
         running: leadIntelligenceWorkerRunning,
         intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
         maxOfficesPerCycle: LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE,
+        maxProfileResearchPerCycle: LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE,
         stopAfterContacts: LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS,
         suppressBrandAfterFailure: LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE,
         researchTechStack: LEAD_INTELLIGENCE_RESEARCH_TECH_STACK,

@@ -825,7 +825,23 @@ function getNextBrokerageProfileForResearch() {
         SELECT *
         FROM brokerage_profiles
         WHERE researchStatus IN ('Pending', 'Needs Research')
-        ORDER BY updatedAt ASC
+           OR (
+                researchStatus = 'Complete'
+                AND (
+                    techStackJson IS NULL
+                    OR techStackJson = ''
+                    OR (
+                        techStackJson NOT LIKE '%"researchVersion":"brokerage-agent-chatter-v2"%'
+                        AND techStackJson NOT LIKE '%"researchVersion": "brokerage-agent-chatter-v2"%'
+                    )
+                )
+           )
+        ORDER BY
+            CASE
+                WHEN researchStatus IN ('Pending', 'Needs Research') THEN 0
+                ELSE 1
+            END,
+            updatedAt ASC
         LIMIT 1
     `).get();
     return prepareBrokerageProfile(row);

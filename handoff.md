@@ -17,6 +17,7 @@ Last updated: 2026-07-03
 - Latest brokerage research-signals commit: `17dddd4 Improve brokerage research signals`, pushed to `origin/main` and deployed live.
 - Latest Lead Communication response-inbox commit: `e4d8392 Filter CRM communications to responded leads`, pushed to `origin/main` and deployed live.
 - Latest activity/log visibility commit: `561c0ed Show real CRM work activity`, pushed to `origin/main` and deployed live.
+- Latest stale brokerage research refresh work is local pending deploy: old/current CRM brokerages without `researchVersion=brokerage-agent-chatter-v2` are now eligible for automatic refresh.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
@@ -53,6 +54,7 @@ Last updated: 2026-07-03
   - Dashboard Workflow Status lists the worker, shows hidden DB counts, and has a Run Now button.
 - Main endpoints: `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/settings`, `POST /api/lead-intelligence/seed`, `POST /api/lead-intelligence/run-once`.
 - Run Now uses the async path `/api/lead-intelligence/run-once?async=true` to avoid Cloudflare/proxy timeout alerts.
+- Existing brokerage profiles are refreshed automatically after roster harvest work when `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true`: `db.getNextBrokerageProfileForResearch()` now treats old `Complete` records without `brokerage-agent-chatter-v2` as stale, and each cycle researches up to `LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE` profiles, default `2`.
 - Production worker config:
   - `LEAD_INTELLIGENCE_ENABLED=true`
   - `LEAD_INTELLIGENCE_INTERVAL_MS=3600000`
@@ -61,6 +63,7 @@ Last updated: 2026-07-03
   - `LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS=true`
   - `LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE=true`
   - `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true` after the Reddit/agent-chatter research upgrade
+  - `LEAD_INTELLIGENCE_MAX_PROFILE_RESEARCH_PER_CYCLE=2` by default unless env overrides it
 
 ## Important Breakthrough
 
@@ -111,6 +114,7 @@ Last updated: 2026-07-03
 - Latest local response-inbox checks passed: `node --check app.js`, `node --check server.js`, `node --check db.js`, and a direct DB smoke returned `3` total local leads / `0` responded local leads.
 - Production response-inbox deploy checks passed: container healthy, in-container syntax checks passed for `/app/app.js`, `/app/db.js`, and `/app/server.js`, and authenticated `/api/leads?respondedOnly=1&limit=5` smoke returned `1` responded lead out of `6` total production leads.
 - Production real-activity deploy checks passed: container healthy, in-container `node --check /app/app.js` and `/app/server.js`; authenticated smoke showed `/api/crm-intelligence` returned `running:false` and `64` contacts; `/api/activity-log` post/read/clear worked.
+- Latest local stale-research refresh checks passed: `node --check server.js`, `node --check db.js`, `node --check app.js`, `git diff --check` with only CRLF warnings, and a direct DB selector smoke returned an eligible profile (`Keller Williams`, `Pending`) for refresh.
 - Production research-signals deploy checks passed: container healthy, in-container `node --check /app/server.js` and `/app/app.js`, authenticated `/api/crm-intelligence` smoke returned `64` roster contacts and brokerage `techStack`.
 - Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.
 - HTTP smoke passed on `PORT=3133` with admin auth disabled for the local test: `/api/crm-intelligence?brokerageLimit=3&rosterLimit=3` returned brokerages, roster fields, totals, and status.
