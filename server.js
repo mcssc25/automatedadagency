@@ -399,7 +399,7 @@ async function postOpenRouterWithRetry(payload, label, timeoutMs = 120000) {
         } catch (error) {
             lastError = error;
             const status = error.response && error.response.status;
-            const retryable = ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code) || [408, 409, 429, 500, 502, 503, 504].includes(status);
+            const retryable = ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code) || [408, 409, 500, 502, 503, 504].includes(status);
             if (attempt < 3 && retryable) {
                 console.warn(`[${label}] OpenRouter request failed (${status || error.code || error.message}); retrying attempt ${attempt + 1}/3.`);
                 await sleep(1000 * attempt);
@@ -868,9 +868,14 @@ function isOpenRouterModelFallbackError(error) {
 async function queryOpenRouterWithModelFallback(promptText, options = {}) {
     const settings = getOpenRouterIntegrationSettings();
     const modelOrder = normalizeOpenRouterModelOrder(options.modelOrder || settings.modelOrder);
+    const maxModels = Math.min(Math.max(parseInt(options.maxModels, 10) || 3, 1), modelOrder.length || 1);
     let lastError;
+    let attempts = 0;
+    let consecutiveRateLimits = 0;
 
     for (const model of modelOrder) {
+        if (attempts >= maxModels) break;
+        attempts++;
         try {
             const text = await queryOpenRouter(promptText, {
                 ...options,
@@ -879,7 +884,10 @@ async function queryOpenRouterWithModelFallback(promptText, options = {}) {
             return { text, model };
         } catch (error) {
             lastError = error;
+            const status = error.response && error.response.status;
+            consecutiveRateLimits = status === 429 ? consecutiveRateLimits + 1 : 0;
             console.warn(`[OpenRouter:${model}] failed: ${formatErrorMessage(error, 'OpenRouter model failed.')}`);
+            if (consecutiveRateLimits >= 2) break;
             if (!isOpenRouterModelFallbackError(error)) break;
         }
     }
@@ -894,6 +902,7 @@ async function queryLeadIntelligenceResearch(promptText, options = {}) {
                 json: options.json,
                 modelOrder: options.modelOrder,
                 webSearch: getOpenRouterIntegrationSettings().webSearchEnabled,
+                maxModels: options.maxModels || 3,
                 timeoutMs: options.timeoutMs || 120000
             });
             return result.text;
@@ -914,6 +923,7 @@ async function queryJsonRepairModel(promptText) {
             const result = await queryOpenRouterWithModelFallback(promptText, {
                 json: true,
                 modelOrder: [OPENROUTER_DEFAULT_MODEL, ...getOpenRouterIntegrationSettings().modelOrder],
+                maxModels: 3,
                 maxTokens: 4096,
                 timeoutMs: 90000
             });
@@ -2822,12 +2832,27 @@ async function extractRosterContactsFromBrowserPage(page, brokerageName, office)
 
         function scopeFor(el) {
             let scope = el;
-            for (let i = 0; i < 7 && scope && scope !== document.body; i++) {
+            let best = null;
+            let bestScore = -1;
+            for (let i = 0; i < 14 && scope && scope !== document.body; i++) {
                 const text = clean(scope.innerText || scope.textContent || '');
                 if (text.includes('@') && text.length >= 20 && text.length <= 2500) return scope;
+
+                let score = 0;
+                if (text.length >= 25 && text.length <= 1500) score += 1;
+                if (text.length >= 25 && text.length <= 350) score += 2;
+                if (/\b(realtor|broker|agent|licensed|owner|associate|assistant|manager)\b/i.test(text)) score += 4;
+                if (scope.matches('article,li,section,[class*="card" i],[class*="agent" i],[class*="team" i],[class*="column" i]')) score += 2;
+                if (scope.querySelector('h1,h2,h3,h4,[class*="heading" i],[class*="name" i]')) score += 2;
+                if (/^(website\s+)?email$/i.test(text)) score -= 5;
+                if (score > bestScore) {
+                    best = scope;
+                    bestScore = score;
+                }
+
                 scope = scope.parentElement;
             }
-            return el.closest('article,li,section,div') || document.body;
+            return best || el.closest('article,li,section,div') || document.body;
         }
 
         function nameFromScope(scope, email) {
@@ -2836,6 +2861,7 @@ async function extractRosterContactsFromBrowserPage(page, brokerageName, office)
                 '[class*="agent-name" i]',
                 '[class*="associate-name" i]',
                 '[class*="member-name" i]',
+                '[class*="heading" i]',
                 '[class*="name" i]',
                 'h1', 'h2', 'h3', 'h4', 'strong'
             ];
@@ -2944,8 +2970,12 @@ async function findNextRosterPage(page) {
     });
 }
 
+function isRosterChallengeText(text = '') {
+    return /\b(just a moment|security verification|performing security verification|verify you are not a bot|not a robot|malicious bots|checking your browser|please verify you are human|burrow services|cloudflare|captcha|recaptcha|access denied|request forbidden)\b/i.test(String(text || ''));
+}
+
 function isBlockedRosterError(message = '') {
-    return /\b(cloudflare|security verification|not a bot|captcha|forbidden|too many requests|blocked|403|429)\b/i.test(String(message || ''));
+    return /\b(forbidden|too many requests|blocked|403|429)\b/i.test(String(message || '')) || isRosterChallengeText(message);
 }
 
 async function harvestRosterWithBrowser(office) {
@@ -2981,7 +3011,7 @@ async function harvestRosterWithBrowser(office) {
             await page.waitForTimeout(1500);
 
             const challengeText = await page.evaluate(() => `${document.title || ''}\n${document.body?.innerText || ''}`.slice(0, 1200));
-            if (/\b(just a moment|security verification|verify you are not a bot|cloudflare|captcha)\b/i.test(challengeText)) {
+            if (isRosterChallengeText(challengeText)) {
                 throw new Error('Blocked by browser security verification / Cloudflare challenge.');
             }
 

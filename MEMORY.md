@@ -33,7 +33,9 @@ Last updated: 2026-07-03
 - Lead Intelligence Run Now uses the async browser path (`/api/lead-intelligence/run-once?async=true`) so Cloudflare/proxy timeouts do not produce HTML error alerts while a long harvest is still running; deployed hotfix commit `9eb2921`.
 - Lead Intelligence URL-discovery model failures should mark only that brokerage office as failed instead of killing the whole worker cycle; deployed resilience fix commit `8f25386`.
 - Lead-intelligence research can prefer OpenRouter with free-model rotation and Gemini fallback. OpenRouter web search is opt-in and may use credits.
-- Known limitation: KW-style protected roster pages can show Cloudflare/security verification to production headless Chromium and should be marked `Blocked`; a managed/stealth browser provider may be needed for those.
+- OpenRouter 429/rate-limit failures should fall back quickly instead of stalling a harvest. Production roster challenge detection includes Cloudflare, reCAPTCHA, Burrow, "Please Verify You Are Human", and similar blocked-page text.
+- Elementor/card-style roster pages need wide ancestor scoping so `mailto:` buttons whose visible text is only "Email" still resolve the actual agent name from the surrounding card.
+- Known limitation: KW/IDX-style protected roster pages can show Cloudflare/security verification to production headless Chromium and should be marked `Blocked`; a managed/stealth browser provider may be needed for those.
 - Realtor directory discovery may use Zillow/Realtor.com/Redfin/Homes.com as profile-discovery signals only; do not bypass robots, logins, CAPTCHAs, paywalls, or private APIs.
 
 ## CRM / Email Safeguards
@@ -51,10 +53,11 @@ Last updated: 2026-07-03
 
 - 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
 - Key deployed commits include hardening `c35051f`, async lead scrape `43c3054`, brokerage-roster-first `649b399`, realtor dedupe/privacy `1d500a7`, CRM auto-approve `2b33db0`, trend preservation `8eb10bd`, lead intelligence base `a91eb02`, lead intelligence reliability `caea108`, OpenRouter provider `e484757`, and OpenRouter Integrations UI `f562eee`.
-- OpenRouter Integrations UI/model rotation commit `f562eee` is deployed live. Production reports `configured=false` until the user pastes a key in Integrations or configures `OPENROUTER_API_KEY` in env.
+- OpenRouter Integrations UI/model rotation commit `f562eee` is deployed live. Production now reports OpenRouter configured from the Integrations UI, but free models can return 429 and should fall back to Gemini.
 - Make.com webhook was recovered from old host root `credentials.json` into durable `data/credentials.json` on 2026-07-03. OpenRouter key was not recoverable and must be re-entered once in Integrations after the persistence fix.
-- Lead intelligence production smoke previously seeded 20 cities and 280 brand/city offices; KW Birmingham was marked `Blocked` due to Cloudflare security verification in production headless Chromium.
+- Lead intelligence production smoke seeded 20 cities and 280 brand/city offices; KW/IDX-style pages were blocked by bot verification in production headless Chromium.
 - Lead Intelligence dashboard/onboarding controls were deployed live in commit `64f48bb`; roster-discovery resilience fix deployed live in commit `8f25386`. Production Run Now after the fix completed for HomeSmart Birmingham with 1 page scanned, 0 contacts, and office counts moved to 268 pending / 20 no-contact / 3 blocked.
+- 2026-07-03 production test proved the hidden DB path end to end: Pointe South Realty roster at `https://pointesouth.com/our-team/` harvested 31 contacts into `roster_contacts`; status after cleanup showed 1 harvested office and 31 hidden contacts.
 - Research & Trends is onboarding-aware and should not invent engagement numbers.
 - Latest production container was healthy after the OpenRouter Integrations deployment.
 
