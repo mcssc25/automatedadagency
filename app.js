@@ -85,6 +85,7 @@ class AutopilotApp {
             leads: [],
             leadsPage: 1,
             leadsPagesCount: 1,
+            respondedLeadsTotal: 0,
             leadStageCounts: {},
             leadsStageFilter: 'All',
             leadsSearchQuery: '',
@@ -1395,7 +1396,7 @@ class AutopilotApp {
             const stage = this.state.leadsStageFilter || 'All';
             const search = this.state.leadsSearchQuery || '';
             const page = this.state.leadsPage || 1;
-            const url = `/api/leads?stage=${encodeURIComponent(stage)}&search=${encodeURIComponent(search)}&page=${page}&limit=50`;
+            const url = `/api/leads?stage=${encodeURIComponent(stage)}&search=${encodeURIComponent(search)}&page=${page}&limit=50&respondedOnly=1`;
             
             const res = await fetch(url);
             if (!res.ok) throw new Error("Leads fetch failed");
@@ -1404,20 +1405,18 @@ class AutopilotApp {
             this.state.leads = data.leads || [];
             this.state.leadsPage = data.page || 1;
             this.state.leadsPagesCount = data.pages || 1;
-            this.state.stats.leads = data.total || 0;
+            this.state.respondedLeadsTotal = data.total || 0;
 
             if (selectedLeadId !== null) {
                 const selectedIndex = this.state.leads.findIndex(lead => lead.id === selectedLeadId);
                 this.state.selectedLeadIndex = selectedIndex >= 0 ? selectedIndex : null;
+                this.state.selectedLeadId = selectedIndex >= 0 ? selectedLeadId : null;
             }
             
             this.renderLeadsList();
             this.renderStats();
             this.updatePaginationUI();
-
-            if (this.state.selectedLeadIndex !== null) {
-                this.renderSelectedLead();
-            }
+            this.renderSelectedLead();
         } catch (err) {
             console.error('[Leads Fetch Error]', err.message);
         }
@@ -4515,15 +4514,25 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
     }
 
     renderLeadsList() {
-        this.dom.crmLeadCount.innerText = `${this.state.leads.length} Leads`;
+        const total = this.state.respondedLeadsTotal ?? this.state.leads.length;
+        this.dom.crmLeadCount.innerText = `${total} Responded`;
+        if (!this.state.leads.length) {
+            this.dom.leadsListContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa-solid fa-inbox"></i>
+                    <p>No responded leads match this view yet.</p>
+                </div>
+            `;
+            return;
+        }
         this.dom.leadsListContainer.innerHTML = this.state.leads.map((l, i) => `
             <div class="lead-item ${this.state.selectedLeadIndex === i ? 'active' : ''}" data-index="${i}">
                 <div class="lead-header">
-                    <span class="lead-name">${l.name}</span>
-                    <span class="lead-stage badge ${l.stage === 'Demo Scheduled' ? 'success-badge' : ['Hot Lead', 'Two-Way Conversation'].includes(l.stage) ? 'warning-badge' : l.stage === 'Quarantined' ? 'danger-badge' : ''}">${l.stage}</span>
+                    <span class="lead-name">${this.escapeHtml(l.name || 'Unknown Lead')}</span>
+                    <span class="lead-stage badge ${l.stage === 'Demo Scheduled' ? 'success-badge' : ['Hot Lead', 'Two-Way Conversation'].includes(l.stage) ? 'warning-badge' : l.stage === 'Quarantined' ? 'danger-badge' : ''}">${this.escapeHtml(l.stage || 'Unknown')}</span>
                 </div>
-                <div class="lead-email">${l.company} · ${l.email}</div>
-                ${l.activeEnrollment ? `<div class="lead-email">Campaign ${l.activeEnrollment.campaignOrder}: ${l.activeEnrollment.campaignName || 'Unknown'} · Step ${l.activeEnrollment.currentStep}</div>` : ''}
+                <div class="lead-email">${this.escapeHtml(l.company || 'No brokerage')} &middot; ${this.escapeHtml(l.email || 'No email')}</div>
+                ${l.activeEnrollment ? `<div class="lead-email">Campaign ${this.escapeHtml(l.activeEnrollment.campaignOrder)}: ${this.escapeHtml(l.activeEnrollment.campaignName || 'Unknown')} &middot; Step ${this.escapeHtml(l.activeEnrollment.currentStep)}</div>` : ''}
             </div>
         `).join("");
 
@@ -4550,9 +4559,9 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         if (!lead) {
             this.dom.selectedLeadHeader.innerHTML = `
                 <h3>Outbound Negotiation Log</h3>
-                <p class="text-muted">Select a lead to inspect conversation</p>
+                <p class="text-muted">Select a responded lead to inspect conversation</p>
             `;
-            this.dom.crmChatMessages.innerHTML = `<div class="empty-state"><p>Select a lead to see conversation logs.</p></div>`;
+            this.dom.crmChatMessages.innerHTML = `<div class="empty-state"><p>Select a responded lead to see conversation logs.</p></div>`;
             return;
         }
         const details = [lead.company, lead.email, lead.phone, lead.website, lead.address]

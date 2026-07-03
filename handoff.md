@@ -15,6 +15,7 @@ Last updated: 2026-07-03
 - Branch: `main`.
 - Latest CRM rework commit: `4b7b1a2 Rework CRM research visibility`, pushed to `origin/main` and deployed live.
 - Latest brokerage research-signals commit: `17dddd4 Improve brokerage research signals`, pushed to `origin/main` and deployed live.
+- Latest Lead Communication filter work is in progress locally: the tab now queries `/api/leads?respondedOnly=1` and should show only responded leads.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
@@ -28,6 +29,7 @@ Last updated: 2026-07-03
   - Brokerage Research: shows brokerages being researched, systems they offer, inferred strengths/gaps, campaign angle notes, office harvest status, and backend worker flow.
   - Agent Roster: shows roster contacts with name, email, phone, brokerage, city/state, source links, socials when available, and search/filter controls.
   - Lead Communication: preserves the prior clicked-lead info header and conversation log layout, now as its own tab.
+- Lead Communication has been tightened into a response inbox: the API supports `respondedOnly=1`, the UI requests it, the count says `Responded`, inactive Scraped/Emailed leads are hidden from that tab, and empty/filter states explain that no responded leads match the current view.
 - Added read-only backend endpoint `GET /api/crm-intelligence` backed by new `db.js` helpers:
   - `getBrokerageResearch`
   - `getRosterContacts`
@@ -100,6 +102,7 @@ Last updated: 2026-07-03
 - Local `node --check app.js` and `node --check db.js` passed after the CRM rework.
 - Local `git diff --check` passed with only normal Windows CRLF warnings.
 - Latest local research-agent follow-up checks passed: `node --check server.js`, `node --check app.js`, and `git diff --check`.
+- Latest local response-inbox checks passed: `node --check app.js`, `node --check server.js`, `node --check db.js`, and a direct DB smoke returned `3` total local leads / `0` responded local leads.
 - Production research-signals deploy checks passed: container healthy, in-container `node --check /app/server.js` and `/app/app.js`, authenticated `/api/crm-intelligence` smoke returned `64` roster contacts and brokerage `techStack`.
 - Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.
 - HTTP smoke passed on `PORT=3133` with admin auth disabled for the local test: `/api/crm-intelligence?brokerageLimit=3&rosterLimit=3` returned brokerages, roster fields, totals, and status.

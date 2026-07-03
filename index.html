@@ -1259,21 +1259,17 @@
                             <div class="dashboard-panel">
                                 <div class="panel-header" style="border-bottom:none; padding-bottom:8px;">
                                     <h3>Lead Communication</h3>
-                                    <span class="badge" id="crm-lead-count">0 Leads</span>
+                                    <span class="badge" id="crm-lead-count">0 Responded</span>
                                 </div>
                                 <div style="padding: 0 16px 12px 16px; display:flex; gap:8px; border-bottom:1px solid var(--border-color); flex-wrap:wrap;">
-                                    <input type="text" id="crm-leads-search" placeholder="Search name/email/company..." style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; color:var(--text-primary); font-size:0.8rem; flex-grow:1; min-width:140px;">
+                                    <input type="text" id="crm-leads-search" placeholder="Search responded leads..." style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; color:var(--text-primary); font-size:0.8rem; flex-grow:1; min-width:140px;">
                                     <select id="crm-leads-stage-filter" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; color:var(--text-primary); font-size:0.8rem; min-width:120px;">
-                                        <option value="All">All Stages</option>
-                                        <option value="Scraped">Scraped</option>
-                                        <option value="Emailed">Emailed</option>
+                                        <option value="All">All Responses</option>
                                         <option value="Two-Way Conversation">Two-Way Conversation</option>
                                         <option value="Hot Lead">Hot Lead</option>
                                         <option value="Demo Scheduled">Demo Scheduled</option>
                                         <option value="Needs Human Action">Needs Human Action</option>
-                                        <option value="Quarantined">Quarantined</option>
                                         <option value="Opted Out">Opted Out</option>
-                                        <option value="DNC">Blacklisted (DNC)</option>
                                     </select>
                                 </div>
                                 <div class="panel-content" style="padding-top:12px;">
@@ -1299,7 +1295,7 @@
                                 <div class="panel-content chat-messages" id="crm-chat-messages">
                                     <div class="empty-state">
                                         <i class="fa-solid fa-address-card"></i>
-                                        <p>Select a lead on the left to see the AI Sales Agent's conversation logs (outbound email follow-ups & automated responses).</p>
+                                        <p>Select a responded lead on the left to see the AI Sales Agent's conversation logs.</p>
                                     </div>
                                 </div>
                             </div>

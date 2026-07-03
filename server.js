@@ -632,11 +632,12 @@ app.get('/api/leads', (req, res) => {
         const search = req.query.search || '';
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 50;
+        const respondedOnly = req.query.respondedOnly === 'true' || req.query.respondedOnly === '1';
         const offset = (page - 1) * limit;
         
-        const leads = attachEnrollmentSummaries(db.getLeads({ stage, search, limit, offset }));
-        const total = db.getLeadsCount({ stage, search });
-        const pages = Math.ceil(total / limit);
+        const leads = attachEnrollmentSummaries(db.getLeads({ stage, search, limit, offset, respondedOnly }));
+        const total = db.getLeadsCount({ stage, search, respondedOnly });
+        const pages = Math.max(1, Math.ceil(total / limit));
         
         res.json({ leads, page, pages, total });
     } catch (err) {

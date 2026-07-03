@@ -296,9 +296,31 @@ function initDb() {
 }
 
 // Leads DAO
-function getLeads({ stage, search, limit = 50, offset = 0 } = {}) {
+const RESPONDED_LEAD_STAGES = [
+    'Two-Way Conversation',
+    'Hot Lead',
+    'Demo Scheduled',
+    'Needs Human Action',
+    'Opted Out'
+];
+
+function appendRespondedLeadFilter(sql, params) {
+    sql += ` AND (
+        stage IN (${RESPONDED_LEAD_STAGES.map(() => '?').join(', ')})
+        OR history LIKE '%"sender":"lead"%'
+        OR history LIKE '%"sender": "lead"%'
+    )`;
+    params.push(...RESPONDED_LEAD_STAGES);
+    return sql;
+}
+
+function getLeads({ stage, search, limit = 50, offset = 0, respondedOnly = false } = {}) {
     let sql = 'SELECT * FROM leads WHERE 1=1';
     const params = [];
+
+    if (respondedOnly) {
+        sql = appendRespondedLeadFilter(sql, params);
+    }
     
     if (stage && stage !== 'All') {
         sql += ' AND stage = ?';
@@ -319,9 +341,13 @@ function getLeads({ stage, search, limit = 50, offset = 0 } = {}) {
     return rows.map(prepareLeadRow);
 }
 
-function getLeadsCount({ stage, search } = {}) {
+function getLeadsCount({ stage, search, respondedOnly = false } = {}) {
     let sql = 'SELECT COUNT(*) as count FROM leads WHERE 1=1';
     const params = [];
+
+    if (respondedOnly) {
+        sql = appendRespondedLeadFilter(sql, params);
+    }
     
     if (stage && stage !== 'All') {
         sql += ' AND stage = ?';

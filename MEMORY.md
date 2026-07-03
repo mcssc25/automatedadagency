@@ -46,7 +46,7 @@ Last updated: 2026-07-03
 
 - CRM was reworked locally on 2026-07-03 to expose hidden lead-intelligence data in the Sales CRM: Brokerage Research, Agent Roster, and Lead Communication tabs. New read-only endpoint: `GET /api/crm-intelligence`.
 - Brokerage Research surfaces systems offered (`crmOffering`, `esignOffering`, `leadTools`, `videoEmail`), inferred strengths/gaps, Reddit/forum agent chatter, source evidence, office harvest status, and recent worker run flow so the user can shape brokerage-specific campaigns.
-- Agent Roster surfaces `roster_contacts` with search/filter by agent, email, phone, brokerage, city/state, source links, and social fields when found. Lead Communication keeps the prior selected-lead header + conversation-log layout.
+- Agent Roster surfaces `roster_contacts` with search/filter by agent, email, phone, brokerage, city/state, source links, and social fields when found. Lead Communication keeps the selected-lead header + conversation-log layout but now filters to responded leads only via `/api/leads?respondedOnly=1`.
 - Lead emails are normalized before storage; scraping skips invalid emails, existing lead emails, and DNC emails.
 - DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients and DNC removal requires `ALLOW_DNC_REMOVAL=true`.
 - Mailgun inbound replies post to `/api/webhooks/inbound-email`; CRM polls on `#crm`.
