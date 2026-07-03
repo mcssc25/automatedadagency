@@ -21,7 +21,7 @@ Last updated: 2026-07-03
 
 - Goal is a review-first AI marketing operator: business research, competitor discovery, content/ad generation, lead discovery, and email campaigns.
 - User wants to see each automation part work and approve outputs before full autonomy.
-- Dashboard/support activity should distinguish real records/jobs from demo simulation; no fake leads, fake chats, fake KPI movement, fake publish success, fake email sends, fake engagement metrics, or mock trend fallbacks.
+- Dashboard/support activity should distinguish real records/jobs from demo simulation; no fake leads, fake chats, fake KPI movement, fake publish success, fake email sends, fake engagement metrics, or mock trend fallbacks. Dashboard Real Activity Log uses runtime `data/activity-log.json` for today's events and can be cleared from the UI.
 
 ## Lead Intelligence
 
@@ -46,7 +46,7 @@ Last updated: 2026-07-03
 
 - CRM was reworked locally on 2026-07-03 to expose hidden lead-intelligence data in the Sales CRM: Brokerage Research, Agent Roster, and Lead Communication tabs. New read-only endpoint: `GET /api/crm-intelligence`.
 - Brokerage Research surfaces systems offered (`crmOffering`, `esignOffering`, `leadTools`, `videoEmail`), inferred strengths/gaps, Reddit/forum agent chatter, source evidence, office harvest status, and recent worker run flow so the user can shape brokerage-specific campaigns.
-- Agent Roster surfaces `roster_contacts` with search/filter by agent, email, phone, brokerage, city/state, source links, and social fields when found. Lead Communication keeps the selected-lead header + conversation-log layout but now filters to responded leads only via `/api/leads?respondedOnly=1`.
+- Agent Roster surfaces `roster_contacts` with search/filter by agent, email, phone, brokerage, city/state, source links, social fields when found, and the shared CRM intelligence summary header. Lead Communication keeps the selected-lead header + conversation-log layout but filters to responded leads only via `/api/leads?respondedOnly=1`.
 - Lead emails are normalized before storage; scraping skips invalid emails, existing lead emails, and DNC emails.
 - DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients and DNC removal requires `ALLOW_DNC_REMOVAL=true`.
 - Mailgun inbound replies post to `/api/webhooks/inbound-email`; CRM polls on `#crm`.
@@ -68,7 +68,7 @@ Last updated: 2026-07-03
 - 2026-07-03 multi-office production test checked 8 offices in one run, harvested 0 new contacts, and skipped 54 same-brand queued offices after bad franchise-brand results. Coldwell Banker was later restored from `Skipped Brand` after raw HTML extraction proved it works; RE/MAX remains skipped/blocked.
 - Research & Trends is onboarding-aware and should not invent engagement numbers.
 - Latest production container was healthy after the Coldwell Banker raw-email extractor deployment.
-- CRM rework commit `4b7b1a2`, brokerage research-signals commit `17dddd4`, and response-inbox commit `e4d8392` were pushed/deployed live on 2026-07-03. Production container became healthy; `/api/crm-intelligence` returned 64 roster contacts, and `/api/leads?respondedOnly=1` returned 1 responded lead out of 6 total.
+- CRM rework commit `4b7b1a2`, brokerage research-signals commit `17dddd4`, response-inbox commit `e4d8392`, and real activity log commit `561c0ed` were pushed/deployed live on 2026-07-03. Production container became healthy; `/api/crm-intelligence` returned 64 roster contacts and `running:false`.
 
 ## Working Agreements
 

@@ -16,10 +16,12 @@ Last updated: 2026-07-03
 - Latest CRM rework commit: `4b7b1a2 Rework CRM research visibility`, pushed to `origin/main` and deployed live.
 - Latest brokerage research-signals commit: `17dddd4 Improve brokerage research signals`, pushed to `origin/main` and deployed live.
 - Latest Lead Communication response-inbox commit: `e4d8392 Filter CRM communications to responded leads`, pushed to `origin/main` and deployed live.
+- Latest activity/log visibility commit: `561c0ed Show real CRM work activity`, pushed to `origin/main` and deployed live.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
 - Response-inbox deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T213224Z-responded-lead-inbox`.
+- Real-activity deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T214733Z-real-activity-log`.
 - Production container was healthy after the Coldwell Banker raw-email extractor deployments.
 - Runtime secrets/data are ignored and must stay out of git: `.env`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
 - OpenRouter and Make.com webhook settings persist in production runtime `data/credentials.json` on the mounted `/opt/ad-agency-autopilot/data` volume.
@@ -31,6 +33,9 @@ Last updated: 2026-07-03
   - Agent Roster: shows roster contacts with name, email, phone, brokerage, city/state, source links, socials when available, and search/filter controls.
   - Lead Communication: preserves the prior clicked-lead info header and conversation log layout, now as its own tab.
 - Lead Communication has been tightened into a response inbox: the API supports `respondedOnly=1`, the UI requests it, the count says `Responded`, inactive Scraped/Emailed leads are hidden from that tab, and empty/filter states explain that no responded leads match the current view.
+- CRM intelligence summary cards now sit above both Brokerage Research and Agent Roster, then hide for Lead Communication, Verification Queue, Campaigns, and Autopilot Settings.
+- Dashboard Real Activity Log is backed by runtime `data/activity-log.json` for today's events. UI events can append to `/api/activity-log`; backend Lead Intelligence and lead-scrape phases append real worker progress; Clear Log calls `DELETE /api/activity-log`.
+- `/api/crm-intelligence` now includes `running`, so the CRM Worker Running badge reflects the backend worker flag instead of only a front-end optimistic state.
 - Added read-only backend endpoint `GET /api/crm-intelligence` backed by new `db.js` helpers:
   - `getBrokerageResearch`
   - `getRosterContacts`
@@ -105,6 +110,7 @@ Last updated: 2026-07-03
 - Latest local research-agent follow-up checks passed: `node --check server.js`, `node --check app.js`, and `git diff --check`.
 - Latest local response-inbox checks passed: `node --check app.js`, `node --check server.js`, `node --check db.js`, and a direct DB smoke returned `3` total local leads / `0` responded local leads.
 - Production response-inbox deploy checks passed: container healthy, in-container syntax checks passed for `/app/app.js`, `/app/db.js`, and `/app/server.js`, and authenticated `/api/leads?respondedOnly=1&limit=5` smoke returned `1` responded lead out of `6` total production leads.
+- Production real-activity deploy checks passed: container healthy, in-container `node --check /app/app.js` and `/app/server.js`; authenticated smoke showed `/api/crm-intelligence` returned `running:false` and `64` contacts; `/api/activity-log` post/read/clear worked.
 - Production research-signals deploy checks passed: container healthy, in-container `node --check /app/server.js` and `/app/app.js`, authenticated `/api/crm-intelligence` smoke returned `64` roster contacts and brokerage `techStack`.
 - Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.
 - HTTP smoke passed on `PORT=3133` with admin auth disabled for the local test: `/api/crm-intelligence?brokerageLimit=3&rosterLimit=3` returned brokerages, roster fields, totals, and status.
