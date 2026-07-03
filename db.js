@@ -834,6 +834,13 @@ function getNextBrokerageProfileForResearch() {
                 FROM roster_contacts rc
                 WHERE LOWER(rc.brokerageName) = LOWER(brokerage_profiles.name)
             )
+          AND researchStatus <> 'Do Not Scrape'
+          AND NOT EXISTS (
+                SELECT 1
+                FROM brokerage_offices bo
+                WHERE LOWER(bo.brokerageName) = LOWER(brokerage_profiles.name)
+                  AND bo.status = 'Do Not Scrape'
+            )
           AND (
                 researchStatus IN ('Pending', 'Needs Research')
                 OR (
