@@ -33,7 +33,7 @@ Last updated: 2026-07-03
 - Lead Intelligence Run Now uses the async browser path (`/api/lead-intelligence/run-once?async=true`) so Cloudflare/proxy timeouts do not produce HTML error alerts while a long harvest is still running; deployed hotfix commit `9eb2921`.
 - Lead Intelligence URL-discovery model failures should mark only that brokerage office as failed instead of killing the whole worker cycle; deployed resilience fix commit `8f25386`.
 - Lead Intelligence cycles should process multiple queued offices per run, not one per hour. Current behavior checks up to 8 offices per cycle, stops early after contacts, and can mark remaining queued offices for the same seeded national brand as `Skipped Brand` after blocked/failed results.
-- Lead Intelligence now prioritizes email harvesting over optional tech-stack research; `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=false` by default so AI research cannot stall extraction.
+- Lead Intelligence prioritizes email harvesting before brokerage tech-stack research. `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true` by default after the 2026-07-03 Reddit/agent-chatter research upgrade, but research runs after contact harvest and can be disabled by env override.
 - Coldwell Banker rosters are deterministic and email-rich: URL pattern `https://www.coldwellbanker.com/city/{state}/{city}/agents`; raw HTML embeds agent JSON fields like `fullName`, `emailAddress`, `businessPhoneNumber`, and profile `url`. Static raw extraction harvested 12 Huntsville contacts and 11 Knoxville contacts in seconds.
 - Lead-intelligence research can prefer OpenRouter with free-model rotation and Gemini fallback. OpenRouter web search is opt-in and may use credits.
 - OpenRouter 429/rate-limit failures should fall back quickly instead of stalling a harvest. Production roster challenge detection includes Cloudflare, reCAPTCHA, Burrow, "Please Verify You Are Human", and similar blocked-page text.
@@ -45,7 +45,7 @@ Last updated: 2026-07-03
 ## CRM / Email Safeguards
 
 - CRM was reworked locally on 2026-07-03 to expose hidden lead-intelligence data in the Sales CRM: Brokerage Research, Agent Roster, and Lead Communication tabs. New read-only endpoint: `GET /api/crm-intelligence`.
-- Brokerage Research surfaces systems offered (`crmOffering`, `esignOffering`, `leadTools`, `videoEmail`), inferred strengths/gaps, office harvest status, and recent worker run flow so the user can shape brokerage-specific campaigns.
+- Brokerage Research surfaces systems offered (`crmOffering`, `esignOffering`, `leadTools`, `videoEmail`), inferred strengths/gaps, Reddit/forum agent chatter, source evidence, office harvest status, and recent worker run flow so the user can shape brokerage-specific campaigns.
 - Agent Roster surfaces `roster_contacts` with search/filter by agent, email, phone, brokerage, city/state, source links, and social fields when found. Lead Communication keeps the prior selected-lead header + conversation-log layout.
 - Lead emails are normalized before storage; scraping skips invalid emails, existing lead emails, and DNC emails.
 - DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients and DNC removal requires `ALLOW_DNC_REMOVAL=true`.

@@ -1544,12 +1544,13 @@ class AutopilotApp {
     }
 
     summarizeBrokeragePositioning(brokerage = {}) {
+        const techStack = brokerage.techStack && typeof brokerage.techStack === 'object' ? brokerage.techStack : {};
         const crm = this.cleanIntelText(brokerage.crmOffering);
         const esign = this.cleanIntelText(brokerage.esignOffering);
         const leadTools = this.cleanIntelText(brokerage.leadTools);
         const video = this.cleanIntelText(brokerage.videoEmail);
-        const strengths = [];
-        const gaps = [];
+        const strengths = Array.isArray(techStack.strengthsAgainstUs) ? techStack.strengthsAgainstUs.filter(Boolean) : [];
+        const gaps = Array.isArray(techStack.gapsWeCanFill) ? techStack.gapsWeCanFill.filter(Boolean) : [];
 
         if (crm) strengths.push(`CRM/admin stack: ${crm}`);
         if (esign) strengths.push(`Transaction/e-sign support: ${esign}`);
@@ -1594,7 +1595,7 @@ class AutopilotApp {
             const profileTotal = profiles.reduce((sum, row) => sum + Number(row.count || 0), 0);
             const workflowSteps = [
                 ['fa-map-location-dot', 'Market discovery', `${profileTotal.toLocaleString()} brokerage profile(s) tracked from seeded markets and searches.`],
-                ['fa-list-check', 'Systems research', `${this.countStatusRows(profiles, ['Researched']).toLocaleString()} researched profile(s); ${this.countStatusRows(profiles, ['Pending', 'Needs Research']).toLocaleString()} waiting for system details.`],
+                ['fa-list-check', 'Systems research', `${this.countStatusRows(profiles, ['Complete']).toLocaleString()} researched profile(s); ${this.countStatusRows(profiles, ['Pending', 'Needs Research']).toLocaleString()} waiting for system details.`],
                 ['fa-users-viewfinder', 'Roster harvest', `${harvested.toLocaleString()} harvested office(s), ${queued.toLocaleString()} queued, ${blocked.toLocaleString()} blocked by site protection or no public contacts.`],
                 ['fa-envelope-open-text', 'Campaign inputs', `${contacts.toLocaleString()} agent contact(s) available to shape brokerage-specific email angles.`]
             ];
@@ -1635,9 +1636,19 @@ class AutopilotApp {
         }
 
         this.dom.crmBrokerageList.innerHTML = brokerages.map(brokerage => {
+            const techStack = brokerage.techStack && typeof brokerage.techStack === 'object' ? brokerage.techStack : {};
             const positioning = this.summarizeBrokeragePositioning(brokerage);
             const siteUrl = this.safeExternalUrl(brokerage.website || brokerage.nationalWebsite);
             const offices = Array.isArray(brokerage.offices) ? brokerage.offices : [];
+            const sourceEvidence = Array.isArray(techStack.sourceEvidence) ? techStack.sourceEvidence : [];
+            const sourceLinks = sourceEvidence.slice(0, 3).map(source => {
+                const url = this.safeExternalUrl(source.url);
+                const label = source.title || source.sourceType || 'Source';
+                return url
+                    ? `<a class="lead-detail-link" href="${this.escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i>${this.escapeHtml(label)}</a>`
+                    : `<span class="brokerage-chip">${this.escapeHtml(label)}</span>`;
+            }).join('');
+            const campaignAngles = Array.isArray(techStack.campaignAngles) ? techStack.campaignAngles.filter(Boolean).slice(0, 2).join(' ') : '';
             const officeChips = offices.slice(0, 5).map(office => {
                 const label = `${office.city || ''}${office.state ? `, ${office.state}` : ''}`.trim() || 'Office';
                 return `<span class="brokerage-chip">${this.escapeHtml(label)} · ${this.escapeHtml(office.status || 'Pending')} · ${Number(office.contactCount || 0)} agents</span>`;
@@ -1661,7 +1672,9 @@ class AutopilotApp {
                         <div><strong>Systems They Offer</strong><p>${this.escapeHtml([brokerage.crmOffering, brokerage.esignOffering, brokerage.leadTools, brokerage.videoEmail].map(v => this.cleanIntelText(v)).filter(Boolean).join(' | ') || 'Not researched yet.')}</p></div>
                         <div><strong>Strength Against Us</strong><p>${this.escapeHtml(positioning.strengths)}</p></div>
                         <div><strong>Gap We Can Fill</strong><p>${this.escapeHtml(positioning.gaps)}</p></div>
-                        <div><strong>Email Campaign Angle</strong><p>${this.escapeHtml(brokerage.notes || 'Write around agent time saved, faster lead response, and visibility into follow-up work.')}</p></div>
+                        <div><strong>Agent Chatter</strong><p>${this.escapeHtml(techStack.agentDiscussionSummary || 'No Reddit/forum chatter researched yet.')}</p></div>
+                        <div><strong>Email Campaign Angle</strong><p>${this.escapeHtml(campaignAngles || brokerage.notes || 'Write around agent time saved, faster lead response, and visibility into follow-up work.')}</p></div>
+                        <div><strong>Evidence</strong><p>${sourceLinks || 'No source evidence stored yet.'}</p></div>
                     </div>
                     ${officeChips ? `<div class="brokerage-office-row">${officeChips}</div>` : ''}
                 </article>

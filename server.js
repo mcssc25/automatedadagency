@@ -2971,19 +2971,41 @@ Return ONLY valid JSON:
     };
 }
 
+function hasCurrentBrokerageTechResearch(profile = {}) {
+    const techStack = profile.techStack && typeof profile.techStack === 'object' ? profile.techStack : {};
+    return profile.researchStatus === 'Complete' && techStack.researchVersion === 'brokerage-agent-chatter-v2';
+}
+
 async function researchBrokerageTechStack(profile) {
-    if (!profile || !profile.name || profile.researchStatus === 'Complete') return profile;
+    if (!profile || !profile.name) return profile;
+    if (hasCurrentBrokerageTechResearch(profile)) return profile;
 
     const prompt = `Research what the real estate brokerage "${profile.name}" appears to provide to agents.
+
+Act like a brokerage recruiting/competitive-intelligence researcher. Use public web search and deliberately look for both official brokerage pages and agent conversations.
+
+Search patterns to try:
+- "${profile.name} agent technology CRM"
+- "${profile.name} tools for agents"
+- "${profile.name} Moxi kvCORE BoldTrail SkySlope Dotloop"
+- "site:reddit.com/r/realtors ${profile.name}"
+- "site:reddit.com/r/RealEstate ${profile.name} agents"
+- "${profile.name} agent reviews technology support"
 
 Find public evidence for:
 - CRM or lead management tools included for agents
 - E-signature/document signing included for agents
 - Lead pages, IDX pages, landing pages, or lead-generation tools
 - Video email/video marketing tools
+- Websites, CMA/presentation tools, marketing automation, ad automation, listing marketing, transaction portals, training/support tools
+- Reddit or forum conversations where agents discuss what the brokerage gives them, what they like, and what they complain about
 - Known platforms such as BoldTrail, kvCORE, Follow Up Boss, Lofty, Chime, Sierra Interactive, BoomTown, DocuSign, Dotloop, SkySlope, TransactionDesk
+- For Coldwell Banker specifically, check for CB Desk, MoxiEngage, MoxiWebsites, MoxiPresent, MoxiImpress, CBx, Prospect Square, Boost/HomeSpotter, Listing Concierge, HomeBase, SkySlope, and Dotloop.
+
+Distinguish official claims from agent chatter. For franchises, mention that tools can vary by office or region when sources indicate variation.
 
 Do not invent facts. Use "unknown" when not found.
+Do not quote long passages from Reddit. Summarize agent sentiment briefly.
 
 Return ONLY valid JSON:
 {
@@ -3000,7 +3022,24 @@ Return ONLY valid JSON:
     "esign": "unknown",
     "leadPages": "unknown",
     "videoEmail": "unknown",
-    "knownTools": []
+    "websites": "unknown",
+    "cmaPresentations": "unknown",
+    "marketingAutomation": "unknown",
+    "transactionManagement": "unknown",
+    "knownTools": [],
+    "officialSummary": "brief source-backed summary",
+    "agentDiscussionSummary": "brief summary of Reddit/forum/agent-review chatter or unknown",
+    "strengthsAgainstUs": ["specific strengths the brokerage can claim"],
+    "gapsWeCanFill": ["specific gaps our CRM/outreach/value offer can fill"],
+    "campaignAngles": ["specific email angles for agents at this brokerage"],
+    "sourceEvidence": [
+      {
+        "sourceType": "official | reddit | forum | review | unknown",
+        "title": "source title",
+        "url": "https://source.example/path",
+        "summary": "what this source supports"
+      }
+    ]
   },
   "notes": "brief sales angle based on missing or known tools"
 }`;
@@ -3008,6 +3047,11 @@ Return ONLY valid JSON:
     try {
         const raw = await queryLeadIntelligenceResearch(prompt, { json: true });
         const data = await parseModelJsonWithRepair(raw);
+        const techStack = {
+            ...(data.techStack || {}),
+            researchVersion: 'brokerage-agent-chatter-v2',
+            researchedWith: 'official-web-plus-agent-discussion-search'
+        };
         return db.upsertBrokerageProfile({
             name: profile.name,
             category: data.category,
@@ -3017,8 +3061,11 @@ Return ONLY valid JSON:
             esignOffering: data.esignOffering || 'unknown',
             leadTools: data.leadTools || 'unknown',
             videoEmail: data.videoEmail || 'unknown',
-            techStack: data.techStack || {},
-            notes: data.notes,
+            techStack,
+            notes: data.notes || [
+                ...(Array.isArray(techStack.gapsWeCanFill) ? techStack.gapsWeCanFill.slice(0, 2) : []),
+                ...(Array.isArray(techStack.campaignAngles) ? techStack.campaignAngles.slice(0, 2) : [])
+            ].join(' '),
             researchStatus: 'Complete',
             researchedAt: new Date().toISOString()
         });
@@ -3375,14 +3422,14 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                 message: `Harvesting ${office.brokerageName} in ${office.city}, ${office.state} (${cycleIndex + 1}/${LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE})`
             });
 
+            const harvest = await harvestBrokerageOfficeRoster(office);
             const profile = LEAD_INTELLIGENCE_RESEARCH_TECH_STACK
                 ? db.getBrokerageProfileByName(office.brokerageName)
                 : null;
-            if (profile && profile.researchStatus !== 'Complete') {
+            if (profile && !hasCurrentBrokerageTechResearch(profile)) {
                 await researchBrokerageTechStack(profile);
             }
 
-            const harvest = await harvestBrokerageOfficeRoster(office);
             let insertedOrUpdated = 0;
             for (const contact of harvest.contacts) {
                 const saved = db.upsertRosterContact({

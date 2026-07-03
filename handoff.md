@@ -34,6 +34,7 @@ Last updated: 2026-07-03
 - Frontend CRM polling refreshes brokerage/roster data while those tabs are active. Manual Lead Intelligence runs and lead scrapes also refresh the new CRM intelligence views.
 - Existing campaign verification, outreach campaigns, and autopilot settings tabs remain available.
 - Production authenticated endpoint smoke after deploy returned `3` sampled brokerages, `3` sampled roster contacts, `64` total roster contacts, and lead-intelligence status.
+- Follow-up local change improves the brokerage research agent: it now explicitly searches official sources plus Reddit/forum/agent-review chatter, stores source evidence and campaign angles in `techStackJson`, shows agent chatter/evidence in CRM, and runs after roster contact harvesting. Compose default for `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK` is now `true` unless env overrides it.
 
 ## Lead Intelligence Worker
 
@@ -50,7 +51,7 @@ Last updated: 2026-07-03
   - `LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE=8`
   - `LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS=true`
   - `LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE=true`
-  - `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=false`
+  - `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true` after the Reddit/agent-chatter research upgrade
 
 ## Important Breakthrough
 
@@ -97,6 +98,7 @@ Last updated: 2026-07-03
 - Local `node --check server.js` passed.
 - Local `node --check app.js` and `node --check db.js` passed after the CRM rework.
 - Local `git diff --check` passed with only normal Windows CRLF warnings.
+- Latest local research-agent follow-up checks passed: `node --check server.js`, `node --check app.js`, and `git diff --check`.
 - Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.
 - HTTP smoke passed on `PORT=3133` with admin auth disabled for the local test: `/api/crm-intelligence?brokerageLimit=3&rosterLimit=3` returned brokerages, roster fields, totals, and status.
 - Deployed in-container syntax checks passed for `/app/app.js`, `/app/db.js`, and `/app/server.js`.
