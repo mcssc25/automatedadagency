@@ -56,7 +56,7 @@ Last updated: 2026-07-03
 ## Current Status
 
 - 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
-- Key deployed commits include hardening `c35051f`, async lead scrape `43c3054`, brokerage-roster-first `649b399`, realtor dedupe/privacy `1d500a7`, CRM auto-approve `2b33db0`, trend preservation `8eb10bd`, lead intelligence base `a91eb02`, lead intelligence reliability `caea108`, OpenRouter provider `e484757`, and OpenRouter Integrations UI `f562eee`.
+- Key deployed commits include hardening `c35051f`, async lead scrape `43c3054`, brokerage-roster-first `649b399`, realtor dedupe/privacy `1d500a7`, CRM auto-approve `2b33db0`, trend preservation `8eb10bd`, lead intelligence base `a91eb02`, lead intelligence reliability `caea108`, OpenRouter provider `e484757`, OpenRouter Integrations UI `f562eee`, agent dashboard controls `64f48bb`, multi-office cycles `8db2269`, and Coldwell Banker raw email extraction `39529c7`.
 - OpenRouter Integrations UI/model rotation commit `f562eee` is deployed live. Production now reports OpenRouter configured from the Integrations UI, but free models can return 429 and should fall back to Gemini.
 - Make.com webhook was recovered from old host root `credentials.json` into durable `data/credentials.json` on 2026-07-03. OpenRouter key was not recoverable and must be re-entered once in Integrations after the persistence fix.
 - Lead intelligence production smoke seeded 20 cities and 280 brand/city offices; KW/IDX-style pages were blocked by bot verification in production headless Chromium.
@@ -64,7 +64,7 @@ Last updated: 2026-07-03
 - 2026-07-03 production test proved the hidden DB path end to end: Pointe South Realty roster at `https://pointesouth.com/our-team/` harvested 31 contacts into `roster_contacts`; status after cleanup showed 1 harvested office and 31 hidden contacts.
 - 2026-07-03 multi-office production test checked 8 offices in one run, harvested 0 new contacts, and skipped 54 same-brand queued offices after bad franchise-brand results. Coldwell Banker was later restored from `Skipped Brand` after raw HTML extraction proved it works; RE/MAX remains skipped/blocked.
 - Research & Trends is onboarding-aware and should not invent engagement numbers.
-- Latest production container was healthy after the OpenRouter Integrations deployment.
+- Latest production container was healthy after the Coldwell Banker raw-email extractor deployment.
 
 ## Working Agreements
 
