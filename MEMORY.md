@@ -15,7 +15,7 @@ Last updated: 2026-07-03
 - Local workspace is for code editing/dev diagnostics only. Do not describe the app as needing to be hosted locally for normal use.
 - Runtime secrets/data are ignored. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, logs, or `node_modules`.
 - Mailgun outreach domain: `outreach.realestatecrmpro.com`.
-- OpenRouter and Make.com webhook settings are configured from the browser Integrations UI and must persist in ignored production runtime `data/credentials.json`, which is on the mounted `/opt/ad-agency-autopilot/data` volume. Do not store these in root `credentials.json`; that path was container-local and got wiped on rebuilds. Env fallback still works with `OPENROUTER_ENABLED=true` and `OPENROUTER_API_KEY`.
+- OpenRouter and Make.com webhook settings are configured from the browser Integrations UI and persist in ignored production runtime `data/credentials.json`, which is on the mounted `/opt/ad-agency-autopilot/data` volume. Commit `af78dbb` fixed the earlier bug where settings were written to container-local root `credentials.json` and got wiped on rebuilds. Env fallback still works with `OPENROUTER_ENABLED=true` and `OPENROUTER_API_KEY`.
 
 ## Product Direction
 
@@ -52,6 +52,7 @@ Last updated: 2026-07-03
 - 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
 - Key deployed commits include hardening `c35051f`, async lead scrape `43c3054`, brokerage-roster-first `649b399`, realtor dedupe/privacy `1d500a7`, CRM auto-approve `2b33db0`, trend preservation `8eb10bd`, lead intelligence base `a91eb02`, lead intelligence reliability `caea108`, OpenRouter provider `e484757`, and OpenRouter Integrations UI `f562eee`.
 - OpenRouter Integrations UI/model rotation commit `f562eee` is deployed live. Production reports `configured=false` until the user pastes a key in Integrations or configures `OPENROUTER_API_KEY` in env.
+- Make.com webhook was recovered from old host root `credentials.json` into durable `data/credentials.json` on 2026-07-03. OpenRouter key was not recoverable and must be re-entered once in Integrations after the persistence fix.
 - Lead intelligence production smoke previously seeded 20 cities and 280 brand/city offices; KW Birmingham was marked `Blocked` due to Cloudflare security verification in production headless Chromium.
 - Lead Intelligence dashboard/onboarding controls were deployed live in commit `64f48bb`; roster-discovery resilience fix deployed live in commit `8f25386`. Production Run Now after the fix completed for HomeSmart Birmingham with 1 page scanned, 0 contacts, and office counts moved to 268 pending / 20 no-contact / 3 blocked.
 - Research & Trends is onboarding-aware and should not invent engagement numbers.

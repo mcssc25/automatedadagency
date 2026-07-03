@@ -9,6 +9,8 @@ Last updated: 2026-07-03
 - Backend now reads/writes credentials and OAuth tokens from mounted runtime files: `data/credentials.json` and `data/tokens.json`.
 - Added one-time migration from legacy root `credentials.json`/`tokens.json` to `data/` when those files exist.
 - Hetzner host had an old root `credentials.json` with a Make.com webhook value, so that can be recovered into `data/credentials.json`. No saved OpenRouter API key was found on the host root file; if it only lived in the old container, it was lost and must be re-entered once after this fix.
+- Persistence fix commit pushed/deployed: `af78dbb` (`Persist integration credentials in data volume`).
+- Production verification after deploy: container healthy; `/app/data/credentials.json` exists inside the container; `/app/credentials.json` does not; Make.com integration status is active/saved; OpenRouter remains unconfigured because no key was recoverable.
 
 ## Previous Update
 
@@ -96,6 +98,9 @@ Last updated: 2026-07-03
 
 ## Verification
 
+- `node --check server.js` passed after credential persistence fix.
+- `git diff --check` passed with normal Windows CRLF warnings only.
+- Production verification after credential persistence fix: container healthy, deployed `server.js` syntax check passed, `data/credentials.json` exists in the mounted volume, root `/app/credentials.json` is absent, `/api/integration-statuses` returned active for LinkedIn/Twitter/Google/Meta via saved Make.com webhook, and `/api/openrouter-settings` returned configured/enabled false.
 - `node --check server.js` passed after Run Now async hotfix.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
@@ -144,12 +149,14 @@ Last updated: 2026-07-03
 
 ## Repo / Deployment Status
 
-- Latest pushed commit: `9eb2921` (`Make lead intelligence run asynchronous`).
+- Latest pushed commit: `af78dbb` (`Persist integration credentials in data volume`).
 - Current live deployment includes dashboard controls, the roster-discovery guard, and async Run Now behavior.
+- Current live deployment also includes persistent integration credential storage under `data/credentials.json`.
 - Deployment backups:
   - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T103159-lead-intelligence-dashboard`
   - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T103959-lead-intelligence-discovery-guard`
   - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T105721-lead-intelligence-async-run`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T110507-persist-integration-credentials`
 
 - Files changed for OpenRouter Integrations UI/model rotation: `server.js`, `app.js`, `index.html`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
