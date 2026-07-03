@@ -101,6 +101,11 @@ class AutopilotApp {
             rosterSearchQuery: '',
             rosterBrokerageFilter: '',
             supportSessions: [],
+            activityLog: {
+                date: '',
+                events: []
+            },
+            activityLogRenderKey: '',
             
             // Current open views
             selectedLeadIndex: null,
@@ -134,6 +139,8 @@ class AutopilotApp {
         this.crmPersistTimer = null;
         this.crmRefreshTimer = null;
         this.crmIntelSearchTimer = null;
+        this.activityLogTimer = null;
+        this.leadStatusTimer = null;
         this.crmRefreshInFlight = false;
         
         // Bootstrapping the app
@@ -167,6 +174,9 @@ class AutopilotApp {
         this.loadWebhookSettings();
         this.checkIntegrationStatuses();
         this.startCrmRefreshPolling();
+        await this.loadActivityLog();
+        this.startActivityLogPolling();
+        this.startLeadStatusPolling();
         
         this.appendStartupStatusLine();
     }
@@ -265,6 +275,7 @@ class AutopilotApp {
         this.dom.crmViews = document.querySelectorAll(".crm-panel-view");
         this.dom.crmBrokerageSearch = document.getElementById("crm-brokerage-search");
         this.dom.crmBrokerageList = document.getElementById("crm-brokerage-list");
+        this.dom.crmIntelligenceSummary = document.getElementById("crm-intelligence-summary");
         this.dom.btnRefreshCrmIntel = document.getElementById("btn-refresh-crm-intel");
         this.dom.crmIntelContactCount = document.getElementById("crm-intel-contact-count");
         this.dom.crmIntelOfficeCount = document.getElementById("crm-intel-office-count");
@@ -454,8 +465,18 @@ class AutopilotApp {
 
     bindEvents() {
         // Clear console
-        this.dom.clearConsoleBtn.addEventListener("click", () => {
-            this.dom.consoleLog.innerHTML = `<div class="console-line system-line">[SYSTEM] Console log cleared. Autopilot active.</div>`;
+        this.dom.clearConsoleBtn.addEventListener("click", async () => {
+            try {
+                const response = await fetch('/api/activity-log', { method: 'DELETE' });
+                if (!response.ok) throw new Error(await this.parseApiError(response, 'Could not clear activity log'));
+                const data = await response.json();
+                this.state.activityLog = { date: data.date || '', events: [] };
+                this.state.activityLogRenderKey = '';
+                this.renderActivityLog();
+                this.appendConsoleLine('system', 'Console log cleared. Autopilot active.');
+            } catch (error) {
+                this.appendConsoleLine('system', `Could not clear activity log: ${error.message}`, { persist: false });
+            }
         });
 
         // Save integrations / API / Outbound config
@@ -648,6 +669,9 @@ class AutopilotApp {
                 const targetId = tab.getAttribute("data-target");
                 const targetView = document.getElementById(targetId);
                 targetView.classList.add("active");
+                if (this.dom.crmIntelligenceSummary) {
+                    this.dom.crmIntelligenceSummary.style.display = ['crm-brokerages', 'crm-roster'].includes(targetId) ? 'grid' : 'none';
+                }
                 
                 if (targetId === "crm-verification") {
                     targetView.style.display = "grid";
@@ -1383,11 +1407,11 @@ class AutopilotApp {
     appendStartupStatusLine() {
         const clientLabel = this.getConfiguredClientLabel();
         if (clientLabel) {
-            this.appendConsoleLine('system', `Workspace ready for ${clientLabel}. Onboarding profile loaded.`);
+            this.appendConsoleLine('system', `Workspace ready for ${clientLabel}. Onboarding profile loaded.`, { persist: false });
             return;
         }
 
-        this.appendConsoleLine('system', 'Workspace ready. Add a client in Agency Onboarding to begin.');
+        this.appendConsoleLine('system', 'Workspace ready. Add a client in Agency Onboarding to begin.', { persist: false });
     }
 
     async fetchLeadsFromServer() {
@@ -1436,6 +1460,71 @@ class AutopilotApp {
                 this.crmRefreshInFlight = false;
             });
         }, 5000);
+    }
+
+    startActivityLogPolling() {
+        if (this.activityLogTimer) clearInterval(this.activityLogTimer);
+        this.activityLogTimer = setInterval(() => {
+            if (!['#dashboard', '#crm'].includes(window.location.hash || '#dashboard')) return;
+            this.loadActivityLog();
+        }, 5000);
+    }
+
+    startLeadStatusPolling() {
+        if (this.leadStatusTimer) clearInterval(this.leadStatusTimer);
+        this.leadStatusTimer = setInterval(() => {
+            if (!['#dashboard', '#crm'].includes(window.location.hash || '#dashboard')) return;
+            this.loadLeadIntelligenceStatus();
+        }, 10000);
+    }
+
+    normalizeConsoleType(type) {
+        if (type === 'system') return 'system-line';
+        return type || 'system-line';
+    }
+
+    formatActivityTime(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    }
+
+    async loadActivityLog() {
+        try {
+            const response = await fetch('/api/activity-log');
+            if (!response.ok) throw new Error(await this.parseApiError(response, 'Activity log unavailable'));
+            const data = await response.json();
+            this.state.activityLog = {
+                date: data.date || '',
+                events: Array.isArray(data.events) ? data.events : []
+            };
+            this.renderActivityLog();
+            return data;
+        } catch (error) {
+            console.warn("Could not load activity log:", error.message);
+            return null;
+        }
+    }
+
+    renderActivityLog() {
+        if (!this.dom.consoleLog) return;
+        const events = this.state.activityLog?.events || [];
+        const renderKey = events.map(event => event.id || `${event.createdAt}:${event.message}`).join('|');
+        if (renderKey && renderKey === this.state.activityLogRenderKey) return;
+        this.state.activityLogRenderKey = renderKey;
+
+        if (!events.length) {
+            this.dom.consoleLog.innerHTML = `<div class="console-line system-line">[SYSTEM] Real activity will appear here after research, lead import, email, publishing, or support events.</div>`;
+            return;
+        }
+
+        this.dom.consoleLog.innerHTML = events.map(event => {
+            const type = this.escapeHtml(this.normalizeConsoleType(event.type));
+            const time = this.formatActivityTime(event.createdAt);
+            const prefix = time ? `[${this.escapeHtml(time)}] ` : '';
+            return `<div class="console-line ${type}">${prefix}${this.escapeHtml(event.message || '')}</div>`;
+        }).join('');
+        this.dom.consoleLog.scrollTop = this.dom.consoleLog.scrollHeight;
     }
 
     updatePaginationUI() {
@@ -1501,8 +1590,14 @@ class AutopilotApp {
                 rosterOffset: Number(data.rosterOffset || 0),
                 status: data.status || null
             };
+            this.state.leadIntelligence = {
+                ...this.state.leadIntelligence,
+                running: data.running === true,
+                status: data.status || this.state.leadIntelligence?.status || null
+            };
             this.renderCrmIntelligence();
             this.renderAgentRoster();
+            this.renderLeadIntelligenceStatus();
             return data;
         } catch (error) {
             console.warn("Could not load CRM intelligence:", error.message);
@@ -1578,15 +1673,16 @@ class AutopilotApp {
         const queued = this.countStatusRows(officeRows, ['Pending', 'Discovered', 'Retry']);
         const harvested = this.countStatusRows(officeRows, ['Harvested']);
         const blocked = this.countStatusRows(officeRows, ['Blocked']);
+        const workerRunning = this.state.leadIntelligence?.running === true;
 
         if (this.dom.crmIntelContactCount) this.dom.crmIntelContactCount.innerText = contacts.toLocaleString();
         if (this.dom.crmIntelOfficeCount) this.dom.crmIntelOfficeCount.innerText = officeTotal.toLocaleString();
         if (this.dom.crmIntelQueuedCount) this.dom.crmIntelQueuedCount.innerText = queued.toLocaleString();
-        if (this.dom.crmIntelLatestStatus) this.dom.crmIntelLatestStatus.innerText = latestRun ? String(latestRun.status || 'Updated') : 'Idle';
+        if (this.dom.crmIntelLatestStatus) this.dom.crmIntelLatestStatus.innerText = workerRunning ? 'Running' : latestRun ? String(latestRun.status || 'Updated') : 'Idle';
         if (this.dom.crmIntelLatestMessage) this.dom.crmIntelLatestMessage.innerText = latestRun ? (latestRun.message || latestRun.error || 'Worker run recorded') : 'No recent worker run loaded';
         if (this.dom.crmIntelRunningBadge) {
-            this.dom.crmIntelRunningBadge.innerText = this.state.leadIntelligence?.running ? 'Worker Running' : 'Worker Idle';
-            this.dom.crmIntelRunningBadge.className = this.state.leadIntelligence?.running ? 'badge warning-badge' : 'badge';
+            this.dom.crmIntelRunningBadge.innerText = workerRunning ? 'Worker Running' : 'Worker Idle';
+            this.dom.crmIntelRunningBadge.className = workerRunning ? 'badge warning-badge' : 'badge';
         }
 
         if (this.dom.crmWorkflowRail) {
@@ -5266,12 +5362,26 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         this.dom.supportChatMessages.scrollTop = this.dom.supportChatMessages.scrollHeight;
     }
 
-    appendConsoleLine(type, text) {
+    appendConsoleLine(type, text, options = {}) {
         const line = document.createElement("div");
-        line.className = `console-line ${type}`;
+        const normalizedType = this.normalizeConsoleType(type);
+        line.className = `console-line ${normalizedType}`;
         line.innerText = text;
         this.dom.consoleLog.appendChild(line);
         this.dom.consoleLog.scrollTop = this.dom.consoleLog.scrollHeight;
+        if (options.persist === false) return;
+
+        fetch('/api/activity-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: normalizedType,
+                message: text,
+                meta: options.meta || {}
+            })
+        }).catch(error => {
+            console.warn("Could not persist activity log event:", error.message);
+        });
     }
 
     // Performance SVG Chart renderer

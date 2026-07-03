@@ -30,6 +30,7 @@ const downloadsDir = path.join(__dirname, 'downloads');
 const CRM_STATE_FILE = path.join(DATA_DIR, 'crm-state.json');
 const CRM_SETTINGS_FILE = path.join(DATA_DIR, 'crm-settings.json');
 const LEAD_INTELLIGENCE_SETTINGS_FILE = path.join(DATA_DIR, 'lead-intelligence-settings.json');
+const ACTIVITY_LOG_FILE = path.join(DATA_DIR, 'activity-log.json');
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const PUBLIC_APP_URL = String(process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || '').replace(/\/+$/, '');
 const OPENROUTER_ENV_API_KEY = process.env.OPENROUTER_API_KEY || '';
@@ -146,6 +147,51 @@ function writeJsonFile(filePath, data) {
     const tmpPath = `${filePath}.tmp`;
     fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
     fs.renameSync(tmpPath, filePath);
+}
+
+function todayActivityKey() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function readActivityLogState() {
+    const today = todayActivityKey();
+    const data = readJsonFile(ACTIVITY_LOG_FILE, { date: today, events: [] });
+    if (data.date !== today) return { date: today, events: [] };
+    return {
+        date: today,
+        events: Array.isArray(data.events) ? data.events : []
+    };
+}
+
+function writeActivityLogState(state) {
+    writeJsonFile(ACTIVITY_LOG_FILE, {
+        date: state.date || todayActivityKey(),
+        events: Array.isArray(state.events) ? state.events.slice(-1000) : []
+    });
+}
+
+function appendActivityLog(type = 'system-line', message = '', meta = {}) {
+    const text = String(message || '').trim();
+    if (!text) return null;
+
+    const state = readActivityLogState();
+    const event = {
+        id: crypto.randomUUID(),
+        type: String(type || 'system-line').trim(),
+        message: text,
+        createdAt: new Date().toISOString(),
+        meta: meta && typeof meta === 'object' ? meta : {}
+    };
+
+    state.events.push(event);
+    writeActivityLogState(state);
+    return event;
+}
+
+function clearActivityLog() {
+    const state = { date: todayActivityKey(), events: [] };
+    writeActivityLogState(state);
+    return state;
 }
 
 function defaultCrmState() {
@@ -534,6 +580,20 @@ app.get('/', serveRootFile('index.html'));
 app.get('/index.html', serveRootFile('index.html'));
 app.get('/app.js', serveRootFile('app.js'));
 app.get('/index.css', serveRootFile('index.css'));
+
+app.get('/api/activity-log', (req, res) => {
+    res.json(readActivityLogState());
+});
+
+app.post('/api/activity-log', (req, res) => {
+    const event = appendActivityLog(req.body?.type || 'system-line', req.body?.message || '', req.body?.meta || {});
+    res.status(event ? 201 : 400).json(event ? { success: true, event } : { error: 'Activity message is required.' });
+});
+
+app.delete('/api/activity-log', (req, res) => {
+    const state = clearActivityLog();
+    res.json({ success: true, ...state });
+});
 app.get('/config.js', serveRootFile('config.js'));
 
 app.get('/api/app-config', (req, res) => {
@@ -663,6 +723,7 @@ app.get('/api/crm-intelligence', (req, res) => {
         };
 
         res.json({
+            running: leadIntelligenceWorkerRunning,
             brokerages: db.getBrokerageResearch({
                 search: brokerageSearch,
                 limit: brokerageLimit
@@ -3383,6 +3444,11 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
     try {
         seedLeadIntelligenceDefaults();
         runId = db.insertIntelligenceRun({ type: 'lead-intelligence', status: 'Running', message: `Started by ${trigger}` });
+        appendActivityLog('agent-sales', `Lead Intelligence started by ${trigger}.`, {
+            workflow: 'lead-intelligence',
+            runId,
+            trigger
+        });
 
         const attempts = [];
         let totalContacts = 0;
@@ -3401,10 +3467,26 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                     break;
                 }
 
-                db.updateIntelligenceRun(runId, { cityId: city.id, message: `Discovering brokerages in ${city.city}, ${city.state}` });
+                const discoveryMessage = `Discovering brokerages in ${city.city}, ${city.state}`;
+                db.updateIntelligenceRun(runId, { cityId: city.id, message: discoveryMessage });
+                appendActivityLog('agent-sales', discoveryMessage, {
+                    workflow: 'lead-intelligence',
+                    runId,
+                    phase: 'brokerage-discovery',
+                    city: city.city,
+                    state: city.state
+                });
                 const offices = await discoverBrokerageOfficeTargetsForCity(city);
                 offices.forEach(item => db.upsertBrokerageOffice(item));
                 discoveredOffices += offices.length;
+                appendActivityLog('agent-sales', `Discovered ${offices.length} brokerage office target(s) in ${city.city}, ${city.state}.`, {
+                    workflow: 'lead-intelligence',
+                    runId,
+                    phase: 'brokerage-discovery',
+                    city: city.city,
+                    state: city.state,
+                    discoveredOffices: offices.length
+                });
                 db.updateMarketCity(city.id, {
                     status: 'Discovered',
                     lastDiscoveryAt: new Date().toISOString()
@@ -3418,9 +3500,20 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
             }
 
             lastOffice = office;
+            const harvestMessage = `Harvesting ${office.brokerageName} in ${office.city}, ${office.state} (${cycleIndex + 1}/${LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE})`;
             db.updateIntelligenceRun(runId, {
                 brokerageOfficeId: office.id,
-                message: `Harvesting ${office.brokerageName} in ${office.city}, ${office.state} (${cycleIndex + 1}/${LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE})`
+                message: harvestMessage
+            });
+            appendActivityLog('agent-sales', harvestMessage, {
+                workflow: 'lead-intelligence',
+                runId,
+                phase: 'roster-harvest',
+                brokerage: office.brokerageName,
+                city: office.city,
+                state: office.state,
+                cycleIndex: cycleIndex + 1,
+                maxOffices: LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE
             });
 
             const harvest = await harvestBrokerageOfficeRoster(office);
@@ -3477,6 +3570,12 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
             attempts.push(attempt);
             totalContacts += insertedOrUpdated;
             totalPagesScanned += harvest.pagesScanned || 0;
+            appendActivityLog(insertedOrUpdated > 0 ? 'agent-sales' : 'system-line', `${office.brokerageName} ${office.city}, ${office.state}: ${status}; ${insertedOrUpdated} contact(s), ${harvest.pagesScanned || 0} page(s) scanned.`, {
+                workflow: 'lead-intelligence',
+                runId,
+                phase: 'roster-harvest-result',
+                ...attempt
+            });
 
             if (insertedOrUpdated > 0 && LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS) {
                 stopReason = 'contacts harvested';
@@ -3490,6 +3589,13 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                 finishedAt: new Date().toISOString(),
                 message: stopReason || 'No lead intelligence work was available.',
                 stats: { discoveredOffices, contacts: 0, attempts: [] }
+            });
+            appendActivityLog('system-line', `Lead Intelligence found no work to run: ${stopReason || 'no work available'}.`, {
+                workflow: 'lead-intelligence',
+                runId,
+                phase: 'complete',
+                discoveredOffices,
+                contacts: 0
             });
             return { skipped: true, reason: stopReason || 'no work available' };
         }
@@ -3514,6 +3620,17 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                 attempts
             }
         });
+        appendActivityLog('agent-sales', `Lead Intelligence complete: ${message}`, {
+            workflow: 'lead-intelligence',
+            runId,
+            phase: 'complete',
+            contacts: totalContacts,
+            officesChecked: attempts.length,
+            discoveredOffices,
+            pagesScanned: totalPagesScanned,
+            suppressedBrandOffices,
+            stopReason: stopReason || 'max offices per cycle reached'
+        });
 
         return {
             skipped: false,
@@ -3536,6 +3653,11 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
                 error: message
             });
         }
+        appendActivityLog('system-line', `Lead Intelligence failed: ${message}`, {
+            workflow: 'lead-intelligence',
+            runId,
+            phase: 'failed'
+        });
         return { skipped: false, error: message };
     } finally {
         leadIntelligenceWorkerRunning = false;
@@ -3596,6 +3718,13 @@ function startLeadScrapeJob(niche, count) {
     };
 
     leadScrapeJobs.set(job.id, job);
+    appendActivityLog('agent-sales', `Lead scrape queued for "${niche}" (${count} requested).`, {
+        workflow: 'lead-scrape',
+        jobId: job.id,
+        phase: 'queued',
+        niche,
+        count
+    });
 
     setImmediate(async () => {
         try {
@@ -3605,9 +3734,23 @@ function startLeadScrapeJob(niche, count) {
                 message: `Starting lead scrape for "${niche}".`,
                 startedAt: new Date().toISOString()
             });
+            appendActivityLog('agent-sales', `Lead scrape started for "${niche}".`, {
+                workflow: 'lead-scrape',
+                jobId: job.id,
+                phase: 'starting',
+                niche,
+                count
+            });
 
             const result = await runLeadScrape(niche, count, (phase, message) => {
                 updateLeadScrapeJob(job, { phase, message });
+                appendActivityLog('agent-sales', message, {
+                    workflow: 'lead-scrape',
+                    jobId: job.id,
+                    phase,
+                    niche,
+                    count
+                });
             });
 
             updateLeadScrapeJob(job, {
@@ -3616,6 +3759,15 @@ function startLeadScrapeJob(niche, count) {
                 message: `Scrape complete. Added ${result.leads.length} new lead(s).`,
                 completedAt: new Date().toISOString(),
                 result
+            });
+            appendActivityLog('agent-sales', `Lead scrape complete for "${niche}". Added ${result.leads.length} new lead(s).`, {
+                workflow: 'lead-scrape',
+                jobId: job.id,
+                phase: 'completed',
+                niche,
+                requested: count,
+                added: result.leads.length,
+                skipped: result.skipped || 0
             });
         } catch (error) {
             const message = formatErrorMessage(error, 'Lead scrape failed.');
@@ -3626,6 +3778,13 @@ function startLeadScrapeJob(niche, count) {
                 completedAt: new Date().toISOString(),
                 error: message,
                 details: error.details || null
+            });
+            appendActivityLog('system-line', `Lead scrape failed for "${niche}": ${message}`, {
+                workflow: 'lead-scrape',
+                jobId: job.id,
+                phase: 'failed',
+                niche,
+                count
             });
         }
     });
