@@ -26,12 +26,13 @@ Last updated: 2026-07-03
 ## Lead Intelligence
 
 - Hidden nationwide lead intelligence engine is backend-only today. It stores market cities, brokerage profiles, brokerage offices, roster contacts, and run logs in SQLite hidden tables.
-- Production Docker config enables the hourly worker with `LEAD_INTELLIGENCE_ENABLED=true`, `LEAD_INTELLIGENCE_INTERVAL_MS=3600000`, and `LEAD_INTELLIGENCE_START_DELAY_MS=120000`.
+- Production Docker config enables the hourly worker with `LEAD_INTELLIGENCE_ENABLED=true`, `LEAD_INTELLIGENCE_INTERVAL_MS=3600000`, `LEAD_INTELLIGENCE_START_DELAY_MS=120000`, and `LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE=8`.
 - The worker seeds 20 mid-market cities and 14 brokerage brand searches per city, researches brokerage/office roster URLs, and browser-harvests public roster pages into `roster_contacts`.
 - Browser controls were added locally on 2026-07-03: Agency Onboarding includes a Lead Intelligence Worker toggle, and Dashboard Workflow Status includes agent toggles, hidden DB counts, and a Lead Intelligence Run Now button.
 - Lead Intelligence browser toggle persists to ignored runtime `data/lead-intelligence-settings.json`; the hourly worker reads that setting before running. Backend endpoints: `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/settings`, `POST /api/lead-intelligence/seed`, and `POST /api/lead-intelligence/run-once`.
 - Lead Intelligence Run Now uses the async browser path (`/api/lead-intelligence/run-once?async=true`) so Cloudflare/proxy timeouts do not produce HTML error alerts while a long harvest is still running; deployed hotfix commit `9eb2921`.
 - Lead Intelligence URL-discovery model failures should mark only that brokerage office as failed instead of killing the whole worker cycle; deployed resilience fix commit `8f25386`.
+- Lead Intelligence cycles should process multiple queued offices per run, not one per hour. Current behavior checks up to 8 offices per cycle, stops early after contacts, and can mark remaining queued offices for the same seeded national brand as `Skipped Brand` after blocked/failed results.
 - Lead-intelligence research can prefer OpenRouter with free-model rotation and Gemini fallback. OpenRouter web search is opt-in and may use credits.
 - OpenRouter 429/rate-limit failures should fall back quickly instead of stalling a harvest. Production roster challenge detection includes Cloudflare, reCAPTCHA, Burrow, "Please Verify You Are Human", and similar blocked-page text.
 - Elementor/card-style roster pages need wide ancestor scoping so `mailto:` buttons whose visible text is only "Email" still resolve the actual agent name from the surrounding card.
@@ -58,6 +59,7 @@ Last updated: 2026-07-03
 - Lead intelligence production smoke seeded 20 cities and 280 brand/city offices; KW/IDX-style pages were blocked by bot verification in production headless Chromium.
 - Lead Intelligence dashboard/onboarding controls were deployed live in commit `64f48bb`; roster-discovery resilience fix deployed live in commit `8f25386`. Production Run Now after the fix completed for HomeSmart Birmingham with 1 page scanned, 0 contacts, and office counts moved to 268 pending / 20 no-contact / 3 blocked.
 - 2026-07-03 production test proved the hidden DB path end to end: Pointe South Realty roster at `https://pointesouth.com/our-team/` harvested 31 contacts into `roster_contacts`; status after cleanup showed 1 harvested office and 31 hidden contacts.
+- 2026-07-03 multi-office production test checked 8 offices in one run, harvested 0 new contacts, and skipped 54 same-brand queued offices after bad franchise-brand results. Coldwell Banker and RE/MAX queued offices were also manually moved to `Skipped Brand` after prior production failures.
 - Research & Trends is onboarding-aware and should not invent engagement numbers.
 - Latest production container was healthy after the OpenRouter Integrations deployment.
 

@@ -813,6 +813,30 @@ function updateBrokerageOffice(id, changes = {}) {
     return db.prepare(`UPDATE brokerage_offices SET ${assignments}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`).run(...values).changes;
 }
 
+function suppressQueuedBrokerageBrand(brokerageName, reason = '', exceptOfficeId = null) {
+    const name = normalizeText(brokerageName);
+    if (!name) return 0;
+
+    const clauses = [
+        'LOWER(brokerageName) = LOWER(?)',
+        "status IN ('Pending', 'Discovered', 'Retry')"
+    ];
+    const values = [normalizeText(reason), name];
+
+    if (exceptOfficeId) {
+        clauses.push('id <> ?');
+        values.push(exceptOfficeId);
+    }
+
+    return db.prepare(`
+        UPDATE brokerage_offices
+        SET status = 'Skipped Brand',
+            lastError = ?,
+            updatedAt = CURRENT_TIMESTAMP
+        WHERE ${clauses.join(' AND ')}
+    `).run(...values).changes;
+}
+
 function upsertRosterContact(contact = {}) {
     const email = normalizeEmail(contact.email);
     const name = normalizeText(contact.name);
@@ -955,6 +979,7 @@ module.exports = {
     upsertBrokerageOffice,
     getNextBrokerageOfficeForHarvest,
     updateBrokerageOffice,
+    suppressQueuedBrokerageBrand,
     upsertRosterContact,
     insertIntelligenceRun,
     updateIntelligenceRun,

@@ -100,6 +100,9 @@ const BROKERAGE_ROSTER_KEYWORDS = [
 const LEAD_INTELLIGENCE_ENABLED = process.env.LEAD_INTELLIGENCE_ENABLED === 'true';
 const LEAD_INTELLIGENCE_INTERVAL_MS = Math.min(Math.max(parseInt(process.env.LEAD_INTELLIGENCE_INTERVAL_MS, 10) || 60 * 60 * 1000, 10 * 60 * 1000), 24 * 60 * 60 * 1000);
 const LEAD_INTELLIGENCE_START_DELAY_MS = Math.min(Math.max(parseInt(process.env.LEAD_INTELLIGENCE_START_DELAY_MS, 10) || 2 * 60 * 1000, 30 * 1000), 30 * 60 * 1000);
+const LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE = Math.min(Math.max(parseInt(process.env.LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE, 10) || 8, 1), 25);
+const LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS = process.env.LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS !== 'false';
+const LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE = process.env.LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE !== 'false';
 const ROSTER_BROWSER_MAX_PAGES = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_MAX_PAGES, 10) || 40, 1), 100);
 const ROSTER_BROWSER_MAX_CONTACTS = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_MAX_CONTACTS, 10) || 250, 10), 1000);
 const ROSTER_BROWSER_TIMEOUT_MS = Math.min(Math.max(parseInt(process.env.ROSTER_BROWSER_TIMEOUT_MS, 10) || 45000, 10000), 120000);
@@ -2639,6 +2642,19 @@ const LEAD_INTELLIGENCE_BROKERAGE_BRAND_SEEDS = [
     { name: 'Realty Executives', category: 'franchise office' }
 ];
 
+const LEAD_INTELLIGENCE_SUPPRESSIBLE_BRANDS = new Set(
+    LEAD_INTELLIGENCE_BROKERAGE_BRAND_SEEDS.map(brand => brand.name.toLowerCase())
+);
+
+function shouldSuppressBrokerageBrandAfterResult(office, status, harvest) {
+    if (!LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE) return false;
+    if (!office || !office.brokerageName) return false;
+    if (!LEAD_INTELLIGENCE_SUPPRESSIBLE_BRANDS.has(String(office.brokerageName).toLowerCase())) return false;
+    if (status === 'Blocked') return true;
+    if (status !== 'Failed') return false;
+    return /invalid response format|could not discover|roster url|not found|forbidden|blocked|captcha|cloudflare|security verification/i.test(String(harvest && harvest.warning || ''));
+}
+
 function seedLeadIntelligenceDefaults() {
     const cityChanges = db.seedMarketCities(LEAD_INTELLIGENCE_SEED_CITIES);
     let officeChanges = 0;
@@ -3097,97 +3113,144 @@ async function runLeadIntelligenceCycle(trigger = 'manual') {
         seedLeadIntelligenceDefaults();
         runId = db.insertIntelligenceRun({ type: 'lead-intelligence', status: 'Running', message: `Started by ${trigger}` });
 
-        let office = db.getNextBrokerageOfficeForHarvest();
-        if (!office) {
-            const city = db.getNextMarketCityForDiscovery();
-            if (!city) {
-                db.updateIntelligenceRun(runId, {
-                    status: 'Complete',
-                    finishedAt: new Date().toISOString(),
-                    message: 'No market cities available for discovery.',
-                    stats: { discoveredOffices: 0, contacts: 0 }
+        const attempts = [];
+        let totalContacts = 0;
+        let totalPagesScanned = 0;
+        let discoveredOffices = 0;
+        let suppressedBrandOffices = 0;
+        let lastOffice = null;
+        let stopReason = '';
+
+        for (let cycleIndex = 0; cycleIndex < LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE; cycleIndex++) {
+            let office = db.getNextBrokerageOfficeForHarvest();
+            if (!office) {
+                const city = db.getNextMarketCityForDiscovery();
+                if (!city) {
+                    stopReason = attempts.length ? 'no more queued offices or cities' : 'no cities available';
+                    break;
+                }
+
+                db.updateIntelligenceRun(runId, { cityId: city.id, message: `Discovering brokerages in ${city.city}, ${city.state}` });
+                const offices = await discoverBrokerageOfficeTargetsForCity(city);
+                offices.forEach(item => db.upsertBrokerageOffice(item));
+                discoveredOffices += offices.length;
+                db.updateMarketCity(city.id, {
+                    status: 'Discovered',
+                    lastDiscoveryAt: new Date().toISOString()
                 });
-                return { skipped: true, reason: 'no cities available' };
+                office = db.getNextBrokerageOfficeForHarvest();
             }
 
-            db.updateIntelligenceRun(runId, { cityId: city.id, message: `Discovering brokerages in ${city.city}, ${city.state}` });
-            const offices = await discoverBrokerageOfficeTargetsForCity(city);
-            offices.forEach(item => db.upsertBrokerageOffice(item));
-            db.updateMarketCity(city.id, {
-                status: 'Discovered',
-                lastDiscoveryAt: new Date().toISOString()
-            });
-            office = db.getNextBrokerageOfficeForHarvest();
-        }
+            if (!office) {
+                stopReason = attempts.length ? 'brokerage discovery produced no queued offices' : 'no brokerage offices queued';
+                break;
+            }
 
-        if (!office) {
+            lastOffice = office;
             db.updateIntelligenceRun(runId, {
-                status: 'Complete',
-                finishedAt: new Date().toISOString(),
-                message: 'Brokerage discovery completed but no offices were queued.',
-                stats: { contacts: 0 }
-            });
-            return { skipped: true, reason: 'no brokerage offices queued' };
-        }
-
-        db.updateIntelligenceRun(runId, {
-            brokerageOfficeId: office.id,
-            message: `Harvesting ${office.brokerageName} in ${office.city}, ${office.state}`
-        });
-
-        const profile = db.getBrokerageProfileByName(office.brokerageName);
-        if (profile && profile.researchStatus !== 'Complete') {
-            await researchBrokerageTechStack(profile);
-        }
-
-        const harvest = await harvestBrokerageOfficeRoster(office);
-        let insertedOrUpdated = 0;
-        for (const contact of harvest.contacts) {
-            const saved = db.upsertRosterContact({
                 brokerageOfficeId: office.id,
-                brokerageName: office.brokerageName,
-                city: office.city,
-                state: office.state,
-                name: contact.name,
-                email: contact.email,
-                phone: contact.phone,
-                website: contact.website,
-                sourceUrl: contact.sourceUrl,
-                socials: contact.socials || {}
+                message: `Harvesting ${office.brokerageName} in ${office.city}, ${office.state} (${cycleIndex + 1}/${LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE})`
             });
-            if (saved) insertedOrUpdated++;
-        }
 
-        const status = insertedOrUpdated > 0 ? 'Harvested' : harvest.blocked ? 'Blocked' : harvest.warning ? 'Failed' : 'No Contacts';
-        db.updateBrokerageOffice(office.id, {
-            status,
-            lastHarvestAt: new Date().toISOString(),
-            lastError: harvest.warning || '',
-            rosterPageCount: harvest.pagesScanned || 0,
-            contactCount: insertedOrUpdated
-        });
-        db.updateIntelligenceRun(runId, {
-            status: 'Complete',
-            finishedAt: new Date().toISOString(),
-            message: `Harvested ${insertedOrUpdated} contact(s) from ${office.brokerageName}.`,
-            stats: {
+            const profile = db.getBrokerageProfileByName(office.brokerageName);
+            if (profile && profile.researchStatus !== 'Complete') {
+                await researchBrokerageTechStack(profile);
+            }
+
+            const harvest = await harvestBrokerageOfficeRoster(office);
+            let insertedOrUpdated = 0;
+            for (const contact of harvest.contacts) {
+                const saved = db.upsertRosterContact({
+                    brokerageOfficeId: office.id,
+                    brokerageName: office.brokerageName,
+                    city: office.city,
+                    state: office.state,
+                    name: contact.name,
+                    email: contact.email,
+                    phone: contact.phone,
+                    website: contact.website,
+                    sourceUrl: contact.sourceUrl,
+                    socials: contact.socials || {}
+                });
+                if (saved) insertedOrUpdated++;
+            }
+
+            const status = insertedOrUpdated > 0 ? 'Harvested' : harvest.blocked ? 'Blocked' : harvest.warning ? 'Failed' : 'No Contacts';
+            db.updateBrokerageOffice(office.id, {
+                status,
+                lastHarvestAt: new Date().toISOString(),
+                lastError: harvest.warning || '',
+                rosterPageCount: harvest.pagesScanned || 0,
+                contactCount: insertedOrUpdated
+            });
+
+            let suppressed = 0;
+            if (shouldSuppressBrokerageBrandAfterResult(office, status, harvest)) {
+                const reason = `${office.brokerageName} skipped after ${status.toLowerCase()} result in ${office.city}, ${office.state}: ${harvest.warning || 'No harvestable public roster contacts.'}`;
+                suppressed = db.suppressQueuedBrokerageBrand(office.brokerageName, reason, office.id);
+                suppressedBrandOffices += suppressed;
+            }
+
+            const attempt = {
                 brokerage: office.brokerageName,
                 city: office.city,
                 state: office.state,
+                status,
                 contacts: insertedOrUpdated,
                 pagesScanned: harvest.pagesScanned || 0,
-                warning: harvest.warning || ''
+                warning: harvest.warning || '',
+                suppressedBrandOffices: suppressed
+            };
+            attempts.push(attempt);
+            totalContacts += insertedOrUpdated;
+            totalPagesScanned += harvest.pagesScanned || 0;
+
+            if (insertedOrUpdated > 0 && LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS) {
+                stopReason = 'contacts harvested';
+                break;
+            }
+        }
+
+        if (attempts.length === 0) {
+            db.updateIntelligenceRun(runId, {
+                status: 'Complete',
+                finishedAt: new Date().toISOString(),
+                message: stopReason || 'No lead intelligence work was available.',
+                stats: { discoveredOffices, contacts: 0, attempts: [] }
+            });
+            return { skipped: true, reason: stopReason || 'no work available' };
+        }
+
+        const harvestedAttempts = attempts.filter(item => item.contacts > 0).length;
+        const message = totalContacts > 0
+            ? `Harvested ${totalContacts} contact(s) from ${harvestedAttempts} office(s) after checking ${attempts.length} office(s).`
+            : `Checked ${attempts.length} office(s); no contacts harvested.`;
+
+        db.updateIntelligenceRun(runId, {
+            status: 'Complete',
+            finishedAt: new Date().toISOString(),
+            brokerageOfficeId: lastOffice && lastOffice.id,
+            message,
+            stats: {
+                contacts: totalContacts,
+                officesChecked: attempts.length,
+                discoveredOffices,
+                pagesScanned: totalPagesScanned,
+                suppressedBrandOffices,
+                stopReason: stopReason || 'max offices per cycle reached',
+                attempts
             }
         });
 
         return {
             skipped: false,
-            brokerage: office.brokerageName,
-            city: office.city,
-            state: office.state,
-            contacts: insertedOrUpdated,
-            pagesScanned: harvest.pagesScanned || 0,
-            warning: harvest.warning || ''
+            contacts: totalContacts,
+            officesChecked: attempts.length,
+            discoveredOffices,
+            pagesScanned: totalPagesScanned,
+            suppressedBrandOffices,
+            stopReason: stopReason || 'max offices per cycle reached',
+            attempts
         };
     } catch (error) {
         const message = formatErrorMessage(error, 'Lead intelligence cycle failed.');
@@ -5339,6 +5402,9 @@ app.get('/api/lead-intelligence/status', (req, res) => {
         configuredDefault: LEAD_INTELLIGENCE_ENABLED,
         running: leadIntelligenceWorkerRunning,
         intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
+        maxOfficesPerCycle: LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE,
+        stopAfterContacts: LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS,
+        suppressBrandAfterFailure: LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE,
         browserMode: true,
         researchProvider: getLeadIntelligenceResearchProvider(),
         openRouter: {
@@ -5364,6 +5430,9 @@ app.post('/api/lead-intelligence/settings', (req, res) => {
         enabled,
         running: leadIntelligenceWorkerRunning,
         intervalMs: LEAD_INTELLIGENCE_INTERVAL_MS,
+        maxOfficesPerCycle: LEAD_INTELLIGENCE_MAX_OFFICES_PER_CYCLE,
+        stopAfterContacts: LEAD_INTELLIGENCE_STOP_AFTER_CONTACTS,
+        suppressBrandAfterFailure: LEAD_INTELLIGENCE_SUPPRESS_BRAND_AFTER_FAILURE,
         browserMode: true,
         researchProvider: getLeadIntelligenceResearchProvider(),
         openRouter: {
