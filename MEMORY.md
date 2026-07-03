@@ -68,7 +68,7 @@ Last updated: 2026-07-03
 - 2026-07-03 multi-office production test checked 8 offices in one run, harvested 0 new contacts, and skipped 54 same-brand queued offices after bad franchise-brand results. Coldwell Banker was later restored from `Skipped Brand` after raw HTML extraction proved it works; RE/MAX remains skipped/blocked.
 - Research & Trends is onboarding-aware and should not invent engagement numbers.
 - Latest production container was healthy after the Coldwell Banker raw-email extractor deployment.
-- CRM rework commit `4b7b1a2` and brokerage research-signals commit `17dddd4` were pushed/deployed live on 2026-07-03. Production container became healthy; in-container syntax checks passed; `/api/crm-intelligence` authenticated smoke returned 64 roster contacts.
+- CRM rework commit `4b7b1a2`, brokerage research-signals commit `17dddd4`, and response-inbox commit `e4d8392` were pushed/deployed live on 2026-07-03. Production container became healthy; `/api/crm-intelligence` returned 64 roster contacts, and `/api/leads?respondedOnly=1` returned 1 responded lead out of 6 total.
 
 ## Working Agreements
 
