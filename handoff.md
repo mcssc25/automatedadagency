@@ -20,7 +20,7 @@ Last updated: 2026-07-03
 - Latest stale brokerage research refresh commit: `3124543 Refresh stale brokerage research automatically`, pushed to `origin/main` and deployed live.
 - Latest OpenRouter free-model guard commit: `7ddf483 Enforce free OpenRouter models`, pushed to `origin/main` and deployed live.
 - Latest roster-gated brokerage research code commit: `32f654f Gate brokerage research on roster success`, pushed to `origin/main` and deployed live.
-- Latest OpenRouter-only/first-zero-contact suppression change: pending commit, not deployed yet.
+- Latest OpenRouter-only/first-zero-contact suppression commit: `0d435f8 Force OpenRouter lead intelligence research`, pushed to `origin/main` and deployed live.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
@@ -29,6 +29,7 @@ Last updated: 2026-07-03
 - Stale brokerage research refresh deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T215355Z-stale-brokerage-research-refresh`.
 - OpenRouter free-model guard deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T220115Z-openrouter-free-model-guard`.
 - Roster-gated brokerage research deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T221747Z-roster-gated-research`.
+- OpenRouter-only / first-zero-contact suppression deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T222723Z-openrouter-only-roster-suppression`.
 - Production container was healthy after the Coldwell Banker raw-email extractor deployments.
 - Runtime secrets/data are ignored and must stay out of git: `.env`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
 - OpenRouter and Make.com webhook settings persist in production runtime `data/credentials.json` on the mounted `/opt/ad-agency-autopilot/data` volume.
@@ -127,6 +128,7 @@ Last updated: 2026-07-03
 - Latest local OpenRouter guard checks passed: `node --check server.js`, `node --check app.js`, `node --check db.js`, `git diff --check` with only CRLF warnings, and a filter smoke dropped `openai/gpt-5` while keeping `openrouter/free` and `:free` models.
 - Latest local roster-gated research checks passed: `node --check server.js`, `node --check db.js`, `node --check app.js`, `git diff --check` with only CRLF warnings, and a direct DB smoke returned no brokerage research candidate when the local DB had no roster contacts.
 - Production roster-gated research deploy checks passed: container healthy, in-container `node --check /app/server.js`, `/app/db.js`, and `/app/app.js`; authenticated `/api/lead-intelligence/status` returned `running:false`, `enabled:true`, `contacts:64`; deployed DB selector smoke returned `Coldwell Banker` as the next research profile with `23` roster contacts.
+- Production OpenRouter-only suppression deploy checks passed: container healthy, in-container `node --check /app/server.js`, `/app/db.js`, and `/app/app.js`; authenticated `/api/lead-intelligence/status` returned `researchProvider:"openrouter"`, OpenRouter configured, `defaultModel:"openrouter/free"`, no paid model IDs, and latest interrupted run stopped the old Realty ONE loop. One-time production DB repair marked `19` non-harvested `Realty ONE Group` offices `Do Not Scrape` while preserving its one harvested office with `6` contacts.
 - Production OpenRouter guard deploy checks passed: container healthy, in-container `node --check /app/server.js`, and authenticated `/api/openrouter-settings` smoke returned `defaultModel:"openrouter/free"`, `15` model-order entries, and `0` unsafe/paid model IDs.
 - Production research-signals deploy checks passed: container healthy, in-container `node --check /app/server.js` and `/app/app.js`, authenticated `/api/crm-intelligence` smoke returned `64` roster contacts and brokerage `techStack`.
 - Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.
