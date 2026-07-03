@@ -30,6 +30,7 @@ Last updated: 2026-07-03
 - The worker seeds 20 mid-market cities and 14 brokerage brand searches per city, researches brokerage/office roster URLs, and browser-harvests public roster pages into `roster_contacts`.
 - Browser controls were added locally on 2026-07-03: Agency Onboarding includes a Lead Intelligence Worker toggle, and Dashboard Workflow Status includes agent toggles, hidden DB counts, and a Lead Intelligence Run Now button.
 - Lead Intelligence browser toggle persists to ignored runtime `data/lead-intelligence-settings.json`; the hourly worker reads that setting before running. Backend endpoints: `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/settings`, `POST /api/lead-intelligence/seed`, and `POST /api/lead-intelligence/run-once`.
+- Lead Intelligence Run Now should use the async browser path (`/api/lead-intelligence/run-once?async=true`) so Cloudflare/proxy timeouts do not produce HTML error alerts while a long harvest is still running.
 - Lead Intelligence URL-discovery model failures should mark only that brokerage office as failed instead of killing the whole worker cycle; deployed resilience fix commit `8f25386`.
 - Lead-intelligence research can prefer OpenRouter with free-model rotation and Gemini fallback. OpenRouter web search is opt-in and may use credits.
 - Known limitation: KW-style protected roster pages can show Cloudflare/security verification to production headless Chromium and should be marked `Blocked`; a managed/stealth browser provider may be needed for those.

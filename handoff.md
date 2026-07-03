@@ -4,6 +4,12 @@ Last updated: 2026-07-03
 
 ## Latest Update
 
+- Hotfix after browser Run Now showed an HTML/proxy timeout alert while the backend worker was actually running.
+- `POST /api/lead-intelligence/run-once?async=true` now accepts a background worker start and returns immediately with `202` instead of holding the browser request open for the full harvest.
+- Dashboard Run Now now uses the async path, shows accepted/running status, and polls `/api/lead-intelligence/status` for completion.
+
+## Previous Update
+
 - Added browser controls for the hidden Lead Intelligence Worker.
 - Agency Onboarding now includes a fifth worker card, `Lead Intelligence Worker`, with a toggle that persists to the backend.
 - Dashboard Workflow Status now lists `Lead Intelligence Worker` with its own toggle, a Run Now button, hidden DB count summary, and live status text.
@@ -81,6 +87,10 @@ Last updated: 2026-07-03
 
 ## Verification
 
+- `node --check server.js` passed after Run Now async hotfix.
+- `node --check app.js` passed.
+- `git diff --check` passed with normal Windows CRLF warnings only.
+- Before the hotfix, production status showed the user's browser click started run `33`, harvesting `Fathom Realty` in Birmingham, AL. It completed with 0 contacts and warning `Invalid response format received from Gemini API`, but the browser saw an HTML timeout/proxy error because the request waited too long.
 - `node --check server.js` passed after Lead Intelligence dashboard/onboarding controls.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.

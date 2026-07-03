@@ -1153,16 +1153,17 @@ class AutopilotApp {
         this.appendConsoleLine('agent-sales', 'Lead Intelligence Worker started one hidden roster harvest cycle.');
 
         try {
-            const response = await fetch('/api/lead-intelligence/run-once', { method: 'POST' });
+            const response = await fetch('/api/lead-intelligence/run-once?async=true', { method: 'POST' });
             if (!response.ok) throw new Error(await this.parseApiError(response, 'Lead Intelligence run failed'));
             const data = await response.json();
             this.state.leadIntelligence.status = data.status || this.state.leadIntelligence.status;
-            this.state.leadIntelligence.running = false;
             const result = data.result || {};
             if (result.skipped) {
+                this.state.leadIntelligence.running = false;
                 this.appendConsoleLine('agent-sales', `Lead Intelligence skipped: ${result.reason || 'nothing queued'}.`);
             } else {
-                this.appendConsoleLine('agent-sales', `Lead Intelligence finished: ${result.contacts || 0} contact(s), ${result.pagesScanned || 0} page(s) scanned.`);
+                this.appendConsoleLine('agent-sales', 'Lead Intelligence accepted. Watching the hidden worker status now.');
+                await this.watchLeadIntelligenceRun();
             }
             await this.loadLeadIntelligenceStatus();
         } catch (error) {
@@ -1176,6 +1177,38 @@ class AutopilotApp {
             }
             this.renderLeadIntelligenceStatus();
         }
+    }
+
+    async watchLeadIntelligenceRun() {
+        const startedAt = Date.now();
+        const maxWaitMs = 5 * 60 * 1000;
+        let sawRunning = false;
+        let lastRunId = null;
+
+        while (Date.now() - startedAt < maxWaitMs) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            const data = await this.loadLeadIntelligenceStatus();
+            const recent = data?.status?.recentRuns?.[0];
+            if (data?.running) {
+                sawRunning = true;
+                if (recent?.id && recent.id !== lastRunId) {
+                    lastRunId = recent.id;
+                    this.appendConsoleLine('agent-sales', recent.message || 'Lead Intelligence worker is running.');
+                }
+                continue;
+            }
+
+            this.state.leadIntelligence.running = false;
+            if (recent && (sawRunning || recent.id === lastRunId || Date.now() - startedAt > 10000)) {
+                const stats = recent.stats || {};
+                this.appendConsoleLine('agent-sales', `Lead Intelligence ${String(recent.status || '').toLowerCase()}: ${stats.contacts || 0} contact(s), ${stats.pagesScanned || 0} page(s) scanned.`);
+                return recent;
+            }
+        }
+
+        this.state.leadIntelligence.running = false;
+        this.appendConsoleLine('system', 'Lead Intelligence is still running in the background. Refresh status from the dashboard in a minute.');
+        return null;
     }
 
     async loadOpenRouterSettings() {

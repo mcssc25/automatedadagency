@@ -5359,6 +5359,31 @@ app.post('/api/lead-intelligence/run-once', async (req, res) => {
     if (!isLeadIntelligenceEnabled()) {
         return res.status(400).json({ error: 'Lead Intelligence is turned off. Enable it before running.' });
     }
+    const runAsync = req.query.async === 'true' || req.body?.async === true;
+    if (runAsync) {
+        if (leadIntelligenceWorkerRunning) {
+            return res.json({
+                success: true,
+                accepted: false,
+                result: { skipped: true, reason: 'lead intelligence worker already running' },
+                status: db.getLeadIntelligenceStatus()
+            });
+        }
+
+        runLeadIntelligenceCycle('manual-api').then(result => {
+            console.log(`[Lead Intelligence] Manual async cycle result: ${JSON.stringify(result)}`);
+        }).catch(error => {
+            console.error('[Lead Intelligence] Manual async cycle error:', error.message);
+        });
+
+        return res.status(202).json({
+            success: true,
+            accepted: true,
+            result: { started: true },
+            status: db.getLeadIntelligenceStatus()
+        });
+    }
+
     const result = await runLeadIntelligenceCycle('manual-api');
     res.json({ success: !result.error, result, status: db.getLeadIntelligenceStatus() });
 });
