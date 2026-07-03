@@ -12,6 +12,8 @@ Last updated: 2026-07-03
 - The hourly worker now checks that persisted setting before startup/interval runs; `POST /api/lead-intelligence/run-once` refuses to run when the worker is off.
 - Added `POST /api/lead-intelligence/settings` for browser toggle updates.
 - Follow-up reliability fix: if Gemini/OpenRouter returns an invalid response while discovering a specific brokerage office roster URL, that office returns a failed/no-contact result instead of failing the entire Lead Intelligence worker cycle.
+- Dashboard controls commit pushed/deployed: `64f48bb` (`Add lead intelligence dashboard controls`).
+- Roster-discovery resilience commit pushed/deployed: `8f25386` (`Harden lead intelligence roster discovery`).
 
 ## Previous Update
 
@@ -89,6 +91,7 @@ Last updated: 2026-07-03
 - A local Run Now request accidentally started one test harvest while enabled; the temporary server was stopped and the ignored local DB run row was marked `Interrupted`. No production run was triggered by this local test.
 - Production deploy for dashboard controls succeeded: container healthy, deployed `server.js` and `app.js` syntax checks passed, and live `/api/lead-intelligence/status` reported enabled true, 269 pending offices, 19 no-contact offices, 3 blocked offices, 0 contacts, and OpenRouter not configured.
 - Production startup worker ran automatically after deploy; manual Run Now correctly skipped while the scheduled worker was running. The scheduled worker then failed on Gemini invalid response, prompting the roster-discovery resilience fix above.
+- Production verification after resilience fix: container healthy, deployed `server.js` and `app.js` syntax checks passed, and authenticated Run Now completed for `HomeSmart` in Birmingham, AL with 1 page scanned, 0 contacts, no warning. Live office counts became 268 pending, 20 no-contact, 3 blocked, 0 contacts.
 - `node --check server.js` passed after the OpenRouter Integrations UI and model-rotation update.
 - `node --check app.js` passed.
 - `git diff --check` passed with normal Windows CRLF warnings only.
@@ -120,6 +123,12 @@ Last updated: 2026-07-03
 - No AI image/video generation, campaign send, email send, or production data mutation was triggered by local verification.
 
 ## Repo / Deployment Status
+
+- Latest pushed commit: `8f25386` (`Harden lead intelligence roster discovery`).
+- Current live deployment includes dashboard controls and the roster-discovery guard.
+- Deployment backups:
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T103159-lead-intelligence-dashboard`
+  - `/opt/ad-agency-autopilot/data/backups/deploy-20260703T103959-lead-intelligence-discovery-guard`
 
 - Files changed for OpenRouter Integrations UI/model rotation: `server.js`, `app.js`, `index.html`, `.env.example`, `docker-compose.yml`, `MEMORY.md`, `handoff.md`.
 - Runtime secrets/data remain uncommitted; no OpenRouter key has been committed.
