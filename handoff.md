@@ -4,6 +4,14 @@ Last updated: 2026-07-03
 
 ## Latest Update
 
+- Fixed runtime credential persistence for Integrations.
+- Root cause: OpenRouter/Make.com settings were being written to `/app/credentials.json` inside the container. Because `credentials.json` is excluded from Docker build context and not mounted as a volume, rebuild/recreate could wipe browser-entered settings.
+- Backend now reads/writes credentials and OAuth tokens from mounted runtime files: `data/credentials.json` and `data/tokens.json`.
+- Added one-time migration from legacy root `credentials.json`/`tokens.json` to `data/` when those files exist.
+- Hetzner host had an old root `credentials.json` with a Make.com webhook value, so that can be recovered into `data/credentials.json`. No saved OpenRouter API key was found on the host root file; if it only lived in the old container, it was lost and must be re-entered once after this fix.
+
+## Previous Update
+
 - Hotfix after browser Run Now showed an HTML/proxy timeout alert while the backend worker was actually running.
 - `POST /api/lead-intelligence/run-once?async=true` now accepts a background worker start and returns immediately with `202` instead of holding the browser request open for the full harvest.
 - Dashboard Run Now now uses the async path, shows accepted/running status, and polls `/api/lead-intelligence/status` for completion.

@@ -15,7 +15,7 @@ Last updated: 2026-07-03
 - Local workspace is for code editing/dev diagnostics only. Do not describe the app as needing to be hosted locally for normal use.
 - Runtime secrets/data are ignored. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, logs, or `node_modules`.
 - Mailgun outreach domain: `outreach.realestatecrmpro.com`.
-- OpenRouter can be configured from the browser Integrations UI; saved key lives in ignored production/runtime `credentials.json`, not browser localStorage or git. Env fallback still works with `OPENROUTER_ENABLED=true` and `OPENROUTER_API_KEY`.
+- OpenRouter and Make.com webhook settings are configured from the browser Integrations UI and must persist in ignored production runtime `data/credentials.json`, which is on the mounted `/opt/ad-agency-autopilot/data` volume. Do not store these in root `credentials.json`; that path was container-local and got wiped on rebuilds. Env fallback still works with `OPENROUTER_ENABLED=true` and `OPENROUTER_API_KEY`.
 
 ## Product Direction
 

@@ -5794,10 +5794,24 @@ app.post('/api/generate-video', async (req, res) => {
 
 // fs storage path configuration
 
-const CREDENTIALS_FILE = path.join(__dirname, 'credentials.json');
-const TOKENS_FILE = path.join(__dirname, 'tokens.json');
+const CREDENTIALS_FILE = path.join(DATA_DIR, 'credentials.json');
+const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
+const LEGACY_CREDENTIALS_FILE = path.join(__dirname, 'credentials.json');
+const LEGACY_TOKENS_FILE = path.join(__dirname, 'tokens.json');
+
+function migrateLegacyRuntimeJson(legacyPath, durablePath) {
+    try {
+        if (fs.existsSync(durablePath) || !fs.existsSync(legacyPath)) return;
+        ensureDataDir();
+        fs.copyFileSync(legacyPath, durablePath);
+        console.log(`[Storage] Migrated ${path.basename(legacyPath)} to data/${path.basename(durablePath)}.`);
+    } catch (error) {
+        console.warn(`[Storage] Failed to migrate ${path.basename(legacyPath)}:`, error.message);
+    }
+}
 
 function getCredentials() {
+    migrateLegacyRuntimeJson(LEGACY_CREDENTIALS_FILE, CREDENTIALS_FILE);
     if (!fs.existsSync(CREDENTIALS_FILE)) {
         return {};
     }
@@ -5809,10 +5823,11 @@ function getCredentials() {
 }
 
 function saveCredentials(creds) {
-    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), 'utf8');
+    writeJsonFile(CREDENTIALS_FILE, creds);
 }
 
 function getTokens() {
+    migrateLegacyRuntimeJson(LEGACY_TOKENS_FILE, TOKENS_FILE);
     if (!fs.existsSync(TOKENS_FILE)) {
         return {};
     }
@@ -5824,7 +5839,7 @@ function getTokens() {
 }
 
 function saveTokens(tokens) {
-    fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
+    writeJsonFile(TOKENS_FILE, tokens);
 }
 
 function serializeOpenRouterSettingsForClient() {
