@@ -1115,8 +1115,14 @@
             <section id="crm-view" class="view-section">
                 <!-- Sub-navigation Tabs -->
                 <div class="content-studio-tabs" style="margin-bottom: 20px;">
-                    <button class="crm-tab active" data-target="crm-pipeline">
-                        <i class="fa-solid fa-address-book"></i> Lead Pipeline
+                    <button class="crm-tab active" data-target="crm-brokerages">
+                        <i class="fa-solid fa-building-user"></i> Brokerage Research
+                    </button>
+                    <button class="crm-tab" data-target="crm-roster">
+                        <i class="fa-solid fa-users-viewfinder"></i> Agent Roster
+                    </button>
+                    <button class="crm-tab" data-target="crm-communications">
+                        <i class="fa-solid fa-comments-dollar"></i> Lead Communication
                     </button>
                     <button class="crm-tab" data-target="crm-verification">
                         <i class="fa-solid fa-envelope-shield"></i> Verification Queue <span class="badge" id="crm-verification-badge" style="background:var(--orange); color:#fff; display:none; margin-left:6px; font-size:0.7rem; padding:2px 6px;">0</span>
@@ -1129,8 +1135,72 @@
                     </button>
                 </div>
 
-                <!-- 1. LEAD PIPELINE VIEW -->
-                <div class="crm-panel-view active" id="crm-pipeline">
+                <!-- 1. BROKERAGE RESEARCH VIEW -->
+                <div class="crm-panel-view active" id="crm-brokerages">
+                    <div class="crm-intel-grid">
+                        <div class="crm-intel-card">
+                            <span class="crm-intel-label">Roster Contacts</span>
+                            <strong id="crm-intel-contact-count">0</strong>
+                            <small>Agents found by backend research</small>
+                        </div>
+                        <div class="crm-intel-card">
+                            <span class="crm-intel-label">Brokerage Offices</span>
+                            <strong id="crm-intel-office-count">0</strong>
+                            <small>Queued, checked, blocked, or harvested</small>
+                        </div>
+                        <div class="crm-intel-card">
+                            <span class="crm-intel-label">Work In Progress</span>
+                            <strong id="crm-intel-queued-count">0</strong>
+                            <small>Offices waiting for roster harvest</small>
+                        </div>
+                        <div class="crm-intel-card">
+                            <span class="crm-intel-label">Latest Worker Step</span>
+                            <strong id="crm-intel-latest-status">Idle</strong>
+                            <small id="crm-intel-latest-message">No recent worker run loaded</small>
+                        </div>
+                    </div>
+
+                    <div class="crm-layout crm-intelligence-layout">
+                        <div class="crm-left crm-research-left">
+                            <div class="dashboard-panel">
+                                <div class="panel-header">
+                                    <h3>Brokerages Being Researched</h3>
+                                    <button class="btn btn-sm btn-outline" id="btn-refresh-crm-intel"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                                </div>
+                                <div class="crm-search-row">
+                                    <input type="text" id="crm-brokerage-search" placeholder="Search brokerage, systems, notes...">
+                                </div>
+                                <div class="panel-content">
+                                    <div class="brokerage-research-list" id="crm-brokerage-list">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-database"></i>
+                                            <p>Brokerage research will appear after Lead Intelligence seeds or harvests offices.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="crm-right">
+                            <div class="dashboard-panel chat-panel">
+                                <div class="panel-header">
+                                    <h3><i class="fa-solid fa-route text-accent"></i> Backend Work Flow</h3>
+                                    <span class="badge" id="crm-intel-running-badge">Worker Idle</span>
+                                </div>
+                                <div class="panel-content">
+                                    <div class="crm-workflow-rail" id="crm-workflow-rail">
+                                        <!-- Dynamic backend workflow steps -->
+                                    </div>
+                                    <div class="crm-run-log" id="crm-run-log">
+                                        <!-- Recent run log -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. AGENT ROSTER VIEW -->
+                <div class="crm-panel-view" id="crm-roster" style="display:none;">
                     <div class="lead-scraper-bar" style="display:flex; gap:16px; margin-bottom:20px; background:rgba(0,0,0,0.15); padding:16px; border-radius:8px; border:1px solid var(--border-color); align-items:center; flex-wrap:wrap;">
                         <div style="display:flex; align-items:center; gap:8px;">
                             <i class="fa-solid fa-spider text-purple" style="font-size:1.5rem;"></i>
@@ -1149,12 +1219,46 @@
                         </button>
                     </div>
 
+                    <div class="dashboard-panel">
+                        <div class="panel-header">
+                            <h3>Agent Roster Database</h3>
+                            <span class="badge" id="crm-roster-count">0 Agents</span>
+                        </div>
+                        <div class="crm-search-row">
+                            <input type="text" id="crm-roster-search" placeholder="Search agent, email, phone, brokerage, city...">
+                            <select id="crm-roster-brokerage-filter">
+                                <option value="">All Brokerages</option>
+                            </select>
+                        </div>
+                        <div class="panel-content">
+                            <div class="crm-roster-table-wrap">
+                                <table class="crm-roster-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Agent</th>
+                                            <th>Brokerage</th>
+                                            <th>Phone</th>
+                                            <th>Socials</th>
+                                            <th>Source</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="crm-roster-body">
+                                        <tr><td colspan="5">No roster contacts loaded yet.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. LEAD COMMUNICATION VIEW -->
+                <div class="crm-panel-view" id="crm-communications" style="display:none;">
                     <div class="crm-layout">
                         <!-- Left: Pipeline & Contacts -->
                         <div class="crm-left">
                             <div class="dashboard-panel">
                                 <div class="panel-header" style="border-bottom:none; padding-bottom:8px;">
-                                    <h3>Acquired Lead Pipeline</h3>
+                                    <h3>Lead Communication</h3>
                                     <span class="badge" id="crm-lead-count">0 Leads</span>
                                 </div>
                                 <div style="padding: 0 16px 12px 16px; display:flex; gap:8px; border-bottom:1px solid var(--border-color); flex-wrap:wrap;">
@@ -1203,7 +1307,7 @@
                     </div>
                 </div>
 
-                <!-- 2. VERIFICATION QUEUE VIEW -->
+                <!-- 4. VERIFICATION QUEUE VIEW -->
                 <div class="crm-panel-view" id="crm-verification" style="display:none;">
                     <div style="background:rgba(255,145,0,0.05); border:1px solid var(--orange); border-radius:8px; padding:12px 16px; margin-bottom:20px; display:flex; align-items:center; gap:12px;">
                         <i class="fa-solid fa-envelope-shield text-orange" style="font-size:1.5rem;"></i>
@@ -1221,7 +1325,7 @@
                     </div>
                 </div>
 
-                <!-- 3. EMAIL CAMPAIGNS VIEW -->
+                <!-- 5. EMAIL CAMPAIGNS VIEW -->
                 <div class="crm-panel-view" id="crm-campaigns" style="display:none;">
                     <div class="dashboard-panel" style="margin-bottom:20px;">
                         <div class="panel-header">
@@ -1289,7 +1393,7 @@
                     </div>
                 </div>
 
-                <!-- 4. CRM AUTOPILOT SETTINGS VIEW -->
+                <!-- 6. CRM AUTOPILOT SETTINGS VIEW -->
                 <div class="crm-panel-view" id="crm-autopilot-settings" style="display:none;">
                     <div class="crm-layout">
                         <!-- Left: Autopilot Rules -->

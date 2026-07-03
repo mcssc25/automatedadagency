@@ -88,6 +88,17 @@ class AutopilotApp {
             leadStageCounts: {},
             leadsStageFilter: 'All',
             leadsSearchQuery: '',
+            crmIntelligence: {
+                brokerages: [],
+                rosterContacts: [],
+                rosterTotal: 0,
+                rosterLimit: 50,
+                rosterOffset: 0,
+                status: null
+            },
+            brokerageSearchQuery: '',
+            rosterSearchQuery: '',
+            rosterBrokerageFilter: '',
             supportSessions: [],
             
             // Current open views
@@ -121,6 +132,7 @@ class AutopilotApp {
         this.dom = {};
         this.crmPersistTimer = null;
         this.crmRefreshTimer = null;
+        this.crmIntelSearchTimer = null;
         this.crmRefreshInFlight = false;
         
         // Bootstrapping the app
@@ -147,6 +159,8 @@ class AutopilotApp {
         this.updateVerificationBadge();
         this.drawPerformanceChart();
         this.renderLeadIntelligenceStatus();
+        this.renderCrmIntelligence();
+        this.renderAgentRoster();
         
         // Load integrations credentials and statuses
         this.loadWebhookSettings();
@@ -248,6 +262,21 @@ class AutopilotApp {
         // CRM Sub-navigation & Panels
         this.dom.crmTabs = document.querySelectorAll(".crm-tab");
         this.dom.crmViews = document.querySelectorAll(".crm-panel-view");
+        this.dom.crmBrokerageSearch = document.getElementById("crm-brokerage-search");
+        this.dom.crmBrokerageList = document.getElementById("crm-brokerage-list");
+        this.dom.btnRefreshCrmIntel = document.getElementById("btn-refresh-crm-intel");
+        this.dom.crmIntelContactCount = document.getElementById("crm-intel-contact-count");
+        this.dom.crmIntelOfficeCount = document.getElementById("crm-intel-office-count");
+        this.dom.crmIntelQueuedCount = document.getElementById("crm-intel-queued-count");
+        this.dom.crmIntelLatestStatus = document.getElementById("crm-intel-latest-status");
+        this.dom.crmIntelLatestMessage = document.getElementById("crm-intel-latest-message");
+        this.dom.crmIntelRunningBadge = document.getElementById("crm-intel-running-badge");
+        this.dom.crmWorkflowRail = document.getElementById("crm-workflow-rail");
+        this.dom.crmRunLog = document.getElementById("crm-run-log");
+        this.dom.crmRosterSearch = document.getElementById("crm-roster-search");
+        this.dom.crmRosterBrokerageFilter = document.getElementById("crm-roster-brokerage-filter");
+        this.dom.crmRosterCount = document.getElementById("crm-roster-count");
+        this.dom.crmRosterBody = document.getElementById("crm-roster-body");
         
         // CRM Lead Scraper
         this.dom.crmScrapeNiche = document.getElementById("crm-scrape-niche");
@@ -406,7 +435,7 @@ class AutopilotApp {
                 break;
             case "crm":
                 title = "Autonomous Sales CRM";
-                subtitle = "Track conversions, leads acquired, and outbound negotiation logs.";
+                subtitle = "Inspect brokerage research, agent roster growth, and live lead communication.";
                 break;
             case "support":
                 title = "24/7 Support Hub";
@@ -628,14 +657,42 @@ class AutopilotApp {
                     this.renderDncList();
                 } else {
                     targetView.style.display = "block";
-                    if (targetId === "crm-pipeline") {
+                    if (targetId === "crm-communications") {
                         this.renderLeadsList();
+                    } else if (targetId === "crm-brokerages") {
+                        this.renderCrmIntelligence();
+                    } else if (targetId === "crm-roster") {
+                        this.renderAgentRoster();
                     } else if (targetId === "crm-campaigns") {
                         this.renderCampaignsList();
                     }
                 }
             });
         });
+
+        if (this.dom.crmBrokerageSearch) {
+            this.dom.crmBrokerageSearch.addEventListener("input", (e) => {
+                this.state.brokerageSearchQuery = e.target.value;
+                this.scheduleCrmIntelligenceLoad();
+            });
+        }
+        if (this.dom.crmRosterSearch) {
+            this.dom.crmRosterSearch.addEventListener("input", (e) => {
+                this.state.rosterSearchQuery = e.target.value;
+                this.state.crmIntelligence.rosterOffset = 0;
+                this.scheduleCrmIntelligenceLoad();
+            });
+        }
+        if (this.dom.crmRosterBrokerageFilter) {
+            this.dom.crmRosterBrokerageFilter.addEventListener("change", (e) => {
+                this.state.rosterBrokerageFilter = e.target.value;
+                this.state.crmIntelligence.rosterOffset = 0;
+                this.loadCrmIntelligence();
+            });
+        }
+        if (this.dom.btnRefreshCrmIntel) {
+            this.dom.btnRefreshCrmIntel.addEventListener("click", () => this.loadCrmIntelligence());
+        }
 
         // Autopilot Settings auto-saving input listeners
         this.dom.contentAutopilotMasterEnabled.addEventListener("change", () => {
@@ -811,6 +868,21 @@ class AutopilotApp {
         if (!Array.isArray(this.state.leads)) this.state.leads = [];
         if (!Array.isArray(this.state.campaignsList)) this.state.campaignsList = [];
         if (!Array.isArray(this.state.verificationQueue)) this.state.verificationQueue = [];
+        if (!this.state.crmIntelligence || typeof this.state.crmIntelligence !== 'object') {
+            this.state.crmIntelligence = {
+                brokerages: [],
+                rosterContacts: [],
+                rosterTotal: 0,
+                rosterLimit: 50,
+                rosterOffset: 0,
+                status: null
+            };
+        }
+        if (!Array.isArray(this.state.crmIntelligence.brokerages)) this.state.crmIntelligence.brokerages = [];
+        if (!Array.isArray(this.state.crmIntelligence.rosterContacts)) this.state.crmIntelligence.rosterContacts = [];
+        this.state.brokerageSearchQuery = this.state.brokerageSearchQuery || '';
+        this.state.rosterSearchQuery = this.state.rosterSearchQuery || '';
+        this.state.rosterBrokerageFilter = this.state.rosterBrokerageFilter || '';
         if (!Array.isArray(this.state.socialPosts)) this.state.socialPosts = [];
         if (!Array.isArray(this.state.competitorTrends)) this.state.competitorTrends = [];
         if (!Array.isArray(this.state.competitorTrendKeywords)) this.state.competitorTrendKeywords = [];
@@ -935,6 +1007,7 @@ class AutopilotApp {
         await this.loadOpenRouterSettings();
         await this.loadLeadIntelligenceStatus();
         await this.loadCrmStateFromServer();
+        await this.loadCrmIntelligence();
         
         // Populate inputs
         document.getElementById("biz-name").value = this.state.bizName;
@@ -971,6 +1044,9 @@ class AutopilotApp {
         this.dom.crmAutoPause.checked = this.state.crmAutopilot.autoPauseOnReply !== false;
         this.dom.crmSimulateUnsubs.checked = false;
         this.state.crmAutopilot.simulateUnsubscribes = false;
+        if (this.dom.crmBrokerageSearch) this.dom.crmBrokerageSearch.value = this.state.brokerageSearchQuery || '';
+        if (this.dom.crmRosterSearch) this.dom.crmRosterSearch.value = this.state.rosterSearchQuery || '';
+        if (this.dom.crmRosterBrokerageFilter) this.dom.crmRosterBrokerageFilter.value = this.state.rosterBrokerageFilter || '';
 
         // Render the competitor list UI from array
         this.renderCompetitorList();
@@ -1059,6 +1135,7 @@ class AutopilotApp {
             this.saveState();
             this.syncAgentToggleUI('leadIntelligence');
             this.renderLeadIntelligenceStatus();
+            this.renderCrmIntelligence();
             return data;
         } catch (error) {
             console.warn("Could not load lead intelligence status:", error.message);
@@ -1166,6 +1243,7 @@ class AutopilotApp {
                 await this.watchLeadIntelligenceRun();
             }
             await this.loadLeadIntelligenceStatus();
+            await this.loadCrmIntelligence();
         } catch (error) {
             this.state.leadIntelligence.running = false;
             this.renderLeadIntelligenceStatus(error.message);
@@ -1351,7 +1429,11 @@ class AutopilotApp {
             if (window.location.hash !== "#crm") return;
             if (this.crmRefreshInFlight) return;
             this.crmRefreshInFlight = true;
-            this.fetchLeadsFromServer().finally(() => {
+            const activeCrmPanel = document.querySelector(".crm-panel-view.active");
+            const shouldRefreshIntel = activeCrmPanel && ['crm-brokerages', 'crm-roster'].includes(activeCrmPanel.id);
+            const refreshes = [this.fetchLeadsFromServer()];
+            if (shouldRefreshIntel) refreshes.push(this.loadCrmIntelligence());
+            Promise.allSettled(refreshes).finally(() => {
                 this.crmRefreshInFlight = false;
             });
         }, 5000);
@@ -1391,6 +1473,248 @@ class AutopilotApp {
             this.renderLeadsList();
             this.renderCampaignWorkflowSummary();
         }
+    }
+
+    scheduleCrmIntelligenceLoad() {
+        if (this.crmIntelSearchTimer) clearTimeout(this.crmIntelSearchTimer);
+        this.crmIntelSearchTimer = setTimeout(() => this.loadCrmIntelligence(), 300);
+    }
+
+    async loadCrmIntelligence() {
+        try {
+            const params = new URLSearchParams({
+                brokerageSearch: this.state.brokerageSearchQuery || '',
+                rosterSearch: this.state.rosterSearchQuery || '',
+                rosterBrokerage: this.state.rosterBrokerageFilter || '',
+                rosterLimit: String(this.state.crmIntelligence?.rosterLimit || 50),
+                rosterOffset: String(this.state.crmIntelligence?.rosterOffset || 0),
+                brokerageLimit: '40'
+            });
+            const response = await fetch(`/api/crm-intelligence?${params.toString()}`);
+            if (!response.ok) throw new Error(await this.parseApiError(response, "CRM intelligence unavailable"));
+            const data = await response.json();
+            this.state.crmIntelligence = {
+                ...this.state.crmIntelligence,
+                brokerages: Array.isArray(data.brokerages) ? data.brokerages : [],
+                rosterContacts: Array.isArray(data.rosterContacts) ? data.rosterContacts : [],
+                rosterTotal: Number(data.rosterTotal || 0),
+                rosterLimit: Number(data.rosterLimit || 50),
+                rosterOffset: Number(data.rosterOffset || 0),
+                status: data.status || null
+            };
+            this.renderCrmIntelligence();
+            this.renderAgentRoster();
+            return data;
+        } catch (error) {
+            console.warn("Could not load CRM intelligence:", error.message);
+            if (this.dom.crmBrokerageList) {
+                this.dom.crmBrokerageList.innerHTML = `<div class="empty-state"><p>CRM intelligence unavailable: ${this.escapeHtml(error.message)}</p></div>`;
+            }
+            return null;
+        }
+    }
+
+    countStatusRows(rows = [], statuses = []) {
+        const wanted = statuses.map(item => String(item).toLowerCase());
+        return rows.reduce((sum, row) => {
+            return wanted.includes(String(row.status || '').toLowerCase()) ? sum + Number(row.count || 0) : sum;
+        }, 0);
+    }
+
+    formatShortDate(value) {
+        if (!value) return 'Not yet';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    safeExternalUrl(value) {
+        try {
+            const url = new URL(String(value || '').trim());
+            return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    cleanIntelText(value) {
+        const text = String(value || '').trim();
+        if (!text || /^unknown|n\/a|none$/i.test(text)) return '';
+        return text;
+    }
+
+    summarizeBrokeragePositioning(brokerage = {}) {
+        const crm = this.cleanIntelText(brokerage.crmOffering);
+        const esign = this.cleanIntelText(brokerage.esignOffering);
+        const leadTools = this.cleanIntelText(brokerage.leadTools);
+        const video = this.cleanIntelText(brokerage.videoEmail);
+        const strengths = [];
+        const gaps = [];
+
+        if (crm) strengths.push(`CRM/admin stack: ${crm}`);
+        if (esign) strengths.push(`Transaction/e-sign support: ${esign}`);
+        if (leadTools) strengths.push(`Lead support: ${leadTools}`);
+        if (!strengths.length) strengths.push('Brand, office support, and brokerage-provided tools are the visible advantages to respect.');
+
+        if (!video) gaps.push('Video email and personalized content automation are not visible.');
+        if (!crm) gaps.push('CRM specifics are unclear, so lead follow-up visibility is a campaign opening.');
+        if (!leadTools) gaps.push('Agent-level lead nurture and response tracking are not clearly advertised.');
+        if (crm || esign || leadTools) gaps.push('Position our offer around done-for-agent outreach, faster response handling, and campaign visibility beyond generic brokerage systems.');
+
+        return {
+            strengths: strengths.slice(0, 2).join(' '),
+            gaps: gaps.slice(0, 3).join(' ')
+        };
+    }
+
+    renderCrmIntelligence() {
+        const intel = this.state.crmIntelligence || {};
+        const status = intel.status || this.state.leadIntelligence?.status || {};
+        const recentRuns = Array.isArray(status.recentRuns) ? status.recentRuns : [];
+        const latestRun = recentRuns[0] || null;
+        const officeRows = status.offices || [];
+        const contacts = Number(status.contacts || intel.rosterTotal || 0);
+        const officeTotal = officeRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+        const queued = this.countStatusRows(officeRows, ['Pending', 'Discovered', 'Retry']);
+        const harvested = this.countStatusRows(officeRows, ['Harvested']);
+        const blocked = this.countStatusRows(officeRows, ['Blocked']);
+
+        if (this.dom.crmIntelContactCount) this.dom.crmIntelContactCount.innerText = contacts.toLocaleString();
+        if (this.dom.crmIntelOfficeCount) this.dom.crmIntelOfficeCount.innerText = officeTotal.toLocaleString();
+        if (this.dom.crmIntelQueuedCount) this.dom.crmIntelQueuedCount.innerText = queued.toLocaleString();
+        if (this.dom.crmIntelLatestStatus) this.dom.crmIntelLatestStatus.innerText = latestRun ? String(latestRun.status || 'Updated') : 'Idle';
+        if (this.dom.crmIntelLatestMessage) this.dom.crmIntelLatestMessage.innerText = latestRun ? (latestRun.message || latestRun.error || 'Worker run recorded') : 'No recent worker run loaded';
+        if (this.dom.crmIntelRunningBadge) {
+            this.dom.crmIntelRunningBadge.innerText = this.state.leadIntelligence?.running ? 'Worker Running' : 'Worker Idle';
+            this.dom.crmIntelRunningBadge.className = this.state.leadIntelligence?.running ? 'badge warning-badge' : 'badge';
+        }
+
+        if (this.dom.crmWorkflowRail) {
+            const profiles = status.profiles || [];
+            const profileTotal = profiles.reduce((sum, row) => sum + Number(row.count || 0), 0);
+            const workflowSteps = [
+                ['fa-map-location-dot', 'Market discovery', `${profileTotal.toLocaleString()} brokerage profile(s) tracked from seeded markets and searches.`],
+                ['fa-list-check', 'Systems research', `${this.countStatusRows(profiles, ['Researched']).toLocaleString()} researched profile(s); ${this.countStatusRows(profiles, ['Pending', 'Needs Research']).toLocaleString()} waiting for system details.`],
+                ['fa-users-viewfinder', 'Roster harvest', `${harvested.toLocaleString()} harvested office(s), ${queued.toLocaleString()} queued, ${blocked.toLocaleString()} blocked by site protection or no public contacts.`],
+                ['fa-envelope-open-text', 'Campaign inputs', `${contacts.toLocaleString()} agent contact(s) available to shape brokerage-specific email angles.`]
+            ];
+            this.dom.crmWorkflowRail.innerHTML = workflowSteps.map(([icon, title, body]) => `
+                <div class="crm-work-step">
+                    <i class="fa-solid ${icon}"></i>
+                    <div><strong>${this.escapeHtml(title)}</strong><span>${this.escapeHtml(body)}</span></div>
+                </div>
+            `).join('');
+        }
+
+        if (this.dom.crmRunLog) {
+            this.dom.crmRunLog.innerHTML = recentRuns.length
+                ? recentRuns.slice(0, 6).map(run => {
+                    const stats = run.stats || {};
+                    const detail = [
+                        stats.brokerage ? `Brokerage: ${stats.brokerage}` : '',
+                        Number.isFinite(Number(stats.contacts)) ? `${stats.contacts} contacts` : '',
+                        Number.isFinite(Number(stats.pagesScanned)) ? `${stats.pagesScanned} pages` : '',
+                        run.error ? `Error: ${run.error}` : ''
+                    ].filter(Boolean).join(' | ');
+                    return `
+                        <div class="crm-run-item">
+                            <strong>${this.escapeHtml(run.status || 'Run')} · ${this.escapeHtml(this.formatShortDate(run.finishedAt || run.startedAt))}</strong>
+                            <span>${this.escapeHtml(run.message || detail || 'Lead intelligence run recorded.')}</span>
+                            ${detail && detail !== run.message ? `<span>${this.escapeHtml(detail)}</span>` : ''}
+                        </div>
+                    `;
+                }).join('')
+                : `<div class="empty-state"><p>No backend lead-intelligence runs recorded yet.</p></div>`;
+        }
+
+        if (!this.dom.crmBrokerageList) return;
+        const brokerages = intel.brokerages || [];
+        if (!brokerages.length) {
+            this.dom.crmBrokerageList.innerHTML = `<div class="empty-state"><i class="fa-solid fa-database"></i><p>No brokerage profiles match this search yet.</p></div>`;
+            return;
+        }
+
+        this.dom.crmBrokerageList.innerHTML = brokerages.map(brokerage => {
+            const positioning = this.summarizeBrokeragePositioning(brokerage);
+            const siteUrl = this.safeExternalUrl(brokerage.website || brokerage.nationalWebsite);
+            const offices = Array.isArray(brokerage.offices) ? brokerage.offices : [];
+            const officeChips = offices.slice(0, 5).map(office => {
+                const label = `${office.city || ''}${office.state ? `, ${office.state}` : ''}`.trim() || 'Office';
+                return `<span class="brokerage-chip">${this.escapeHtml(label)} · ${this.escapeHtml(office.status || 'Pending')} · ${Number(office.contactCount || 0)} agents</span>`;
+            }).join('');
+            return `
+                <article class="brokerage-card">
+                    <div class="brokerage-card-header">
+                        <div>
+                            <h4>${this.escapeHtml(brokerage.name || 'Unknown Brokerage')}</h4>
+                            <p>${this.escapeHtml(brokerage.category || 'Brokerage profile')} · ${Number(brokerage.contactsCount || 0)} roster contact(s) · ${Number(brokerage.officesCount || 0)} office(s)</p>
+                        </div>
+                        ${siteUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(siteUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-globe"></i>Site</a>` : ''}
+                    </div>
+                    <div class="brokerage-chip-row">
+                        <span class="brokerage-chip">${this.escapeHtml(brokerage.researchStatus || 'Pending')}</span>
+                        <span class="brokerage-chip">${Number(brokerage.harvestedOffices || 0)} harvested</span>
+                        <span class="brokerage-chip">${Number(brokerage.queuedOffices || 0)} queued</span>
+                        <span class="brokerage-chip">${Number(brokerage.blockedOffices || 0)} blocked</span>
+                    </div>
+                    <div class="brokerage-card-section">
+                        <div><strong>Systems They Offer</strong><p>${this.escapeHtml([brokerage.crmOffering, brokerage.esignOffering, brokerage.leadTools, brokerage.videoEmail].map(v => this.cleanIntelText(v)).filter(Boolean).join(' | ') || 'Not researched yet.')}</p></div>
+                        <div><strong>Strength Against Us</strong><p>${this.escapeHtml(positioning.strengths)}</p></div>
+                        <div><strong>Gap We Can Fill</strong><p>${this.escapeHtml(positioning.gaps)}</p></div>
+                        <div><strong>Email Campaign Angle</strong><p>${this.escapeHtml(brokerage.notes || 'Write around agent time saved, faster lead response, and visibility into follow-up work.')}</p></div>
+                    </div>
+                    ${officeChips ? `<div class="brokerage-office-row">${officeChips}</div>` : ''}
+                </article>
+            `;
+        }).join('');
+    }
+
+    renderAgentRoster() {
+        const intel = this.state.crmIntelligence || {};
+        const contacts = intel.rosterContacts || [];
+        if (this.dom.crmRosterCount) {
+            this.dom.crmRosterCount.innerText = `${Number(intel.rosterTotal || 0).toLocaleString()} Agents`;
+        }
+
+        if (this.dom.crmRosterBrokerageFilter) {
+            const current = this.state.rosterBrokerageFilter || '';
+            const names = [...new Set((intel.brokerages || []).map(item => item.name).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+            this.dom.crmRosterBrokerageFilter.innerHTML = [
+                `<option value="">All Brokerages</option>`,
+                ...names.map(name => `<option value="${this.escapeHtml(name)}"${name === current ? ' selected' : ''}>${this.escapeHtml(name)}</option>`)
+            ].join('');
+        }
+
+        if (!this.dom.crmRosterBody) return;
+        if (!contacts.length) {
+            this.dom.crmRosterBody.innerHTML = `<tr><td colspan="5">No roster contacts match this search yet.</td></tr>`;
+            return;
+        }
+
+        this.dom.crmRosterBody.innerHTML = contacts.map(contact => {
+            const socials = contact.socials && typeof contact.socials === 'object' ? contact.socials : {};
+            const socialLinks = Object.entries(socials)
+                .filter(([, href]) => this.safeExternalUrl(href))
+                .map(([label, href]) => `<a class="roster-social-link" href="${this.escapeHtml(this.safeExternalUrl(href))}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(label)}</a>`)
+                .join('');
+            const sourceUrl = this.safeExternalUrl(contact.sourceUrl || contact.website);
+            const emailHref = contact.email ? `mailto:${encodeURIComponent(contact.email)}` : '';
+            return `
+                <tr>
+                    <td>
+                        <strong>${this.escapeHtml(contact.name || 'Unknown Agent')}</strong>
+                        ${contact.email ? `<small><a class="roster-social-link" href="${emailHref}">${this.escapeHtml(contact.email)}</a></small>` : ''}
+                    </td>
+                    <td>
+                        ${this.escapeHtml(contact.brokerageName || 'Unknown Brokerage')}
+                        <small>${this.escapeHtml([contact.city, contact.state].filter(Boolean).join(', '))}</small>
+                    </td>
+                    <td>${this.escapeHtml(contact.phone || 'Not found')}</td>
+                    <td><div class="roster-socials">${socialLinks || '<span class="text-muted">Not found</span>'}</div></td>
+                    <td>${sourceUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i>Source</a>` : '<span class="text-muted">No source</span>'}</td>
+                </tr>
+            `;
+        }).join('');
     }
 
     clearKnownDemoState() {
@@ -4306,18 +4630,19 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         }
 
         this.dom.crmChatMessages.innerHTML = lead.history.map(m => {
+            const messageText = this.escapeHtml(m.text || '').replace(/\n/g, "<br>");
             if (m.sender === 'agent-action') {
-                return `<div class="chat-bubble agent-action">${m.text}</div>`;
+                return `<div class="chat-bubble agent-action">${messageText}</div>`;
             }
             const senderName = m.sender === 'agent' ? 'Sales Agent' : lead.name;
             const bubbleClass = m.sender === 'agent' ? 'agent-msg' : 'lead-msg';
             return `
                 <div class="chat-bubble ${bubbleClass}">
                     <div class="msg-header">
-                        <span>${senderName}</span>
-                        <span>${m.time}</span>
+                        <span>${this.escapeHtml(senderName)}</span>
+                        <span>${this.escapeHtml(m.time || '')}</span>
                     </div>
-                    <p>${m.text.replace(/\n/g, "<br>")}</p>
+                    <p>${messageText}</p>
                 </div>
             `;
         }).join("");
@@ -4490,6 +4815,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             if (data.leads && data.leads.length > 0) {
                 this.state.leadsPage = 1;
                 await this.loadCrmStateFromServer();
+                await this.loadCrmIntelligence();
                 
                 let logMsg = `Scraped and loaded ${data.leads.length} leads for "${niche}" into pipeline via ${data.source || 'lead scraper'}.`;
                 if (data.warnings && data.warnings.length) {

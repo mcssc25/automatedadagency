@@ -725,6 +725,75 @@ function getBrokerageProfileByName(name) {
     return prepareBrokerageProfile(row);
 }
 
+function getBrokerageResearch({ search = '', limit = 30 } = {}) {
+    const params = [];
+    let where = '';
+
+    if (search) {
+        where = `
+            WHERE p.name LIKE ?
+               OR p.category LIKE ?
+               OR p.crmOffering LIKE ?
+               OR p.esignOffering LIKE ?
+               OR p.leadTools LIKE ?
+               OR p.notes LIKE ?
+        `;
+        const wild = `%${search}%`;
+        params.push(wild, wild, wild, wild, wild, wild);
+    }
+
+    params.push(Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100));
+
+    const rows = db.prepare(`
+        SELECT
+            p.*,
+            COUNT(DISTINCT o.id) AS officesCount,
+            SUM(CASE WHEN o.status = 'Harvested' THEN 1 ELSE 0 END) AS harvestedOffices,
+            SUM(CASE WHEN o.status IN ('Pending', 'Discovered', 'Retry') THEN 1 ELSE 0 END) AS queuedOffices,
+            SUM(CASE WHEN o.status = 'Blocked' THEN 1 ELSE 0 END) AS blockedOffices,
+            MAX(o.updatedAt) AS lastOfficeUpdate,
+            COALESCE(rc.contactsCount, 0) AS contactsCount
+        FROM brokerage_profiles p
+        LEFT JOIN brokerage_offices o
+            ON o.brokerageProfileId = p.id
+            OR LOWER(o.brokerageName) = LOWER(p.name)
+        LEFT JOIN (
+            SELECT LOWER(brokerageName) AS brokerageKey, COUNT(*) AS contactsCount
+            FROM roster_contacts
+            GROUP BY LOWER(brokerageName)
+        ) rc ON rc.brokerageKey = LOWER(p.name)
+        ${where}
+        GROUP BY p.id
+        ORDER BY
+            COALESCE(rc.contactsCount, 0) DESC,
+            harvestedOffices DESC,
+            officesCount DESC,
+            COALESCE(p.researchedAt, p.updatedAt) DESC
+        LIMIT ?
+    `).all(...params);
+
+    const officesByBrokerage = db.prepare(`
+        SELECT brokerageName, city, state, status, contactCount, rosterPageCount, rosterUrl, website, lastHarvestAt, lastError
+        FROM brokerage_offices
+        WHERE LOWER(brokerageName) = LOWER(?)
+        ORDER BY
+            CASE status WHEN 'Harvested' THEN 0 WHEN 'Pending' THEN 1 WHEN 'Discovered' THEN 2 WHEN 'Blocked' THEN 3 ELSE 4 END,
+            updatedAt DESC
+        LIMIT 5
+    `);
+
+    return rows.map(row => ({
+        ...prepareBrokerageProfile(row),
+        officesCount: row.officesCount || 0,
+        harvestedOffices: row.harvestedOffices || 0,
+        queuedOffices: row.queuedOffices || 0,
+        blockedOffices: row.blockedOffices || 0,
+        contactsCount: row.contactsCount || 0,
+        lastOfficeUpdate: row.lastOfficeUpdate || null,
+        offices: officesByBrokerage.all(row.name)
+    }));
+}
+
 function getNextBrokerageProfileForResearch() {
     const row = db.prepare(`
         SELECT *
@@ -882,6 +951,68 @@ function upsertRosterContact(contact = {}) {
     return prepareRosterContact(row);
 }
 
+function getRosterContacts({ search = '', brokerage = '', limit = 50, offset = 0 } = {}) {
+    const params = [];
+    let sql = `
+        SELECT *
+        FROM roster_contacts
+        WHERE 1=1
+    `;
+
+    if (brokerage) {
+        sql += ' AND LOWER(brokerageName) = LOWER(?)';
+        params.push(normalizeText(brokerage));
+    }
+
+    if (search) {
+        sql += `
+            AND (
+                name LIKE ?
+                OR email LIKE ?
+                OR phone LIKE ?
+                OR brokerageName LIKE ?
+                OR city LIKE ?
+                OR state LIKE ?
+            )
+        `;
+        const wild = `%${search}%`;
+        params.push(wild, wild, wild, wild, wild, wild);
+    }
+
+    sql += ' ORDER BY updatedAt DESC, id DESC LIMIT ? OFFSET ?';
+    params.push(Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200), Math.max(parseInt(offset, 10) || 0, 0));
+
+    return db.prepare(sql).all(...params).map(prepareRosterContact);
+}
+
+function getRosterContactsCount({ search = '', brokerage = '' } = {}) {
+    const params = [];
+    let sql = 'SELECT COUNT(*) AS count FROM roster_contacts WHERE 1=1';
+
+    if (brokerage) {
+        sql += ' AND LOWER(brokerageName) = LOWER(?)';
+        params.push(normalizeText(brokerage));
+    }
+
+    if (search) {
+        sql += `
+            AND (
+                name LIKE ?
+                OR email LIKE ?
+                OR phone LIKE ?
+                OR brokerageName LIKE ?
+                OR city LIKE ?
+                OR state LIKE ?
+            )
+        `;
+        const wild = `%${search}%`;
+        params.push(wild, wild, wild, wild, wild, wild);
+    }
+
+    const result = db.prepare(sql).get(...params);
+    return result ? result.count : 0;
+}
+
 function insertIntelligenceRun(run = {}) {
     const stmt = db.prepare(`
         INSERT INTO intelligence_runs (type, status, brokerageOfficeId, cityId, message, statsJson, error)
@@ -975,12 +1106,15 @@ module.exports = {
     updateMarketCity,
     upsertBrokerageProfile,
     getBrokerageProfileByName,
+    getBrokerageResearch,
     getNextBrokerageProfileForResearch,
     upsertBrokerageOffice,
     getNextBrokerageOfficeForHarvest,
     updateBrokerageOffice,
     suppressQueuedBrokerageBrand,
     upsertRosterContact,
+    getRosterContacts,
+    getRosterContactsCount,
     insertIntelligenceRun,
     updateIntelligenceRun,
     getLeadIntelligenceStatus,

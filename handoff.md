@@ -13,10 +13,24 @@ Last updated: 2026-07-03
 ## Current Repo / Deploy State
 
 - Branch: `main`.
-- Latest pushed commit before this handoff refresh: `39529c7 Extract embedded Coldwell Banker roster emails`.
+- Latest commit/repo status after this handoff refresh: current `main` HEAD includes the CRM rework and docs refresh; branch is intended to be pushed and deployed live.
+- CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Production container was healthy after the Coldwell Banker raw-email extractor deployments.
 - Runtime secrets/data are ignored and must stay out of git: `.env`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
 - OpenRouter and Make.com webhook settings persist in production runtime `data/credentials.json` on the mounted `/opt/ad-agency-autopilot/data` volume.
+
+## Latest CRM Rework
+
+- Sales CRM now has visible work sections:
+  - Brokerage Research: shows brokerages being researched, systems they offer, inferred strengths/gaps, campaign angle notes, office harvest status, and backend worker flow.
+  - Agent Roster: shows roster contacts with name, email, phone, brokerage, city/state, source links, socials when available, and search/filter controls.
+  - Lead Communication: preserves the prior clicked-lead info header and conversation log layout, now as its own tab.
+- Added read-only backend endpoint `GET /api/crm-intelligence` backed by new `db.js` helpers:
+  - `getBrokerageResearch`
+  - `getRosterContacts`
+  - `getRosterContactsCount`
+- Frontend CRM polling refreshes brokerage/roster data while those tabs are active. Manual Lead Intelligence runs and lead scrapes also refresh the new CRM intelligence views.
+- Existing campaign verification, outreach campaigns, and autopilot settings tabs remain available.
 
 ## Lead Intelligence Worker
 
@@ -78,7 +92,10 @@ Last updated: 2026-07-03
 ## Verification From Latest Code Work
 
 - Local `node --check server.js` passed.
+- Local `node --check app.js` and `node --check db.js` passed after the CRM rework.
 - Local `git diff --check` passed with only normal Windows CRLF warnings.
+- Direct DB helper smoke passed: returned brokerage rows, roster totals, and lead-intelligence status from local SQLite.
+- HTTP smoke passed on `PORT=3133` with admin auth disabled for the local test: `/api/crm-intelligence?brokerageLimit=3&rosterLimit=3` returned brokerages, roster fields, totals, and status.
 - Deployed `/app/server.js` syntax check passed.
 - Production manual runs proved the raw Coldwell Banker extractor end to end.
 - Deployment backups from the Coldwell work:
@@ -89,6 +106,8 @@ Last updated: 2026-07-03
 
 ## Next Steps
 
+- Review the new CRM tabs live after deployment.
+- Production should show real roster contacts from the VPS SQLite data even though the local smoke DB had `0` roster contacts.
 - Run the worker through remaining Coldwell Banker cities now that they are restored to `Pending`.
 - Build brand-specific raw/network extractors for each major brokerage brand instead of treating every no-DOM-email page as a dead end.
 - Investigate each brand in this order: raw HTML, embedded JSON/script payloads, public network responses, browser fallback, AI fallback.

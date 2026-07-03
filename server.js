@@ -645,6 +645,39 @@ app.get('/api/leads', (req, res) => {
     }
 });
 
+app.get('/api/crm-intelligence', (req, res) => {
+    try {
+        const brokerageSearch = String(req.query.brokerageSearch || '').trim();
+        const rosterSearch = String(req.query.rosterSearch || '').trim();
+        const rosterBrokerage = String(req.query.rosterBrokerage || '').trim();
+        const rosterLimit = Math.min(Math.max(parseInt(req.query.rosterLimit, 10) || 50, 1), 200);
+        const rosterOffset = Math.max(parseInt(req.query.rosterOffset, 10) || 0, 0);
+        const brokerageLimit = Math.min(Math.max(parseInt(req.query.brokerageLimit, 10) || 30, 1), 100);
+
+        const rosterFilters = {
+            search: rosterSearch,
+            brokerage: rosterBrokerage,
+            limit: rosterLimit,
+            offset: rosterOffset
+        };
+
+        res.json({
+            brokerages: db.getBrokerageResearch({
+                search: brokerageSearch,
+                limit: brokerageLimit
+            }),
+            rosterContacts: db.getRosterContacts(rosterFilters),
+            rosterTotal: db.getRosterContactsCount(rosterFilters),
+            rosterLimit,
+            rosterOffset,
+            status: db.getLeadIntelligenceStatus()
+        });
+    } catch (err) {
+        console.error('[CRM Intelligence API Error]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Update a single lead stage/history
 app.put('/api/leads/:id', (req, res) => {
     try {
