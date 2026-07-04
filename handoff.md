@@ -21,6 +21,7 @@ Last updated: 2026-07-03
 - Latest OpenRouter free-model guard commit: `7ddf483 Enforce free OpenRouter models`, pushed to `origin/main` and deployed live.
 - Latest roster-gated brokerage research code commit: `32f654f Gate brokerage research on roster success`, pushed to `origin/main` and deployed live.
 - Latest OpenRouter-only/first-zero-contact suppression commit: `0d435f8 Force OpenRouter lead intelligence research`, pushed to `origin/main` and deployed live.
+- Latest worker shutdown/default-off change: pending commit, not deployed yet.
 - CRM rework changed `app.js`, `db.js`, `server.js`, `index.html`, `index.css`, `MEMORY.md`, and `handoff.md`.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T210917Z-crm-research-visibility`.
 - Research-signals deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260703T212258Z-brokerage-research-signals`.
@@ -60,6 +61,7 @@ Last updated: 2026-07-03
 - Browser controls are live:
   - Agency Onboarding has a Lead Intelligence Worker toggle.
   - Dashboard Workflow Status lists the worker, shows hidden DB counts, and has a Run Now button.
+- Auto-schedule is intentionally off now: browser runtime setting is `enabled:false`, CRM pipeline toggles are false, and Docker default changed to `LEAD_INTELLIGENCE_ENABLED=false` so rebuilds/restarts do not re-enable hourly Lead Intelligence without an explicit setting.
 - Main endpoints: `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/settings`, `POST /api/lead-intelligence/seed`, `POST /api/lead-intelligence/run-once`.
 - Run Now uses the async path `/api/lead-intelligence/run-once?async=true` to avoid Cloudflare/proxy timeout alerts.
 - Brokerage systems research is gated behind roster success when `LEAD_INTELLIGENCE_RESEARCH_TECH_STACK=true`: the worker saves roster contacts first, only researches brokerages with at least one roster contact and no `Do Not Scrape` office, and marks zero-contact/unharvestable brokerages `Do Not Scrape` after the first zero-contact result so queued same-name offices are skipped before more scrape or AI spend.
