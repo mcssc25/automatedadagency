@@ -5469,6 +5469,35 @@ async function sendMailgunEmail({ to, subject, text }) {
     return response.data;
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableMailgunError(error) {
+    const status = error && error.response ? error.response.status : null;
+    if (status === 429) return true;
+    if (status >= 500 && status <= 599) return true;
+    return Boolean(error && error.request && !error.response);
+}
+
+async function sendMailgunEmailWithRetry(message, { attempts = 3, baseDelayMs = 1500 } = {}) {
+    let lastError;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            return await sendMailgunEmail(message);
+        } catch (err) {
+            lastError = err;
+            if (attempt >= attempts || !isRetryableMailgunError(err)) {
+                throw err;
+            }
+            const delayMs = baseDelayMs * attempt;
+            console.warn(`[Mailgun Retry] Attempt ${attempt} failed, retrying in ${delayMs}ms: ${err.message}`);
+            await sleep(delayMs);
+        }
+    }
+    throw lastError;
+}
+
 function getConfiguredCampaignChain(settings = readCrmSettings()) {
     return [
         settings.firstCampaignId,
@@ -5889,19 +5918,17 @@ Otherwise, set "requiresHandoff" to false. Ensure the response is valid JSON onl
             const cleaned = rawResponse.replace(/```json|```/g, "").trim();
             replyJson = JSON.parse(cleaned);
         } catch (err) {
-            console.error('[Inbound Webhook] Gemini query failed, using fallback:', err.message);
-            const bookingFallback = settings.bookingLink
-                ? `You can select a time that works best for you here: ${settings.bookingLink}`
-                : 'Reply with a couple times that work for you and we can coordinate from there';
+            console.error('[Inbound Webhook] Gemini query failed, routing to human review:', err.message);
             replyJson = {
-                replyText: `Hi ${lead.name.split(" ")[0]},\n\nThanks for your response. I would love to set up a quick 10-minute call to show you how we can help automate your workflow. ${bookingFallback}. Let me know if you have any questions!\n\nBest,`,
-                requiresHandoff: false,
-                reason: "Fallback response used"
+                replyText: '',
+                requiresHandoff: true,
+                reason: `Gemini failed to draft a reply: ${err.message}`
             };
         }
         replyJson.replyText = applySalesAssetPlaceholders(replyJson.replyText, settings, req.body.bizWebsite || '');
+        let handoffRequired = replyJson.requiresHandoff === true;
         
-        if (replyJson.requiresHandoff) {
+        if (handoffRequired) {
             lead.stage = "Needs Human Action";
             lead.history.push({
                 sender: "agent-action",
@@ -5912,7 +5939,7 @@ Otherwise, set "requiresHandoff" to false. Ensure the response is valid JSON onl
             console.log(`[CRM Handoff] Lead ${lead.name} (${lead.email}) requires handoff. Reason: ${replyJson.reason}`);
         } else {
             try {
-                await sendMailgunEmail({
+                await sendMailgunEmailWithRetry({
                     to: lead.email,
                     subject: subject.startsWith('Re:') ? subject : `Re: ${subject}`,
                     text: replyJson.replyText
@@ -5924,12 +5951,24 @@ Otherwise, set "requiresHandoff" to false. Ensure the response is valid JSON onl
                     text: replyJson.replyText
                 });
             } catch (sendErr) {
-                console.error('[Inbound Webhook] Failed to send email reply:', sendErr.message);
+                lead.stage = "Needs Human Action";
+                lead.history.push({
+                    sender: "agent-action",
+                    time: "Just Now",
+                    text: `Auto-reply failed after Mailgun retry. Human review needed. Error: ${sendErr.message}`
+                });
+                lead.history.push({
+                    sender: "agent-draft",
+                    time: new Date().toLocaleTimeString(),
+                    text: replyJson.replyText
+                });
+                handoffRequired = true;
+                console.error('[Inbound Webhook] Failed to send email reply after retry:', sendErr.message);
             }
         }
         
         db.updateLead(lead);
-        res.json({ success: true, handoff: replyJson.requiresHandoff });
+        res.json({ success: true, handoff: handoffRequired });
     } catch (error) {
         console.error('[Inbound Webhook Error]', error.message);
         res.status(500).json({ error: error.message });
