@@ -15,9 +15,10 @@ Last updated: 2026-07-04
 
 - Branch: `main`.
 - Latest deployed known production changes include CRM visibility `4b7b1a2`, brokerage research signals `17dddd4`, response inbox `e4d8392`, real activity log `561c0ed`, stale research refresh `3124543`, OpenRouter free-model guard `7ddf483`, roster-gated research `32f654f`, and OpenRouter-only suppression `0d435f8`.
-- Latest deployed commit: `416f8bb Harden inbound AI responder handoff`, pushed to `origin/main` and deployed live.
-- Current local update: Human Review CRM tab in `index.html`, `app.js`, and `index.css`; not committed or deployed yet.
+- Latest deployed commit: `852be6d Add CRM human review queue`, pushed to `origin/main` and deployed live.
+- Prior responder safety commit: `416f8bb Harden inbound AI responder handoff`, pushed to `origin/main` and deployed live.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T101750Z-inbound-responder-handoff`.
+- Human Review deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T103338Z-human-review-crm`.
 
 ## Latest Change
 
@@ -47,8 +48,9 @@ Last updated: 2026-07-04
 - Local smoke on `PORT=3134` with admin auth off returned valid JSON for `/api/leads?stage=Needs%20Human%20Action&page=1&limit=5`.
 - Production Docker rebuild/restart of only `ad-agency-autopilot` succeeded.
 - Production container reported `healthy`.
-- In-container `node --check /app/server.js` passed.
+- In-container `node --check /app/app.js` and `node --check /app/server.js` passed.
 - Production HTTP smoke against `http://127.0.0.1:3100/api/app-config` returned JSON with `geminiConfigured:true` and `openRouterConfigured:true`.
+- Production authenticated in-container smoke returned `200` and valid JSON for `/api/leads?stage=Needs%20Human%20Action&page=1&limit=5`.
 - No full Mailgun/Gemini webhook integration smoke was run yet; live behavior still needs a controlled inbound reply test.
 
 ## Next Steps
