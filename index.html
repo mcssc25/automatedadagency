@@ -1220,6 +1220,15 @@
                         <button class="btn btn-primary" id="btn-crm-scrape" style="align-self:flex-end; height:41px;">
                             <i class="fa-solid fa-magnifying-glass"></i> Scrape Leads
                         </button>
+                        <div style="display:flex; flex-direction:column; gap:6px; min-width:220px; flex:1;">
+                            <label style="font-size:0.75rem; font-weight:600; text-transform:uppercase; color:var(--text-secondary);">Import Contacts</label>
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                <input type="file" id="crm-csv-import-file" accept=".csv,text/csv" style="max-width:220px; color:var(--text-secondary); font-size:0.78rem;">
+                                <button class="btn btn-outline" id="btn-crm-csv-import" type="button" style="height:36px; padding:6px 10px;">
+                                    <i class="fa-solid fa-file-arrow-up"></i> Upload CSV
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="dashboard-panel">

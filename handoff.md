@@ -17,11 +17,16 @@ Last updated: 2026-07-04
 - Latest deployed known production changes include CRM visibility `4b7b1a2`, brokerage research signals `17dddd4`, response inbox `e4d8392`, real activity log `561c0ed`, stale research refresh `3124543`, OpenRouter free-model guard `7ddf483`, roster-gated research `32f654f`, and OpenRouter-only suppression `0d435f8`.
 - Latest deployed commit: `852be6d Add CRM human review queue`, pushed to `origin/main` and deployed live.
 - Prior responder safety commit: `416f8bb Harden inbound AI responder handoff`, pushed to `origin/main` and deployed live.
+- Current local update: CSV contact import in `server.js`, `app.js`, and `index.html`; not committed or deployed yet.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T101750Z-inbound-responder-handoff`.
 - Human Review deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T103338Z-human-review-crm`.
 
 ## Latest Change
 
+- Added CSV contact import controls to the Agent Roster acquisition bar.
+- New endpoint: `POST /api/leads/import-csv` with multipart field `contactsCsv`; uploads are memory-only and capped at 5 MB / 1,000 imported contacts.
+- CSV import accepts common headers such as name/full name/first name/last name, email/email address, brokerage/company, phone, website/url, address, and source URL.
+- Imported contacts reuse `insertLeadCandidates`, so invalid emails, DNC emails, and duplicate emails/identities are skipped; successful imports become `Scraped` leads eligible for normal campaign launch.
 - Added a dedicated Sales CRM `Human Review` tab next to Lead Communication.
 - Human Review fetches `/api/leads?stage=Needs%20Human%20Action`, has its own search/pagination state, and shows a tab badge for waiting review items.
 - Selecting a review item shows the handoff reason, conversation history, management actions, and preserved `agent-draft` entries.
@@ -45,6 +50,7 @@ Last updated: 2026-07-04
 - Local `node --check server.js` passed after the inbound responder update.
 - Local `node --check app.js` passed after the Human Review tab update.
 - Local `git diff --check` passed with only normal Windows CRLF warnings.
+- Local CSV import smoke on `PORT=3135` with admin auth off added 2 leads from a test CSV, then a second upload skipped both as duplicates; smoke test rows/files were cleaned up afterward.
 - Local smoke on `PORT=3134` with admin auth off returned valid JSON for `/api/leads?stage=Needs%20Human%20Action&page=1&limit=5`.
 - Production Docker rebuild/restart of only `ad-agency-autopilot` succeeded.
 - Production container reported `healthy`.

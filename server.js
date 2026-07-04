@@ -123,6 +123,13 @@ const mailgunUpload = multer({
         fieldSize: 2 * 1024 * 1024
     }
 });
+const csvUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        files: 1,
+        fileSize: 5 * 1024 * 1024
+    }
+});
 
 if (ADMIN_AUTH_ENABLED && !ADMIN_PASSWORD) {
     throw new Error('ADMIN_PASSWORD must be configured when admin authentication is enabled.');
@@ -745,6 +752,53 @@ app.get('/api/crm-intelligence', (req, res) => {
         });
     } catch (err) {
         console.error('[CRM Intelligence API Error]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/leads/import-csv', csvUpload.single('contactsCsv'), (req, res) => {
+    try {
+        if (!req.file || !req.file.buffer) {
+            return res.status(400).json({ error: 'CSV file is required.' });
+        }
+
+        const originalName = String(req.file.originalname || 'contacts.csv');
+        if (!/\.csv$/i.test(originalName)) {
+            return res.status(400).json({ error: 'Please upload a .csv file.' });
+        }
+
+        const csvText = req.file.buffer.toString('utf8').replace(/^\uFEFF/, '');
+        const rows = parseCsvRows(csvText);
+        if (!rows.length) {
+            return res.status(400).json({ error: 'CSV did not contain a header row and at least one contact row.' });
+        }
+
+        const discoveryQuery = `CSV import: ${originalName}`;
+        const candidates = mergeLeadCandidatesByEmail(csvRowsToLeadCandidates(rows, discoveryQuery));
+        const result = insertLeadCandidates(candidates, discoveryQuery, {
+            limit: 1000,
+            realtorContactsOnly: false
+        });
+
+        appendActivityLog('agent-sales', `CSV contact import completed. Added ${result.insertedLeads.length} lead(s), skipped ${Object.values(result.skipped).reduce((sum, count) => sum + count, 0)}.`, {
+            workflow: 'csv-import',
+            fileName: originalName,
+            rows: rows.length,
+            candidates: candidates.length,
+            inserted: result.insertedLeads.length,
+            skipped: result.skipped
+        });
+
+        res.json({
+            success: true,
+            fileName: originalName,
+            rows: rows.length,
+            candidates: candidates.length,
+            leads: result.insertedLeads,
+            skipped: result.skipped
+        });
+    } catch (err) {
+        console.error('[Lead CSV Import Error]', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -1626,6 +1680,80 @@ function parseCsvRows(csvText) {
             obj[header] = values[index] || '';
         });
         return obj;
+    });
+}
+
+function normalizeCsvHeaderKey(value) {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function getCsvRowValue(row = {}, aliases = []) {
+    const normalized = {};
+    Object.entries(row).forEach(([key, value]) => {
+        normalized[normalizeCsvHeaderKey(key)] = String(value || '').trim();
+    });
+
+    for (const alias of aliases) {
+        const value = normalized[normalizeCsvHeaderKey(alias)];
+        if (value) return value;
+    }
+    return '';
+}
+
+function getCsvRowEmailValue(row = {}) {
+    const explicit = getCsvRowValue(row, [
+        'email',
+        'email address',
+        'email_address',
+        'e-mail',
+        'mail',
+        'primary email',
+        'work email',
+        'business email'
+    ]);
+    if (explicit) return explicit;
+
+    return Object.values(row)
+        .map(value => String(value || ''))
+        .find(value => parseEmailListFromCsvValue(value).length > 0) || '';
+}
+
+function csvRowsToLeadCandidates(rows = [], discoveryQuery = '') {
+    return rows.flatMap(row => {
+        const firstName = getCsvRowValue(row, ['first name', 'first_name', 'firstname', 'given name']);
+        const lastName = getCsvRowValue(row, ['last name', 'last_name', 'lastname', 'surname', 'family name']);
+        const fullName = getCsvRowValue(row, ['name', 'full name', 'full_name', 'contact name', 'agent name', 'realtor name']);
+        const emailValue = getCsvRowEmailValue(row);
+        const emails = parseEmailListFromCsvValue(emailValue);
+        if (!emails.length) return [];
+
+        const fallbackName = emails[0].split('@')[0].replace(/[._-]+/g, ' ').trim();
+        const name = fullName || [firstName, lastName].filter(Boolean).join(' ') || fallbackName;
+        const company = getCsvRowValue(row, [
+            'company',
+            'brokerage',
+            'organization',
+            'office',
+            'agency',
+            'team',
+            'business',
+            'business name'
+        ]);
+        const phone = getCsvRowValue(row, ['phone', 'phone number', 'mobile', 'cell', 'cell phone', 'work phone', 'business phone']);
+        const website = getCsvRowValue(row, ['website', 'web site', 'url', 'domain', 'profile url', 'profile']);
+        const address = getCsvRowValue(row, ['address', 'street address', 'mailing address', 'office address', 'location']);
+        const sourceUrl = getCsvRowValue(row, ['source', 'source url', 'source_url', 'lead source', 'profile url', 'profile', 'url']) || website;
+
+        return normalizeLeadCandidate({
+            name,
+            company: company || name,
+            email: emails.join(','),
+            phone,
+            website,
+            address,
+            sourceUrl,
+            discoveryQuery
+        }, discoveryQuery, sourceUrl);
     });
 }
 

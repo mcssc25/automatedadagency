@@ -301,6 +301,8 @@ class AutopilotApp {
         this.dom.crmScrapeNiche = document.getElementById("crm-scrape-niche");
         this.dom.crmScrapeCount = document.getElementById("crm-scrape-count");
         this.dom.btnCrmScrape = document.getElementById("btn-crm-scrape");
+        this.dom.crmCsvImportFile = document.getElementById("crm-csv-import-file");
+        this.dom.btnCrmCsvImport = document.getElementById("btn-crm-csv-import");
         
         // CRM Verification Queue
         this.dom.crmVerificationContainer = document.getElementById("crm-verification-container");
@@ -894,6 +896,9 @@ class AutopilotApp {
 
         // CRM Scrape Leads button
         this.dom.btnCrmScrape.addEventListener("click", () => this.handleCrmScrape());
+        if (this.dom.btnCrmCsvImport) {
+            this.dom.btnCrmCsvImport.addEventListener("click", () => this.handleCrmCsvImport());
+        }
 
         // CRM Campaign form submit
         this.dom.crmCampaignForm.addEventListener("submit", (e) => {
@@ -5129,6 +5134,54 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         } finally {
             this.dom.btnCrmScrape.disabled = false;
             this.dom.btnCrmScrape.innerHTML = `<i class="fa-solid fa-magnifying-glass"></i> Scrape Leads`;
+        }
+    }
+
+    async handleCrmCsvImport() {
+        const file = this.dom.crmCsvImportFile?.files?.[0];
+        if (!file) {
+            alert("Choose a CSV file of contacts first.");
+            return;
+        }
+
+        if (!/\.csv$/i.test(file.name)) {
+            alert("Please choose a .csv file.");
+            return;
+        }
+
+        const btn = this.dom.btnCrmCsvImport;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Uploading...`;
+        this.appendConsoleLine('system', `Importing contacts from CSV: ${file.name}...`);
+
+        try {
+            const formData = new FormData();
+            formData.append('contactsCsv', file);
+
+            const response = await fetch('/api/leads/import-csv', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(await this.parseApiError(response, "CSV import failed"));
+            }
+
+            const data = await response.json();
+            const skipped = data.skipped || {};
+            const skippedTotal = Object.values(skipped).reduce((sum, count) => sum + Number(count || 0), 0);
+            this.state.leadsPage = 1;
+            await this.loadCrmStateFromServer();
+            await this.loadActivityLog();
+            this.appendConsoleLine('agent-sales', `CSV import added ${data.leads?.length || 0} lead(s) from ${data.rows || 0} row(s). Skipped ${skippedTotal}.`);
+            alert(`CSV import complete.\n\nAdded: ${data.leads?.length || 0}\nSkipped: ${skippedTotal}\nInvalid: ${skipped.invalid || 0}\nDuplicates: ${skipped.duplicate || 0}\nDNC: ${skipped.dnc || 0}`);
+            this.dom.crmCsvImportFile.value = '';
+        } catch (error) {
+            console.error("CSV import failed:", error);
+            alert("CSV import failed: " + error.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-file-arrow-up"></i> Upload CSV`;
         }
     }
 

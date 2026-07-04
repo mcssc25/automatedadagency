@@ -37,8 +37,10 @@ Last updated: 2026-07-04
 ## CRM / Email Safeguards
 
 - Sales CRM exposes Brokerage Research, Agent Roster, Lead Communication, Human Review, Verification Queue, Campaigns, and Autopilot Settings tabs.
-- Agent Roster surfaces `roster_contacts`; Lead Communication filters to responded leads via `/api/leads?respondedOnly=1`.
-- Lead emails are normalized before storage; scraping skips invalid emails, existing lead emails, and DNC emails.
+- Agent Roster surfaces `roster_contacts`; it also has scraper and CSV contact import controls for building the `Scraped` lead audience.
+- Lead Communication filters to responded leads via `/api/leads?respondedOnly=1`.
+- Lead emails are normalized before storage; scraping/import skips invalid emails, existing lead emails, and DNC emails.
+- CSV contact import posts memory-only uploads to `/api/leads/import-csv`, accepts common contact-list headers, caps imports at 1,000 contacts, and stores imported contacts as `Scraped` leads.
 - DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients and DNC removal requires `ALLOW_DNC_REMOVAL=true`.
 - `OUTBOUND_POSTAL_ADDRESS` must be configured for compliance-required outbound Mailgun sends.
 - Campaign approval targets only `Scraped` leads, sends Step 1 through Mailgun, and stores campaign id/step on leads.
