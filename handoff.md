@@ -15,8 +15,8 @@ Last updated: 2026-07-04
 
 - Branch: `main`.
 - Latest deployed known production changes include CRM visibility `4b7b1a2`, brokerage research signals `17dddd4`, response inbox `e4d8392`, real activity log `561c0ed`, stale research refresh `3124543`, OpenRouter free-model guard `7ddf483`, roster-gated research `32f654f`, and OpenRouter-only suppression `0d435f8`.
-- Current local update: inbound AI responder safety changes in `server.js`, plus refreshed `MEMORY.md` and `handoff.md`.
-- Local update is not committed or deployed yet at this handoff point.
+- Latest commit: `416f8bb Harden inbound AI responder handoff`, pushed to `origin/main` and deployed live.
+- Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T101750Z-inbound-responder-handoff`.
 
 ## Latest Change
 
@@ -37,10 +37,14 @@ Last updated: 2026-07-04
 ## Verification
 
 - Local `node --check server.js` passed after the inbound responder update.
-- No full integration/webhook smoke was run yet; Mailgun/Gemini live behavior still needs a controlled inbound test after deployment.
+- Local `git diff --check` passed with only normal Windows CRLF warnings.
+- Production Docker rebuild/restart of only `ad-agency-autopilot` succeeded.
+- Production container reported `healthy`.
+- In-container `node --check /app/server.js` passed.
+- Production HTTP smoke against `http://127.0.0.1:3100/api/app-config` returned JSON with `geminiConfigured:true` and `openRouterConfigured:true`.
+- No full Mailgun/Gemini webhook integration smoke was run yet; live behavior still needs a controlled inbound reply test.
 
 ## Next Steps
 
-- Commit and deploy the inbound responder safety update if proceeding live.
 - After deploy, run an inbound Mailgun test reply that forces/observes: normal Gemini auto-reply, Gemini failure or invalid JSON handoff, unsubscribe quarantine, and Mailgun delivery failure handoff if safely reproducible.
 - Consider adding a visible CRM badge/filter for `agent-draft` history entries so unsent AI drafts are easy to find during human review.
