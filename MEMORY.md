@@ -36,7 +36,7 @@ Last updated: 2026-07-04
 
 ## CRM / Email Safeguards
 
-- Sales CRM exposes Brokerage Research, Agent Roster, Lead Communication, Verification Queue, Campaigns, and Autopilot Settings tabs.
+- Sales CRM exposes Brokerage Research, Agent Roster, Lead Communication, Human Review, Verification Queue, Campaigns, and Autopilot Settings tabs.
 - Agent Roster surfaces `roster_contacts`; Lead Communication filters to responded leads via `/api/leads?respondedOnly=1`.
 - Lead emails are normalized before storage; scraping skips invalid emails, existing lead emails, and DNC emails.
 - DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients and DNC removal requires `ALLOW_DNC_REMOVAL=true`.
@@ -46,6 +46,7 @@ Last updated: 2026-07-04
 - Auto-pause on reply is supported through Mailgun inbound webhook.
 - Mailgun inbound replies post to `/api/webhooks/inbound-email`; webhook signatures are verified when `REQUIRE_MAILGUN_WEBHOOK_SIGNATURE=true`.
 - Inbound responder flow: save Realtor reply, pause active campaign if enabled, quarantine unsubscribe requests, ask Gemini for JSON reply/handoff decision, send through Mailgun only when no handoff is needed.
+- Human Review tab surfaces `Needs Human Action` leads, handoff reasons, conversation history, and preserved unsent AI drafts.
 - As of 2026-07-04, Gemini draft/JSON failures route the lead to `Needs Human Action` instead of sending a generic fallback.
 - As of 2026-07-04, inbound auto-replies use limited retries for transient Mailgun/network failures; if delivery still fails, preserve the draft and mark `Needs Human Action`.
 - Open/click/signup routing is not connected yet; only inbound replies are tracked.

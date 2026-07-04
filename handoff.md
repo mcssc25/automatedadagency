@@ -15,11 +15,16 @@ Last updated: 2026-07-04
 
 - Branch: `main`.
 - Latest deployed known production changes include CRM visibility `4b7b1a2`, brokerage research signals `17dddd4`, response inbox `e4d8392`, real activity log `561c0ed`, stale research refresh `3124543`, OpenRouter free-model guard `7ddf483`, roster-gated research `32f654f`, and OpenRouter-only suppression `0d435f8`.
-- Latest commit: `416f8bb Harden inbound AI responder handoff`, pushed to `origin/main` and deployed live.
+- Latest deployed commit: `416f8bb Harden inbound AI responder handoff`, pushed to `origin/main` and deployed live.
+- Current local update: Human Review CRM tab in `index.html`, `app.js`, and `index.css`; not committed or deployed yet.
 - Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T101750Z-inbound-responder-handoff`.
 
 ## Latest Change
 
+- Added a dedicated Sales CRM `Human Review` tab next to Lead Communication.
+- Human Review fetches `/api/leads?stage=Needs%20Human%20Action`, has its own search/pagination state, and shows a tab badge for waiting review items.
+- Selecting a review item shows the handoff reason, conversation history, management actions, and preserved `agent-draft` entries.
+- `agent-draft` messages now render as an `Unsent AI Draft` bubble in conversation logs.
 - Mailgun inbound replies still arrive at `/api/webhooks/inbound-email`, verify signatures, match the sender to a CRM lead, save the Realtor reply, and pause active campaign enrollment when `autoPauseOnReply` is enabled.
 - Gemini draft/JSON failures now route the lead to `Needs Human Action` with a handoff reason instead of sending a generic fallback response.
 - Inbound AI auto-replies now use `sendMailgunEmailWithRetry` for likely transient Mailgun failures: network/no response, HTTP 429, and HTTP 5xx.
@@ -37,7 +42,9 @@ Last updated: 2026-07-04
 ## Verification
 
 - Local `node --check server.js` passed after the inbound responder update.
+- Local `node --check app.js` passed after the Human Review tab update.
 - Local `git diff --check` passed with only normal Windows CRLF warnings.
+- Local smoke on `PORT=3134` with admin auth off returned valid JSON for `/api/leads?stage=Needs%20Human%20Action&page=1&limit=5`.
 - Production Docker rebuild/restart of only `ad-agency-autopilot` succeeded.
 - Production container reported `healthy`.
 - In-container `node --check /app/server.js` passed.

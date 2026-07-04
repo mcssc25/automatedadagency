@@ -2182,6 +2182,36 @@ body {
     text-overflow: ellipsis;
 }
 
+.human-review-reason {
+    margin-top: 10px;
+    color: #ffcf8a;
+    font-size: 0.74rem;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.human-review-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 10px;
+    border: 1px solid rgba(255, 145, 0, 0.28);
+    border-radius: 8px;
+    background: rgba(255, 145, 0, 0.08);
+    color: #ffcf8a;
+    padding: 9px 11px;
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.human-review-alert i {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
 /* Chat Log/Messages Screen */
 .chat-panel {
     display: flex;
@@ -2222,6 +2252,13 @@ body {
     border: 1px solid var(--border-color);
     align-self: flex-end;
     border-bottom-right-radius: 2px;
+}
+
+.chat-bubble.agent-draft {
+    background: rgba(255, 145, 0, 0.08);
+    border: 1px dashed rgba(255, 145, 0, 0.35);
+    align-self: flex-start;
+    border-bottom-left-radius: 2px;
 }
 
 .chat-bubble.agent-action {

@@ -86,6 +86,11 @@ class AutopilotApp {
             leadsPage: 1,
             leadsPagesCount: 1,
             respondedLeadsTotal: 0,
+            humanReviewLeads: [],
+            humanReviewPage: 1,
+            humanReviewPagesCount: 1,
+            humanReviewTotal: 0,
+            humanReviewSearchQuery: '',
             leadStageCounts: {},
             leadsStageFilter: 'All',
             leadsSearchQuery: '',
@@ -110,6 +115,8 @@ class AutopilotApp {
             // Current open views
             selectedLeadIndex: null,
             selectedLeadId: null,
+            selectedHumanReviewLeadIndex: null,
+            selectedHumanReviewLeadId: null,
             selectedSupportIndex: null,
             
             // API setup
@@ -365,6 +372,11 @@ class AutopilotApp {
         this.dom.crmChatMessages = document.getElementById("crm-chat-messages");
         this.dom.crmLeadCount = document.getElementById("crm-lead-count");
         this.dom.selectedLeadHeader = document.getElementById("selected-lead-header");
+        this.dom.humanReviewListContainer = document.getElementById("human-review-list-container");
+        this.dom.humanReviewChatMessages = document.getElementById("human-review-chat-messages");
+        this.dom.humanReviewCount = document.getElementById("crm-human-review-count");
+        this.dom.humanReviewTabBadge = document.getElementById("crm-human-review-tab-badge");
+        this.dom.selectedHumanReviewHeader = document.getElementById("selected-human-review-header");
         
         this.dom.supportSessionsContainer = document.getElementById("support-sessions-container");
         this.dom.supportChatMessages = document.getElementById("support-chat-messages");
@@ -684,6 +696,8 @@ class AutopilotApp {
                     targetView.style.display = "block";
                     if (targetId === "crm-communications") {
                         this.renderLeadsList();
+                    } else if (targetId === "crm-human-review") {
+                        this.fetchHumanReviewLeadsFromServer();
                     } else if (targetId === "crm-brokerages") {
                         this.renderCrmIntelligence();
                     } else if (targetId === "crm-roster") {
@@ -846,6 +860,34 @@ class AutopilotApp {
                 if (this.state.leadsPage < this.state.leadsPagesCount) {
                     this.state.leadsPage++;
                     this.fetchLeadsFromServer();
+                }
+            });
+        }
+
+        const humanReviewSearch = document.getElementById("crm-human-review-search");
+        const humanReviewPrevBtn = document.getElementById("btn-human-review-prev");
+        const humanReviewNextBtn = document.getElementById("btn-human-review-next");
+
+        if (humanReviewSearch) {
+            humanReviewSearch.addEventListener("input", (e) => {
+                this.state.humanReviewSearchQuery = e.target.value;
+                this.state.humanReviewPage = 1;
+                this.fetchHumanReviewLeadsFromServer();
+            });
+        }
+        if (humanReviewPrevBtn) {
+            humanReviewPrevBtn.addEventListener("click", () => {
+                if (this.state.humanReviewPage > 1) {
+                    this.state.humanReviewPage--;
+                    this.fetchHumanReviewLeadsFromServer();
+                }
+            });
+        }
+        if (humanReviewNextBtn) {
+            humanReviewNextBtn.addEventListener("click", () => {
+                if (this.state.humanReviewPage < this.state.humanReviewPagesCount) {
+                    this.state.humanReviewPage++;
+                    this.fetchHumanReviewLeadsFromServer();
                 }
             });
         }
@@ -1446,6 +1488,36 @@ class AutopilotApp {
         }
     }
 
+    async fetchHumanReviewLeadsFromServer() {
+        try {
+            const selectedLeadId = this.state.selectedHumanReviewLeadId;
+            const search = this.state.humanReviewSearchQuery || '';
+            const page = this.state.humanReviewPage || 1;
+            const url = `/api/leads?stage=${encodeURIComponent('Needs Human Action')}&search=${encodeURIComponent(search)}&page=${page}&limit=50`;
+
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("Human review fetch failed");
+            const data = await res.json();
+
+            this.state.humanReviewLeads = data.leads || [];
+            this.state.humanReviewPage = data.page || 1;
+            this.state.humanReviewPagesCount = data.pages || 1;
+            this.state.humanReviewTotal = data.total || 0;
+
+            if (selectedLeadId !== null) {
+                const selectedIndex = this.state.humanReviewLeads.findIndex(lead => lead.id === selectedLeadId);
+                this.state.selectedHumanReviewLeadIndex = selectedIndex >= 0 ? selectedIndex : null;
+                this.state.selectedHumanReviewLeadId = selectedIndex >= 0 ? selectedLeadId : null;
+            }
+
+            this.renderHumanReviewList();
+            this.updateHumanReviewPaginationUI();
+            this.renderSelectedHumanReviewLead();
+        } catch (err) {
+            console.error('[Human Review Fetch Error]', err.message);
+        }
+    }
+
     startCrmRefreshPolling() {
         if (this.crmRefreshTimer) clearInterval(this.crmRefreshTimer);
         this.crmRefreshTimer = setInterval(() => {
@@ -1454,7 +1526,9 @@ class AutopilotApp {
             this.crmRefreshInFlight = true;
             const activeCrmPanel = document.querySelector(".crm-panel-view.active");
             const shouldRefreshIntel = activeCrmPanel && ['crm-brokerages', 'crm-roster'].includes(activeCrmPanel.id);
-            const refreshes = [this.fetchLeadsFromServer()];
+            const refreshes = [];
+            if (!activeCrmPanel || activeCrmPanel.id === 'crm-communications') refreshes.push(this.fetchLeadsFromServer());
+            if (!activeCrmPanel || activeCrmPanel.id === 'crm-human-review') refreshes.push(this.fetchHumanReviewLeadsFromServer());
             if (shouldRefreshIntel) refreshes.push(this.loadCrmIntelligence());
             Promise.allSettled(refreshes).finally(() => {
                 this.crmRefreshInFlight = false;
@@ -1538,6 +1612,30 @@ class AutopilotApp {
         if (nextBtn) nextBtn.disabled = this.state.leadsPage >= this.state.leadsPagesCount;
     }
 
+    updateHumanReviewPaginationUI() {
+        const info = document.getElementById("human-review-pagination-info");
+        if (info) {
+            info.innerText = `Page ${this.state.humanReviewPage} of ${this.state.humanReviewPagesCount}`;
+        }
+        const prevBtn = document.getElementById("btn-human-review-prev");
+        const nextBtn = document.getElementById("btn-human-review-next");
+        if (prevBtn) prevBtn.disabled = this.state.humanReviewPage <= 1;
+        if (nextBtn) nextBtn.disabled = this.state.humanReviewPage >= this.state.humanReviewPagesCount;
+    }
+
+    renderHumanReviewBadge() {
+        const stageTotal = this.state.leadStageCounts?.['Needs Human Action'];
+        const tabTotal = Number.isFinite(stageTotal) ? stageTotal : (this.state.humanReviewTotal || 0);
+        const listTotal = this.state.humanReviewTotal ?? tabTotal;
+        if (this.dom.humanReviewCount) {
+            this.dom.humanReviewCount.innerText = `${listTotal} Waiting`;
+        }
+        if (this.dom.humanReviewTabBadge) {
+            this.dom.humanReviewTabBadge.innerText = tabTotal;
+            this.dom.humanReviewTabBadge.style.display = tabTotal > 0 ? 'inline-flex' : 'none';
+        }
+    }
+
     async loadCrmStateFromServer() {
         try {
             const response = await fetch('/api/crm-state');
@@ -1554,12 +1652,15 @@ class AutopilotApp {
             this.state.leadStageCounts = serverState.leadStageCounts || {};
             
             await this.fetchLeadsFromServer();
+            await this.fetchHumanReviewLeadsFromServer();
             this.populateCampaignSelectDropdowns();
             this.renderCampaignWorkflowSummary();
+            this.renderHumanReviewBadge();
         } catch (error) {
             console.warn("Could not load CRM storage; using browser state:", error.message);
             this.renderLeadsList();
             this.renderCampaignWorkflowSummary();
+            this.renderHumanReviewBadge();
         }
     }
 
@@ -4609,6 +4710,50 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         this.appendConsoleLine('agent-content', `Voice playback active for draft ${postId}.`);
     }
 
+    getLeadReviewReason(lead) {
+        const history = Array.isArray(lead?.history) ? lead.history : [];
+        const event = [...history].reverse().find(item => {
+            const text = String(item.text || '');
+            return item.sender === 'agent-action' && /handoff|human review|failed/i.test(text);
+        });
+        return event ? String(event.text || '').trim() : 'Review requested by the AI Sales Agent.';
+    }
+
+    renderLeadHistoryMessages(lead) {
+        if (!lead.history || lead.history.length === 0) {
+            return `<div class="empty-state"><p>No conversation logs found.</p></div>`;
+        }
+
+        return lead.history.map(m => {
+            const messageText = this.escapeHtml(m.text || '').replace(/\n/g, "<br>");
+            if (m.sender === 'agent-action') {
+                return `<div class="chat-bubble agent-action">${messageText}</div>`;
+            }
+            if (m.sender === 'agent-draft') {
+                return `
+                    <div class="chat-bubble agent-draft">
+                        <div class="msg-header">
+                            <span>Unsent AI Draft</span>
+                            <span>${this.escapeHtml(m.time || '')}</span>
+                        </div>
+                        <p>${messageText}</p>
+                    </div>
+                `;
+            }
+            const senderName = m.sender === 'agent' ? 'Sales Agent' : lead.name;
+            const bubbleClass = m.sender === 'agent' ? 'agent-msg' : 'lead-msg';
+            return `
+                <div class="chat-bubble ${bubbleClass}">
+                    <div class="msg-header">
+                        <span>${this.escapeHtml(senderName)}</span>
+                        <span>${this.escapeHtml(m.time || '')}</span>
+                    </div>
+                    <p>${messageText}</p>
+                </div>
+            `;
+        }).join("");
+    }
+
     renderLeadsList() {
         const total = this.state.respondedLeadsTotal ?? this.state.leads.length;
         this.dom.crmLeadCount.innerText = `${total} Responded`;
@@ -4647,6 +4792,14 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
         this.state.selectedLeadId = selectedLead ? selectedLead.id : null;
         this.renderLeadsList(); // Refresh active state highlight
         this.renderSelectedLead();
+    }
+
+    selectHumanReviewLead(index) {
+        this.state.selectedHumanReviewLeadIndex = index;
+        const selectedLead = this.state.humanReviewLeads[index];
+        this.state.selectedHumanReviewLeadId = selectedLead ? selectedLead.id : null;
+        this.renderHumanReviewList();
+        this.renderSelectedHumanReviewLead();
     }
 
     renderSelectedLead() {
@@ -4742,35 +4895,53 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             ${safeEnrollmentLine}
         `;
 
-        if (!lead.history || lead.history.length === 0) {
-            this.dom.crmChatMessages.innerHTML = `<div class="empty-state"><p>No conversation logs found.</p></div>`;
-            return;
-        }
+        this.dom.crmChatMessages.innerHTML = this.renderLeadHistoryMessages(lead);
 
-        this.dom.crmChatMessages.innerHTML = lead.history.map(m => {
-            const messageText = this.escapeHtml(m.text || '').replace(/\n/g, "<br>");
-            if (m.sender === 'agent-action') {
-                return `<div class="chat-bubble agent-action">${messageText}</div>`;
-            }
-            const senderName = m.sender === 'agent' ? 'Sales Agent' : lead.name;
-            const bubbleClass = m.sender === 'agent' ? 'agent-msg' : 'lead-msg';
-            return `
-                <div class="chat-bubble ${bubbleClass}">
-                    <div class="msg-header">
-                        <span>${this.escapeHtml(senderName)}</span>
-                        <span>${this.escapeHtml(m.time || '')}</span>
-                    </div>
-                    <p>${messageText}</p>
-                </div>
-            `;
-        }).join("");
-        
         // Auto scroll
         this.dom.crmChatMessages.scrollTop = this.dom.crmChatMessages.scrollHeight;
     }
 
+    renderSelectedHumanReviewLead() {
+        const index = this.state.selectedHumanReviewLeadIndex;
+        const lead = index !== null ? this.state.humanReviewLeads[index] : null;
+        if (!lead) {
+            this.dom.selectedHumanReviewHeader.innerHTML = `
+                <h3>Review Needed</h3>
+                <p class="text-muted">Select a lead to inspect the handoff</p>
+            `;
+            this.dom.humanReviewChatMessages.innerHTML = `<div class="empty-state"><p>Select a lead to review the inbound reply and any unsent draft.</p></div>`;
+            return;
+        }
+
+        const details = [lead.company, lead.email, lead.phone].filter(Boolean).join(' | ');
+        const reason = this.getLeadReviewReason(lead);
+        const canPauseCampaign = lead.activeEnrollment && lead.activeEnrollment.status === 'Active';
+        const leadManagementActions = [
+            canPauseCampaign
+                ? `<button type="button" class="lead-action-button" title="Pause this lead's active drip campaign" onclick="App.pauseLeadCampaign(${lead.id})"><i class="fa-solid fa-pause"></i> Pause Campaign</button>`
+                : '',
+            `<button type="button" class="lead-action-button danger" title="Delete this lead from the pipeline" onclick="App.deleteLead(${lead.id})"><i class="fa-solid fa-trash"></i> Delete Lead</button>`
+        ].filter(Boolean).join('');
+
+        this.dom.selectedHumanReviewHeader.innerHTML = `
+            <div class="selected-lead-title-row">
+                <div>
+                    <span class="selected-lead-eyebrow">Human Review</span>
+                    <h3>${this.escapeHtml(lead.name || 'Unknown Lead')}</h3>
+                </div>
+                <span class="lead-stage-pill">${this.escapeHtml(lead.stage || 'Needs Human Action')}</span>
+            </div>
+            ${details ? `<p class="text-muted" style="font-size:0.75rem;">${this.escapeHtml(details)}</p>` : ''}
+            <div class="human-review-alert"><i class="fa-solid fa-triangle-exclamation"></i>${this.escapeHtml(reason)}</div>
+            ${leadManagementActions ? `<div class="lead-management-actions">${leadManagementActions}</div>` : ''}
+        `;
+
+        this.dom.humanReviewChatMessages.innerHTML = this.renderLeadHistoryMessages(lead);
+        this.dom.humanReviewChatMessages.scrollTop = this.dom.humanReviewChatMessages.scrollHeight;
+    }
+
     async pauseLeadCampaign(leadId) {
-        const lead = this.state.leads.find(item => String(item.id) === String(leadId));
+        const lead = [...this.state.leads, ...this.state.humanReviewLeads].find(item => String(item.id) === String(leadId));
         if (!lead) return;
 
         if (!confirm(`Pause the active campaign for ${lead.name}?`)) return;
@@ -4788,6 +4959,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             this.appendConsoleLine('agent-sales', `Paused campaign outreach for ${lead.name}. ${data.pausedEnrollments || 0} enrollment(s) updated.`);
             await this.loadCrmStateFromServer();
             this.renderSelectedLead();
+            this.renderSelectedHumanReviewLead();
             this.renderCampaignWorkflowSummary();
         } catch (error) {
             console.error("[Lead Pause Error]", error);
@@ -4796,7 +4968,7 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
     }
 
     async deleteLead(leadId) {
-        const lead = this.state.leads.find(item => String(item.id) === String(leadId));
+        const lead = [...this.state.leads, ...this.state.humanReviewLeads].find(item => String(item.id) === String(leadId));
         if (!lead) return;
 
         if (!confirm(`Delete ${lead.name} from the lead pipeline?\n\nThis removes their CRM record and campaign enrollment history, but it does not add them to the DNC blacklist.`)) {
@@ -4812,8 +4984,11 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             this.appendConsoleLine('agent-sales', `Deleted ${lead.name} from the lead pipeline.`);
             this.state.selectedLeadId = null;
             this.state.selectedLeadIndex = null;
+            this.state.selectedHumanReviewLeadId = null;
+            this.state.selectedHumanReviewLeadIndex = null;
             await this.loadCrmStateFromServer();
             this.renderSelectedLead();
+            this.renderSelectedHumanReviewLead();
             this.renderCampaignWorkflowSummary();
         } catch (error) {
             console.error("[Lead Delete Error]", error);
@@ -5381,6 +5556,40 @@ Keep the caption short (max 2-3 sentences, under 150 characters), use emojis, an
             })
         }).catch(error => {
             console.warn("Could not persist activity log event:", error.message);
+        });
+    }
+
+    renderHumanReviewList() {
+        this.renderHumanReviewBadge();
+        if (!this.state.humanReviewLeads.length) {
+            this.dom.humanReviewListContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <p>No leads need human review right now.</p>
+                </div>
+            `;
+            return;
+        }
+
+        this.dom.humanReviewListContainer.innerHTML = this.state.humanReviewLeads.map((l, i) => {
+            const reason = this.getLeadReviewReason(l);
+            return `
+                <div class="lead-item human-review-item ${this.state.selectedHumanReviewLeadIndex === i ? 'active' : ''}" data-index="${i}">
+                    <div class="lead-header">
+                        <span class="lead-name">${this.escapeHtml(l.name || 'Unknown Lead')}</span>
+                        <span class="lead-stage badge warning-badge">Review</span>
+                    </div>
+                    <div class="lead-email">${this.escapeHtml(l.company || 'No brokerage')} &middot; ${this.escapeHtml(l.email || 'No email')}</div>
+                    <div class="human-review-reason">${this.escapeHtml(reason)}</div>
+                </div>
+            `;
+        }).join("");
+
+        this.dom.humanReviewListContainer.querySelectorAll(".lead-item").forEach(item => {
+            item.addEventListener("click", () => {
+                const index = parseInt(item.getAttribute("data-index"));
+                this.selectHumanReviewLead(index);
+            });
         });
     }
 
