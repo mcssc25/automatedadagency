@@ -1858,11 +1858,14 @@ class AutopilotApp {
                 <article class="brokerage-card">
                     <div class="brokerage-card-header">
                         <div>
+                        <div>
                             <h4>${this.escapeHtml(brokerage.name || 'Unknown Brokerage')}</h4>
-                            <p>${this.escapeHtml(brokerage.category || 'Brokerage profile')} · ${Number(brokerage.contactsCount || 0)} roster contact(s) · ${Number(brokerage.officesCount || 0)} office(s)</p>
+                            <p>${this.escapeHtml(brokerage.category || 'Brokerage profile')} • ${Number(brokerage.contactsCount || 0)} roster contact(s) • ${Number(brokerage.officesCount || 0)} office(s)</p>
                         </div>
-                        ${siteUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(siteUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-globe"></i>Site</a>` : ''}
-                    </div>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            ${Number(brokerage.contactsCount || 0) > 0 ? `<button type="button" class="btn btn-sm btn-outline btn-send-batch" onclick="App.openBatchCampaignModal('${this.escapeHtml(brokerage.name)}')" style="border-color:var(--accent); color:var(--accent);"><i class="fa-solid fa-paper-plane"></i> Send Batch</button>` : ''}
+                            ${siteUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(siteUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-globe"></i>Site</a>` : ''}
+                        </div>
                     <div class="brokerage-chip-row">
                         <span class="brokerage-chip">${this.escapeHtml(brokerage.researchStatus || 'Pending')}</span>
                         <span class="brokerage-chip">${Number(brokerage.harvestedOffices || 0)} harvested</span>
@@ -1881,6 +1884,67 @@ class AutopilotApp {
                 </article>
             `;
         }).join('');
+    }
+
+    openBatchCampaignModal(brokerageName) {
+        const modal = document.getElementById("batch-campaign-modal");
+        const label = document.getElementById("batch-brokerage-name-label");
+        const hidden = document.getElementById("batch-brokerage-name-hidden");
+        const select = document.getElementById("batch-campaign-select");
+        
+        if (!modal || !label || !hidden || !select) return;
+        
+        label.textContent = brokerageName;
+        hidden.value = brokerageName;
+        
+        const campaigns = this.state.campaignsList || [];
+        select.innerHTML = campaigns.map(c => `<option value="${c.id}">${this.escapeHtml(c.name)}</option>`).join('') || `<option value="">No campaigns available</option>`;
+        
+        modal.style.display = "flex";
+    }
+
+    closeBatchCampaignModal() {
+        const modal = document.getElementById("batch-campaign-modal");
+        if (modal) modal.style.display = "none";
+    }
+
+    async submitBatchCampaign() {
+        const brokerageName = document.getElementById("batch-brokerage-name-hidden").value;
+        const campaignId = document.getElementById("batch-campaign-select").value;
+        const batchSize = document.getElementById("batch-size-select").value;
+        
+        if (!brokerageName || !campaignId || !batchSize) {
+            alert("Please ensure a brokerage and campaign are selected.");
+            return;
+        }
+        
+        const btn = document.querySelector("#batch-campaign-modal .btn-primary");
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Launching...`;
+        
+        try {
+            const res = await fetch("/api/brokerages/send-batch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ brokerageName, campaignId, batchSize })
+            });
+            const data = await res.json();
+            if (data.error) {
+                alert(data.error);
+            } else {
+                alert(`Success! Enrolled and sent campaign to a batch of ${data.sentCount} agents.`);
+                this.closeBatchCampaignModal();
+                await this.loadCrmIntelligence();
+                await this.fetchLeadsFromServer();
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Failed to launch campaign batch: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
     }
 
     renderAgentRoster() {

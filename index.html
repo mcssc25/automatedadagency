@@ -1111,6 +1111,41 @@
                 </div>
             </div>
 
+            <!-- Batch Send Campaign Modal -->
+            <div class="modal-overlay" id="batch-campaign-modal" style="display:none;">
+                <div class="modal-card" style="max-width: 500px;">
+                    <div class="modal-header" style="border-bottom:1px solid var(--border-color); padding-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+                        <h3><i class="fa-solid fa-paper-plane text-accent"></i> Send Campaign Batch</h3>
+                        <button class="modal-close" onclick="App.closeBatchCampaignModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.5rem; cursor:pointer;">&times;</button>
+                    </div>
+                    <div class="modal-body" style="padding-top:15px; display:flex; flex-direction:column; gap:16px;">
+                        <p class="helper-text" style="margin:0;">Select a campaign and a batch size to enroll and send to agents at <strong id="batch-brokerage-name-label" style="color:var(--accent);"></strong>.</p>
+                        <input type="hidden" id="batch-brokerage-name-hidden">
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
+                            <label for="batch-campaign-select" style="font-weight:600; color:var(--text-primary); display:block;">Outbound Campaign</label>
+                            <select id="batch-campaign-select" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                <!-- Options populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
+                            <label for="batch-size-select" style="font-weight:600; color:var(--text-primary); display:block;">Batch Size (Number of agents)</label>
+                            <select id="batch-size-select" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+                                <option value="5">5 agents</option>
+                                <option value="10" selected>10 agents</option>
+                                <option value="20">20 agents</option>
+                                <option value="50">50 agents</option>
+                                <option value="100">100 agents</option>
+                                <option value="all">All available agents</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--border-color); padding-top:15px; margin-top:20px;">
+                        <button class="btn btn-outline" onclick="App.closeBatchCampaignModal()">Cancel</button>
+                        <button class="btn btn-primary" onclick="App.submitBatchCampaign()"><i class="fa-solid fa-rocket"></i> Launch Batch</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Sales CRM View -->
             <section id="crm-view" class="view-section">
                 <!-- Sub-navigation Tabs -->

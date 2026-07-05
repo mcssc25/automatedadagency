@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-07-04
+Last updated: 2026-07-05
 
 ## Start Here
 
@@ -14,54 +14,39 @@ Last updated: 2026-07-04
 ## Current Repo / Deploy State
 
 - Branch: `main`.
-- Latest deployed known production changes include CRM visibility `4b7b1a2`, brokerage research signals `17dddd4`, response inbox `e4d8392`, real activity log `561c0ed`, stale research refresh `3124543`, OpenRouter free-model guard `7ddf483`, roster-gated research `32f654f`, and OpenRouter-only suppression `0d435f8`.
-- Latest deployed commit: `6d27ac9 Add CRM CSV contact import`, pushed to `origin/main` and deployed live.
-- Prior UI commit: `852be6d Add CRM human review queue`, pushed to `origin/main` and deployed live.
-- Prior responder safety commit: `416f8bb Harden inbound AI responder handoff`, pushed to `origin/main` and deployed live.
-- Deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T101750Z-inbound-responder-handoff`.
-- Human Review deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T103338Z-human-review-crm`.
-- CSV import deployment backup: `/opt/ad-agency-autopilot/data/backups/deploy-20260704T103955Z-csv-contact-import`.
+- Uncommitted local changes exist in:
+  - `server.js` (templates subject personalization, [Brokerage Name]/[City] support, and `/api/brokerages/send-batch` route)
+  - `index.html` (added `batch-campaign-modal` overlay)
+  - `app.js` (added "Send Batch" buttons and modal open/close/submit methods)
+  - `MEMORY.md` & `handoff.md` (updated documentation)
+- Database seeding: Run `.\.venv\Scripts\python.exe C:\Users\daved\.gemini\antigravity\brain\c9996b1a-3198-4c21-a960-532453972852\scratch\seed_crm_db.py` to seed `crm.db` database with 739 boutique targets (23 completed), 31 roster contacts, and 9 drip campaigns. Done locally.
 
-## Latest Change
+## Latest Changes
 
-- Added CSV contact import controls to the Agent Roster acquisition bar.
-- New endpoint: `POST /api/leads/import-csv` with multipart field `contactsCsv`; uploads are memory-only and capped at 5 MB / 1,000 imported contacts.
-- CSV import accepts common headers such as name/full name/first name/last name, email/email address, brokerage/company, phone, website/url, address, and source URL.
-- Imported contacts reuse `insertLeadCandidates`, so invalid emails, DNC emails, and duplicate emails/identities are skipped; successful imports become `Scraped` leads eligible for normal campaign launch.
-- Added a dedicated Sales CRM `Human Review` tab next to Lead Communication.
-- Human Review fetches `/api/leads?stage=Needs%20Human%20Action`, has its own search/pagination state, and shows a tab badge for waiting review items.
-- Selecting a review item shows the handoff reason, conversation history, management actions, and preserved `agent-draft` entries.
-- `agent-draft` messages now render as an `Unsent AI Draft` bubble in conversation logs.
-- Mailgun inbound replies still arrive at `/api/webhooks/inbound-email`, verify signatures, match the sender to a CRM lead, save the Realtor reply, and pause active campaign enrollment when `autoPauseOnReply` is enabled.
-- Gemini draft/JSON failures now route the lead to `Needs Human Action` with a handoff reason instead of sending a generic fallback response.
-- Inbound AI auto-replies now use `sendMailgunEmailWithRetry` for likely transient Mailgun failures: network/no response, HTTP 429, and HTTP 5xx.
-- Non-retryable Mailgun failures, or retry exhaustion, now mark the lead `Needs Human Action`, log the send error, and preserve Gemini's unsent draft in lead history as `agent-draft`.
-- The webhook JSON response now reports `handoff:true` when a Mailgun send failure causes human review.
-
-## CRM / Email Behavior Notes
-
-- Campaign approval targets only `Scraped` leads, sends Step 1 through Mailgun, and stores campaign id/step on leads.
-- Auto-send due follow-ups is controlled by `autoAdvanceCampaigns`; due sends skip leads already in `Two-Way Conversation`, `Needs Human Action`, `Quarantined`, `DNC`, or `Opted Out`.
-- Unsubscribe/stop/remove-me replies are quarantined and added to DNC before Gemini is asked to draft anything.
-- Mailgun send failures can still happen even when the replying email address is valid: Mailgun auth/domain issues, rate limits, 5xx outages, network timeouts, compliance fail-closed settings, DNC protection, or provider-side rejection/suppression.
-- `OUTBOUND_POSTAL_ADDRESS` must be configured for compliance-required outbound Mailgun sends.
+1. **Email Personalization & Subject Lines**:
+   - Updated `personalizeCampaignBody` in `server.js` to process and substitute `[Brokerage Name]`, `[Brokerage]`, `[Company]`, and `[City]` placeholders.
+   - Updated `sendCampaignStepToLead` to apply personalization to the subject lines (`customizedSubject`) to ensure catchy, custom headlines go out.
+2. **Outreach Campaigns Seeding**:
+   - Created and inserted 9 custom 3-step drip campaign templates in SQLite:
+     - 4 Major Brokerages: Benchmark Realty, Fathom Realty, United Real Estate, Virtual Properties Realty.
+     - 5 Boutique Brokerages: California Boutique, Colorado Boutique, Florida Boutique, Georgia Boutique, and General Boutique.
+   - Embedded correct links: Free 14-day trial (`https://realestatecrmpro.com`), Dave's demo scheduling (`https://realestatecrmpro.com/schedule/realestatecrmpro-demo/`), and YouTube channel (`https://www.youtube.com/@RealEstateCRMPro`).
+3. **Database Seeding**:
+   - Seeded 739 boutique targets, detailed research profiles (CRM, e-sign, video tour, gaps, strengths, email angles) for 23 researched boutique targets, and 31 agent roster contacts.
+4. **Campaign Batch Sending**:
+   - Added `POST /api/brokerages/send-batch` backend endpoint to enroll a batch of roster contacts for a given brokerage into a selected campaign, promoting them to the `leads` table and sending Step 1 immediately.
+   - Updated Brokerage Research UI to show a "Send Batch" button for brokerages with roster contacts.
+   - Added `batch-campaign-modal` to index.html and event handlers in app.js.
 
 ## Verification
 
-- Local `node --check server.js` passed after the inbound responder update.
-- Local `node --check app.js` passed after the Human Review tab update.
-- Local `git diff --check` passed with only normal Windows CRLF warnings.
-- Local CSV import smoke on `PORT=3135` with admin auth off added 2 leads from a test CSV, then a second upload skipped both as duplicates; smoke test rows/files were cleaned up afterward.
-- Local smoke on `PORT=3134` with admin auth off returned valid JSON for `/api/leads?stage=Needs%20Human%20Action&page=1&limit=5`.
-- Production Docker rebuild/restart of only `ad-agency-autopilot` succeeded.
-- Production container reported `healthy`.
-- In-container `node --check /app/app.js` and `node --check /app/server.js` passed.
-- Production authenticated CSV import smoke returned `200` and added 2 test leads; both test leads and their activity-log event were removed immediately afterward.
-- Production HTTP smoke against `http://127.0.0.1:3100/api/app-config` returned JSON with `geminiConfigured:true` and `openRouterConfigured:true`.
-- Production authenticated in-container smoke returned `200` and valid JSON for `/api/leads?stage=Needs%20Human%20Action&page=1&limit=5`.
-- No full Mailgun/Gemini webhook integration smoke was run yet; live behavior still needs a controlled inbound reply test.
+- Local `node -c server.js` passed successfully.
+- Local `node -c app.js` passed successfully.
+- Local SQLite database `crm.db` verifies 362 profiles, 630 offices, 31 roster contacts, and 9 campaigns.
 
 ## Next Steps
 
-- After deploy, run an inbound Mailgun test reply that forces/observes: normal Gemini auto-reply, Gemini failure or invalid JSON handoff, unsubscribe quarantine, and Mailgun delivery failure handoff if safely reproducible.
-- Consider adding a visible CRM badge/filter for `agent-draft` history entries so unsent AI drafts are easy to find during human review.
+- Push the local changes to GitHub `origin/main`.
+- Deploy the updated app files (`server.js`, `app.js`, `index.html`) to the Hetzner production server (`/opt/ad-agency-autopilot`).
+- Back up changed production files under `/opt/ad-agency-autopilot/data/backups/deploy-20260705T...` before overriding.
+- Restart/rebuild the production Docker container `ad-agency-autopilot` and verify it boots up cleanly.

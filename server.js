@@ -5676,6 +5676,10 @@ function personalizeCampaignBody(template, lead, campaign, bizName, bizWebsite, 
     const personalized = String(template || '')
         .replace(/\[Lead Name\]/g, (lead.name || '').split(' ')[0] || lead.name || 'there')
         .replace(/\[Agent Name\]/g, (lead.name || '').split(' ')[0] || lead.name || 'there')
+        .replace(/\[Brokerage Name\]/g, lead.company || 'your brokerage')
+        .replace(/\[Brokerage\]/g, lead.company || 'your brokerage')
+        .replace(/\[Company\]/g, lead.company || 'your brokerage')
+        .replace(/\[City\]/g, (lead.address || '').split(',')[0].trim() || 'your area')
         .replace(/\[Your Name\]/g, bizName || 'our team');
     return applySalesAssetPlaceholders(personalized, settings, bizWebsite, campaign);
 }
@@ -5698,10 +5702,11 @@ async function sendCampaignStepToLead({ lead, campaign, enrollment, bizName = 'o
         return { sent: false, completed: true };
     }
 
+    const customizedSubject = personalizeCampaignBody(step.subject, lead, campaign, bizName, bizWebsite, settings);
     const customizedBody = personalizeCampaignBody(step.body, lead, campaign, bizName, bizWebsite, settings);
     await sendMailgunEmail({
         to: lead.email,
-        subject: step.subject,
+        subject: customizedSubject,
         text: customizedBody
     });
 
@@ -5718,7 +5723,7 @@ async function sendCampaignStepToLead({ lead, campaign, enrollment, bizName = 'o
     lead.history.push({
         sender: 'agent',
         time: new Date().toLocaleTimeString(),
-        text: `[OUTBOUND EMAIL - CAMPAIGN ${enrollment.campaignOrder} STEP ${step.step || nextStepNumber}]\nSubject: ${step.subject}\n\n${customizedBody}`
+        text: `[OUTBOUND EMAIL - CAMPAIGN ${enrollment.campaignOrder} STEP ${step.step || nextStepNumber}]\nSubject: ${customizedSubject}\n\n${customizedBody}`
     });
     db.updateLead(lead);
 
@@ -6268,6 +6273,96 @@ app.post('/api/crm-pipeline/run', async (req, res) => {
         res.json({ success: true, result });
     } catch (err) {
         console.error('[CRM Pipeline Run Error]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Outbound Campaign Batch Send for Roster Contacts
+app.post('/api/brokerages/send-batch', async (req, res) => {
+    try {
+        const { brokerageName, campaignId, batchSize } = req.body;
+        if (!brokerageName || !campaignId || !batchSize) {
+            return res.status(400).json({ error: 'brokerageName, campaignId, and batchSize are required.' });
+        }
+
+        const campaign = db.getCampaignById(campaignId);
+        if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+        // Query roster contacts for this brokerage
+        const contacts = db.getRosterContacts({ brokerage: brokerageName, limit: 1000 }) || [];
+        const batch = [];
+
+        for (const contact of contacts) {
+            if (batch.length >= parseInt(batchSize, 10)) break;
+            
+            // Check if contact email is DNC
+            if (db.isEmailDnc(contact.email)) continue;
+
+            let lead = db.getLeadByEmail(contact.email);
+            if (!lead) {
+                // Insert lead as Scraped
+                const leadId = db.insertLead({
+                    name: contact.name,
+                    company: contact.brokerageName,
+                    email: contact.email,
+                    phone: contact.phone,
+                    website: contact.website,
+                    address: [contact.city, contact.state].filter(Boolean).join(', '),
+                    sourceUrl: contact.sourceUrl,
+                    discoveryQuery: `Batch send: ${campaign.name}`,
+                    stage: 'Scraped'
+                });
+                if (leadId) {
+                    lead = db.getLeadById(leadId);
+                }
+            }
+
+            if (lead) {
+                // Check if this lead is already enrolled in this campaign
+                const enrollments = db.getEnrollmentsForLead(lead.id) || [];
+                const alreadyEnrolled = enrollments.some(e => e.campaignId === campaign.id);
+                if (!alreadyEnrolled) {
+                    batch.push(lead);
+                }
+            }
+        }
+
+        if (batch.length === 0) {
+            return res.status(400).json({ error: 'No new roster contacts are available to enroll in this campaign for ' + brokerageName });
+        }
+
+        const settings = readCrmSettings();
+        const campaignOrder = getCampaignOrder(campaign.id, settings);
+        const bizName = settings.bizName || req.body.bizName || 'our team';
+        const bizWebsite = settings.bizWebsite || req.body.bizWebsite || '';
+
+        let sentCount = 0;
+        let failedCount = 0;
+
+        for (const lead of batch) {
+            try {
+                const enrollment = enrollLeadInCampaign(lead, campaign.id, campaignOrder, new Date().toISOString());
+                await sendCampaignStepToLead({ lead, campaign, enrollment, bizName, bizWebsite, settings });
+                sentCount++;
+            } catch (err) {
+                failedCount++;
+                console.error(`[Batch Send] Failed for ${lead.email}:`, err.message);
+            }
+        }
+
+        appendActivityLog('agent-sales', `Enrolled and sent campaign "${campaign.name}" to a batch of ${sentCount} agent(s) from "${brokerageName}".`, {
+            workflow: 'batch-enroll',
+            brokerageName,
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            batchSize: batch.length,
+            sentCount,
+            failedCount
+        });
+
+        res.json({ success: true, batchSize: batch.length, sentCount, failedCount });
+    } catch (err) {
+        console.error('[Brokerage Send Batch Error]', err.message);
         res.status(500).json({ error: err.message });
     }
 });

@@ -1,6 +1,6 @@
 # Project Memory
 
-Last updated: 2026-07-04
+Last updated: 2026-07-05
 
 ## Durable Facts
 
@@ -11,7 +11,7 @@ Last updated: 2026-07-04
 - Production runs as Docker Compose service `ad-agency-autopilot` on `127.0.0.1:3100->3000`; Cloudflare Tunnel fronts the public URL.
 - VPS is shared with ClaimPilot; only touch `/opt/ad-agency-autopilot`, never ClaimPilot or `fluffysbait.com`.
 - VPS deploys are file-copy based, not `git pull`: back up changed runtime files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`, copy only this app's files, then rebuild/restart only `ad-agency-autopilot`.
-- Runtime secrets/data are ignored. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, logs, or `node_modules`.
+- Runtime secrets/data are ignored. Never commit `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, downloads, or `node_modules`.
 - Mailgun outreach domain: `outreach.realestatecrmpro.com`.
 - OpenRouter and Make.com webhook settings persist in ignored runtime `data/credentials.json` on the mounted `/opt/ad-agency-autopilot/data` volume.
 
@@ -21,45 +21,27 @@ Last updated: 2026-07-04
 - User wants to see each automation part work and approve outputs before full autonomy.
 - Dashboard/support activity should distinguish real records/jobs from demo simulation; no fake leads, fake chats, fake KPI movement, fake publish success, fake email sends, fake engagement metrics, or mock trend fallbacks.
 
-## Lead Intelligence
+## Lead Intelligence & CRM Seeding
 
-- Hidden nationwide lead intelligence engine is backend-only. It stores market cities, brokerage profiles, brokerage offices, roster contacts, and run logs in SQLite hidden tables.
-- Lead Intelligence auto-schedule is off by default unless explicitly enabled in runtime settings; avoid surprise hourly AI spend.
-- Worker seeds mid-market cities and brokerage brand searches, researches brokerage/office roster URLs, and harvests public roster pages into `roster_contacts`.
-- Browser controls exist in Agency Onboarding and Dashboard Workflow Status; endpoints include `GET /api/lead-intelligence/status`, `POST /api/lead-intelligence/settings`, `POST /api/lead-intelligence/seed`, and `POST /api/lead-intelligence/run-once`.
-- Run Now uses `/api/lead-intelligence/run-once?async=true` to avoid proxy timeout alerts during long harvests.
-- Lead-intelligence research is OpenRouter-first/OpenRouter-only and must not fall back to Gemini; route only to `openrouter/free` or model IDs ending in `:free`.
-- Roster harvesting is gated before AI brokerage research: only research brokerage systems after at least one roster contact, and mark unharvestable/zero-contact brokerages `Do Not Scrape`.
-- Coldwell Banker rosters are deterministic/email-rich at `https://www.coldwellbanker.com/city/{state}/{city}/agents`; raw HTML embeds agent JSON fields.
-- KW/IDX-style protected roster pages can show Cloudflare/security verification to production headless Chromium and should be marked `Blocked`; do not try CAPTCHA bypasses unless explicitly requested.
-- Realtor directory discovery may use Zillow/Realtor.com/Redfin/Homes.com as profile-discovery signals only; do not bypass robots, logins, CAPTCHAs, paywalls, or private APIs.
+- SQLite DB (`crm.db`) is seeded with 362 brokerage profiles, 630 offices, 31 agent roster contacts, and 9 outreach campaigns.
+- 23 boutique brokerages have detailed profile research status set to 'Complete' (notes, offered tech systems, and campaign angles configured).
+- 9 Outreach Campaigns are fully set up in the DB: Benchmark Realty, Fathom Realty, United Real Estate, Virtual Properties Realty (VPR), and 5 region-specific Boutique campaigns (California, Colorado, Florida, Georgia, and General Boutique).
+- Outreach templates utilize target links:
+  - Free 14-day trial: `https://realestatecrmpro.com`
+  - Demo scheduling: `https://realestatecrmpro.com/schedule/realestatecrmpro-demo/`
+  - YouTube channel: `https://www.youtube.com/@RealEstateCRMPro`
+- Specific YouTube training videos are referenced (such as replacements for software sprawl, CMA walkthroughs, booking tools).
 
-## CRM / Email Safeguards
+## CRM / Email Safeguards & Batch Sending
 
 - Sales CRM exposes Brokerage Research, Agent Roster, Lead Communication, Human Review, Verification Queue, Campaigns, and Autopilot Settings tabs.
-- Agent Roster surfaces `roster_contacts`; it also has scraper and CSV contact import controls for building the `Scraped` lead audience.
-- Lead Communication filters to responded leads via `/api/leads?respondedOnly=1`.
-- Lead emails are normalized before storage; scraping/import skips invalid emails, existing lead emails, and DNC emails.
-- CSV contact import posts memory-only uploads to `/api/leads/import-csv`, accepts common contact-list headers, caps imports at 1,000 contacts, and stores imported contacts as `Scraped` leads.
-- DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients and DNC removal requires `ALLOW_DNC_REMOVAL=true`.
-- `OUTBOUND_POSTAL_ADDRESS` must be configured for compliance-required outbound Mailgun sends.
+- Personalization: `personalizeCampaignBody` in `server.js` replaces `[Brokerage Name]`, `[Brokerage]`, `[Company]`, and `[City]` in template subjects and bodies.
+- Batch Sending: Users can trigger a batch campaign enrollment from the Brokerage Research tab. 
+  - Front-end displays a "Send Batch" button for brokerages with roster contacts.
+  - Clicking "Send Batch" opens a modal to select a campaign and batch size.
+  - Endpoint `POST /api/brokerages/send-batch` pulls raw roster contacts, promotes them to the `leads` table as `Scraped` (if not already present), enrolls them in the campaign, and sends the first step immediately.
 - Campaign approval targets only `Scraped` leads, sends Step 1 through Mailgun, and stores campaign id/step on leads.
-- Backend CRM automation toggles default off: daily scrape, auto-enroll Scraped leads, auto-approve campaigns, and auto-send due follow-ups.
-- Auto-pause on reply is supported through Mailgun inbound webhook.
-- Mailgun inbound replies post to `/api/webhooks/inbound-email`; webhook signatures are verified when `REQUIRE_MAILGUN_WEBHOOK_SIGNATURE=true`.
-- Inbound responder flow: save Realtor reply, pause active campaign if enabled, quarantine unsubscribe requests, ask Gemini for JSON reply/handoff decision, send through Mailgun only when no handoff is needed.
-- Human Review tab surfaces `Needs Human Action` leads, handoff reasons, conversation history, and preserved unsent AI drafts.
-- As of 2026-07-04, Gemini draft/JSON failures route the lead to `Needs Human Action` instead of sending a generic fallback.
-- As of 2026-07-04, inbound auto-replies use limited retries for transient Mailgun/network failures; if delivery still fails, preserve the draft and mark `Needs Human Action`.
-- Open/click/signup routing is not connected yet; only inbound replies are tracked.
-
-## Current Status
-
-- 2026-07-02 hardening is deployed: root static files are allowlisted, production/admin Basic auth is required, CORS is restricted, Mailgun webhook signatures are verified, and outbound compliance footer/List-Unsubscribe are enforced.
-- Key deployed commits include hardening `c35051f`, async lead scrape `43c3054`, brokerage-roster-first `649b399`, realtor dedupe/privacy `1d500a7`, CRM auto-approve `2b33db0`, lead intelligence base `a91eb02`, OpenRouter provider/UI `e484757`/`f562eee`, agent dashboard controls `64f48bb`, multi-office cycles `8db2269`, Coldwell Banker extraction `39529c7`, CRM visibility `4b7b1a2`, response inbox `e4d8392`, activity log `561c0ed`, OpenRouter free guard `7ddf483`, roster-gated research `32f654f`, OpenRouter-only suppression `0d435f8`, inbound responder safety `416f8bb`, CRM human review queue `852be6d`, and CRM CSV import `6d27ac9`.
-- Production tests proved hidden DB path end to end; Pointe South Realty harvested 31 contacts, Coldwell Banker Huntsville/Knoxville harvested 23 contacts total, and production roster contacts reached at least 64.
-- OpenRouter free models can return 429; Lead Intelligence should fail closed rather than spend Gemini budget.
-- Research & Trends is onboarding-aware and should not invent engagement numbers.
+- DNC/unsubscribe entries are permanent by default; outbound sending blocks DNC recipients and DNC removal requires `ALLOW_DNC_REMOVAL=true`.
 
 ## Working Agreements
 
