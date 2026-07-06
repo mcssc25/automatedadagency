@@ -1113,35 +1113,59 @@
 
             <!-- Batch Send Campaign Modal -->
             <div class="modal-overlay" id="batch-campaign-modal" style="display:none;">
-                <div class="modal-card" style="max-width: 500px;">
+                <div class="modal-card brokerage-launch-modal">
                     <div class="modal-header" style="border-bottom:1px solid var(--border-color); padding-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
-                        <h3><i class="fa-solid fa-paper-plane text-accent"></i> Send Campaign Batch</h3>
+                        <h3><i class="fa-solid fa-paper-plane text-accent"></i> Brokerage Campaign Launch</h3>
                         <button class="modal-close" onclick="App.closeBatchCampaignModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.5rem; cursor:pointer;">&times;</button>
                     </div>
-                    <div class="modal-body" style="padding-top:15px; display:flex; flex-direction:column; gap:16px;">
-                        <p class="helper-text" style="margin:0;">Select a campaign and a batch size to enroll and send to agents at <strong id="batch-brokerage-name-label" style="color:var(--accent);"></strong>.</p>
+                    <div class="modal-body brokerage-launch-body">
+                        <p class="helper-text" style="margin:0;">Preview agents, choose a campaign, and launch a controlled send for <strong id="batch-brokerage-name-label" style="color:var(--accent);"></strong>.</p>
                         <input type="hidden" id="batch-brokerage-name-hidden">
-                        <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
-                            <label for="batch-campaign-select" style="font-weight:600; color:var(--text-primary); display:block;">Outbound Campaign</label>
-                            <select id="batch-campaign-select" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
+
+                        <div class="brokerage-launch-grid">
+                            <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
+                                <label for="batch-campaign-select" style="font-weight:600; color:var(--text-primary); display:block;">Variant A Campaign</label>
+                                <select id="batch-campaign-select" class="brokerage-launch-input">
+                                    <!-- Options populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
+                                <label for="batch-size-select" style="font-weight:600; color:var(--text-primary); display:block;">Send Wave</label>
+                                <select id="batch-size-select" class="brokerage-launch-input">
+                                    <option value="5">First 5 selected agents</option>
+                                    <option value="10" selected>First 10 selected agents</option>
+                                    <option value="20">First 20 selected agents</option>
+                                    <option value="50">First 50 selected agents</option>
+                                    <option value="100">First 100 selected agents</option>
+                                    <option value="all">All selected agents</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <label class="checkbox-label brokerage-ab-toggle">
+                            <input type="checkbox" id="batch-ab-test-enabled">
+                            <span>Run A/B split with a second campaign variant</span>
+                        </label>
+                        <div class="form-group" id="batch-campaign-b-wrap" style="display:none; flex-direction:column; gap:8px;">
+                            <label for="batch-campaign-b-select" style="font-weight:600; color:var(--text-primary); display:block;">Variant B Campaign</label>
+                            <select id="batch-campaign-b-select" class="brokerage-launch-input">
                                 <!-- Options populated dynamically -->
                             </select>
                         </div>
-                        <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
-                            <label for="batch-size-select" style="font-weight:600; color:var(--text-primary); display:block;">Batch Size (Number of agents)</label>
-                            <select id="batch-size-select" style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; box-sizing:border-box;">
-                                <option value="5">5 agents</option>
-                                <option value="10" selected>10 agents</option>
-                                <option value="20">20 agents</option>
-                                <option value="50">50 agents</option>
-                                <option value="100">100 agents</option>
-                                <option value="all">All available agents</option>
-                            </select>
+
+                        <div class="brokerage-launch-summary" id="batch-recipient-summary">Choose a campaign to preview available recipients.</div>
+                        <div class="brokerage-recipient-toolbar">
+                            <button type="button" class="btn btn-sm btn-outline" id="btn-select-all-recipients">Select All Eligible</button>
+                            <button type="button" class="btn btn-sm btn-outline" id="btn-clear-recipients">Clear</button>
+                            <span id="batch-selected-count">0 selected</span>
+                        </div>
+                        <div class="brokerage-recipient-list" id="batch-recipient-list">
+                            <div class="empty-state"><p>Recipient preview will load after a campaign is selected.</p></div>
                         </div>
                     </div>
                     <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--border-color); padding-top:15px; margin-top:20px;">
                         <button class="btn btn-outline" onclick="App.closeBatchCampaignModal()">Cancel</button>
-                        <button class="btn btn-primary" onclick="App.submitBatchCampaign()"><i class="fa-solid fa-rocket"></i> Launch Batch</button>
+                        <button class="btn btn-primary" id="btn-launch-brokerage-campaign" onclick="App.submitBatchCampaign()"><i class="fa-solid fa-paper-plane"></i> Send Selected Emails Now</button>
                     </div>
                 </div>
             </div>
@@ -1203,7 +1227,10 @@
                             <div class="dashboard-panel">
                                 <div class="panel-header">
                                     <h3>Brokerages Being Researched</h3>
-                                    <button class="btn btn-sm btn-outline" id="btn-refresh-crm-intel"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                                    <div class="brokerage-header-actions">
+                                        <button class="btn btn-sm btn-outline" id="btn-brokerage-finished-list" type="button"><i class="fa-solid fa-circle-check"></i> Finished List <span id="brokerage-finished-count" class="mini-count-badge">0</span></button>
+                                        <button class="btn btn-sm btn-outline" id="btn-refresh-crm-intel"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                                    </div>
                                 </div>
                                 <div class="crm-search-row">
                                     <input type="text" id="crm-brokerage-search" placeholder="Search brokerage, systems, notes...">

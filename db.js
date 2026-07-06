@@ -242,6 +242,21 @@ function initDb() {
             FOREIGN KEY (brokerageOfficeId) REFERENCES brokerage_offices(id)
         );
 
+        CREATE TABLE IF NOT EXISTS roster_scraping_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            brokerageOfficeId INTEGER,
+            brokerageName TEXT NOT NULL,
+            city TEXT,
+            state TEXT,
+            agentName TEXT NOT NULL,
+            profileUrl TEXT UNIQUE NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            lastError TEXT,
+            createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (brokerageOfficeId) REFERENCES brokerage_offices(id)
+        );
+
         CREATE TABLE IF NOT EXISTS intelligence_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             type TEXT NOT NULL,
@@ -287,6 +302,9 @@ function initDb() {
 
         CREATE INDEX IF NOT EXISTS idx_roster_contacts_brokerage
         ON roster_contacts(brokerageName, city, state);
+
+        CREATE INDEX IF NOT EXISTS idx_roster_scraping_queue_status
+        ON roster_scraping_queue(status, updatedAt);
 
         CREATE INDEX IF NOT EXISTS idx_intelligence_runs_started
         ON intelligence_runs(startedAt DESC);
@@ -1124,12 +1142,15 @@ function getLeadIntelligenceStatus() {
     const recentRuns = db.prepare('SELECT * FROM intelligence_runs ORDER BY id DESC LIMIT 10').all()
         .map(row => ({ ...row, stats: safeJsonParse(row.statsJson, {}) }));
 
+    const queueCounts = db.prepare('SELECT status, COUNT(*) AS count FROM roster_scraping_queue GROUP BY status').all();
+
     return {
         cities: cityCounts,
         offices: officeCounts,
         profiles: profileCounts,
         contacts: contactCount,
-        recentRuns
+        recentRuns,
+        queue: queueCounts
     };
 }
 
@@ -1143,6 +1164,47 @@ function markInterruptedIntelligenceRuns(reason = 'Server restarted before the r
         WHERE status = 'Running'
     `);
     return stmt.run(normalizeText(reason), normalizeText(reason)).changes;
+}
+
+function insertScrapingQueueItem(item) {
+    const stmt = db.prepare(`
+        INSERT INTO roster_scraping_queue (
+            brokerageOfficeId, brokerageName, city, state, agentName, profileUrl, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profileUrl) DO NOTHING
+    `);
+    return stmt.run(
+        item.brokerageOfficeId || null,
+        normalizeText(item.brokerageName),
+        normalizeText(item.city),
+        normalizeText(item.state),
+        normalizeText(item.agentName),
+        normalizeText(item.profileUrl),
+        normalizeText(item.status || 'Pending')
+    ).changes;
+}
+
+function getPendingScrapingQueueItems(limit = 10) {
+    return db.prepare(`
+        SELECT * FROM roster_scraping_queue
+        WHERE status = 'Pending'
+        LIMIT ?
+    `).all(limit);
+}
+
+function updateScrapingQueueStatus(id, status, error = null) {
+    return db.prepare(`
+        UPDATE roster_scraping_queue
+        SET status = ?, lastError = ?, updatedAt = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `).run(normalizeText(status), normalizeText(error), id).changes;
+}
+
+function getScrapingQueueStats() {
+    return db.prepare(`
+        SELECT status, COUNT(*) AS count FROM roster_scraping_queue GROUP BY status
+    `).all();
 }
 
 module.exports = {
@@ -1189,5 +1251,9 @@ module.exports = {
     insertIntelligenceRun,
     updateIntelligenceRun,
     getLeadIntelligenceStatus,
-    markInterruptedIntelligenceRuns
+    markInterruptedIntelligenceRuns,
+    insertScrapingQueueItem,
+    getPendingScrapingQueueItems,
+    updateScrapingQueueStatus,
+    getScrapingQueueStats
 };

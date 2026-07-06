@@ -103,6 +103,8 @@ class AutopilotApp {
                 status: null
             },
             brokerageSearchQuery: '',
+            brokerageFinishedView: false,
+            finishedBrokerages: [],
             rosterSearchQuery: '',
             rosterBrokerageFilter: '',
             supportSessions: [],
@@ -284,6 +286,8 @@ class AutopilotApp {
         this.dom.crmBrokerageList = document.getElementById("crm-brokerage-list");
         this.dom.crmIntelligenceSummary = document.getElementById("crm-intelligence-summary");
         this.dom.btnRefreshCrmIntel = document.getElementById("btn-refresh-crm-intel");
+        this.dom.btnBrokerageFinishedList = document.getElementById("btn-brokerage-finished-list");
+        this.dom.brokerageFinishedCount = document.getElementById("brokerage-finished-count");
         this.dom.crmIntelContactCount = document.getElementById("crm-intel-contact-count");
         this.dom.crmIntelOfficeCount = document.getElementById("crm-intel-office-count");
         this.dom.crmIntelQueuedCount = document.getElementById("crm-intel-queued-count");
@@ -318,6 +322,18 @@ class AutopilotApp {
         this.dom.btnCreateCampaign = document.getElementById("btn-create-campaign");
         this.dom.crmCampaignsContainer = document.getElementById("crm-campaigns-container");
         this.dom.crmCampaignWorkflowSummary = document.getElementById("crm-campaign-workflow-summary");
+        this.dom.batchCampaignModal = document.getElementById("batch-campaign-modal");
+        this.dom.batchCampaignSelect = document.getElementById("batch-campaign-select");
+        this.dom.batchCampaignBSelect = document.getElementById("batch-campaign-b-select");
+        this.dom.batchCampaignBWrap = document.getElementById("batch-campaign-b-wrap");
+        this.dom.batchAbTestEnabled = document.getElementById("batch-ab-test-enabled");
+        this.dom.batchSizeSelect = document.getElementById("batch-size-select");
+        this.dom.batchRecipientSummary = document.getElementById("batch-recipient-summary");
+        this.dom.batchRecipientList = document.getElementById("batch-recipient-list");
+        this.dom.batchSelectedCount = document.getElementById("batch-selected-count");
+        this.dom.btnSelectAllRecipients = document.getElementById("btn-select-all-recipients");
+        this.dom.btnClearRecipients = document.getElementById("btn-clear-recipients");
+        this.dom.btnLaunchBrokerageCampaign = document.getElementById("btn-launch-brokerage-campaign");
 
         // Outbound Settings
         this.dom.settingsDailyLimit = document.getElementById("settings-daily-limit");
@@ -734,6 +750,9 @@ class AutopilotApp {
         if (this.dom.btnRefreshCrmIntel) {
             this.dom.btnRefreshCrmIntel.addEventListener("click", () => this.loadCrmIntelligence());
         }
+        if (this.dom.btnBrokerageFinishedList) {
+            this.dom.btnBrokerageFinishedList.addEventListener("click", () => this.toggleBrokerageFinishedView());
+        }
 
         // Autopilot Settings auto-saving input listeners
         this.dom.contentAutopilotMasterEnabled.addEventListener("change", () => {
@@ -905,6 +924,26 @@ class AutopilotApp {
             e.preventDefault();
             this.handleCrmCampaignCreate();
         });
+        if (this.dom.batchCampaignSelect) {
+            this.dom.batchCampaignSelect.addEventListener("change", () => this.loadBrokerageLaunchPreview());
+        }
+        if (this.dom.batchCampaignBSelect) {
+            this.dom.batchCampaignBSelect.addEventListener("change", () => this.loadBrokerageLaunchPreview());
+        }
+        if (this.dom.batchAbTestEnabled) {
+            this.dom.batchAbTestEnabled.addEventListener("change", () => {
+                if (this.dom.batchCampaignBWrap) {
+                    this.dom.batchCampaignBWrap.style.display = this.dom.batchAbTestEnabled.checked ? "flex" : "none";
+                }
+                this.loadBrokerageLaunchPreview();
+            });
+        }
+        if (this.dom.btnSelectAllRecipients) {
+            this.dom.btnSelectAllRecipients.addEventListener("click", () => this.setBrokerageRecipientSelection(true));
+        }
+        if (this.dom.btnClearRecipients) {
+            this.dom.btnClearRecipients.addEventListener("click", () => this.setBrokerageRecipientSelection(false));
+        }
 
         // Developer credentials form submit
         if (this.dom.devCredentialsForm) {
@@ -953,6 +992,8 @@ class AutopilotApp {
         if (!Array.isArray(this.state.crmIntelligence.brokerages)) this.state.crmIntelligence.brokerages = [];
         if (!Array.isArray(this.state.crmIntelligence.rosterContacts)) this.state.crmIntelligence.rosterContacts = [];
         this.state.brokerageSearchQuery = this.state.brokerageSearchQuery || '';
+        this.state.brokerageFinishedView = this.state.brokerageFinishedView === true;
+        if (!Array.isArray(this.state.finishedBrokerages)) this.state.finishedBrokerages = [];
         this.state.rosterSearchQuery = this.state.rosterSearchQuery || '';
         this.state.rosterBrokerageFilter = this.state.rosterBrokerageFilter || '';
         if (!Array.isArray(this.state.socialPosts)) this.state.socialPosts = [];
@@ -1768,6 +1809,212 @@ class AutopilotApp {
         };
     }
 
+    normalizeBrokerageKey(value) {
+        return String(value || '')
+            .trim()
+            .toLowerCase()
+            .replace(/&amp;/g, '&')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
+    getBrokerageKey(brokerage = {}) {
+        return this.normalizeBrokerageKey(brokerage.name || brokerage.website || brokerage.nationalWebsite || '');
+    }
+
+    getFinishedBrokerageMap() {
+        return new Map((this.state.finishedBrokerages || [])
+            .filter(item => item && item.key)
+            .map(item => [item.key, item]));
+    }
+
+    findBrokerageByEncodedKey(encodedKey) {
+        const key = this.normalizeBrokerageKey(decodeURIComponent(String(encodedKey || '')));
+        return (this.state.crmIntelligence?.brokerages || []).find(item => this.getBrokerageKey(item) === key) || null;
+    }
+
+    getBrokerageCampaignAngle(brokerage = {}) {
+        const techStack = brokerage.techStack && typeof brokerage.techStack === 'object' ? brokerage.techStack : {};
+        const angles = Array.isArray(techStack.campaignAngles) ? techStack.campaignAngles.filter(Boolean).slice(0, 2).join(' ') : '';
+        return angles || brokerage.notes || 'Write around agent time saved, faster lead response, and visibility into follow-up work.';
+    }
+
+    toggleBrokerageFinishedView() {
+        this.state.brokerageFinishedView = !this.state.brokerageFinishedView;
+        this.saveState();
+        this.renderCrmIntelligence();
+    }
+
+    markBrokerageFinished(encodedKey) {
+        const brokerage = this.findBrokerageByEncodedKey(encodedKey);
+        if (!brokerage) return;
+        const key = this.getBrokerageKey(brokerage);
+        const existing = this.getFinishedBrokerageMap().get(key);
+        const finishedItem = {
+            ...existing,
+            key,
+            name: brokerage.name || existing?.name || 'Unknown Brokerage',
+            category: brokerage.category || existing?.category || 'Brokerage profile',
+            contactsCount: Number(brokerage.contactsCount || existing?.contactsCount || 0),
+            officesCount: Number(brokerage.officesCount || existing?.officesCount || 0),
+            campaignAngle: this.getBrokerageCampaignAngle(brokerage),
+            finishedAt: new Date().toISOString()
+        };
+        this.state.finishedBrokerages = [
+            finishedItem,
+            ...(this.state.finishedBrokerages || []).filter(item => item && item.key !== key)
+        ];
+        this.saveState();
+        this.renderCrmIntelligence();
+        this.appendConsoleLine('agent-sales', `${finishedItem.name} moved to the brokerage finished list.`);
+    }
+
+    restoreFinishedBrokerage(encodedKey) {
+        const key = this.normalizeBrokerageKey(decodeURIComponent(String(encodedKey || '')));
+        const restored = (this.state.finishedBrokerages || []).find(item => item && item.key === key);
+        this.state.finishedBrokerages = (this.state.finishedBrokerages || []).filter(item => item && item.key !== key);
+        this.saveState();
+        this.renderCrmIntelligence();
+        if (restored) this.appendConsoleLine('agent-sales', `${restored.name} restored to the active brokerage research list.`);
+    }
+
+    openBrokerageCampaignBuilder(encodedKey) {
+        const brokerage = this.findBrokerageByEncodedKey(encodedKey);
+        if (!brokerage) {
+            alert('That brokerage is not loaded in the current research list. Refresh CRM intelligence and try again.');
+            return;
+        }
+
+        const name = brokerage.name || 'Brokerage';
+        const positioning = this.summarizeBrokeragePositioning(brokerage);
+        const techStack = brokerage.techStack && typeof brokerage.techStack === 'object' ? brokerage.techStack : {};
+        const sourceEvidence = Array.isArray(techStack.sourceEvidence) ? techStack.sourceEvidence : [];
+        const evidence = sourceEvidence
+            .slice(0, 3)
+            .map(source => source.title || source.sourceType || source.url)
+            .filter(Boolean)
+            .join('; ');
+        const systems = [brokerage.crmOffering, brokerage.esignOffering, brokerage.leadTools, brokerage.videoEmail]
+            .map(v => this.cleanIntelText(v))
+            .filter(Boolean)
+            .join(' | ') || 'No clear advertised system stack found yet.';
+
+        if (this.dom.campaignName) this.dom.campaignName.value = `${name} Agent Outreach`;
+        if (this.dom.campaignType) this.dom.campaignType.value = 'cold-outreach';
+        if (this.dom.campaignVideoAsset && !this.dom.campaignVideoAsset.value.trim()) {
+            this.dom.campaignVideoAsset.value = this.getDefaultCampaignCta();
+        }
+        if (this.dom.campaignInstructions) {
+            this.dom.campaignInstructions.value = [
+                `Build a 3-step email drip for agents at ${name}.`,
+                `Respect their brokerage strengths: ${positioning.strengths}`,
+                `Use these gaps as the offer angle: ${positioning.gaps}`,
+                `Known systems they offer: ${systems}`,
+                `Agent chatter/context: ${techStack.agentDiscussionSummary || 'No public agent discussion found yet.'}`,
+                `Suggested campaign angle: ${this.getBrokerageCampaignAngle(brokerage)}`,
+                evidence ? `Evidence to stay grounded: ${evidence}` : '',
+                'Tone: specific, consultative, short, and practical. Do not insult the brokerage; position this as extra agent-level follow-up and video-email support that complements what the office already provides.'
+            ].filter(Boolean).join('\n\n');
+        }
+
+        const campaignsTab = document.querySelector('.crm-tab[data-target="crm-campaigns"]');
+        if (campaignsTab) campaignsTab.click();
+        this.dom.crmCampaignForm?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.appendConsoleLine('agent-sales', `Campaign builder loaded with a brokerage-specific angle for ${name}.`);
+    }
+
+    renderFinishedBrokerageList() {
+        const query = String(this.state.brokerageSearchQuery || '').trim().toLowerCase();
+        const currentBrokerages = new Map((this.state.crmIntelligence?.brokerages || []).map(item => [this.getBrokerageKey(item), item]));
+        const finished = (this.state.finishedBrokerages || [])
+            .filter(item => item && item.key)
+            .map(item => ({ ...item, ...(currentBrokerages.get(item.key) || {}) }))
+            .filter(item => {
+                if (!query) return true;
+                return [item.name, item.category, item.campaignAngle, item.notes].some(value => String(value || '').toLowerCase().includes(query));
+            });
+
+        if (!finished.length) {
+            return `<div class="empty-state"><i class="fa-solid fa-circle-check"></i><p>No finished brokerages match this search yet.</p></div>`;
+        }
+
+        return finished.map(item => {
+            const key = item.key || this.getBrokerageKey(item);
+            const encodedKey = this.escapeHtml(encodeURIComponent(key));
+            const finishedAt = item.finishedAt ? this.formatShortDate(item.finishedAt) : 'Finished';
+            return `
+                <article class="brokerage-card brokerage-card-finished">
+                    <div class="brokerage-card-header">
+                        <div class="brokerage-title-block">
+                            <h4>${this.escapeHtml(item.name || 'Unknown Brokerage')}</h4>
+                            <p>${this.escapeHtml(item.category || 'Brokerage profile')} | ${Number(item.contactsCount || 0)} roster contact(s) | ${Number(item.officesCount || 0)} office(s)</p>
+                        </div>
+                        <div class="brokerage-card-actions">
+                            <span class="badge success-badge"><i class="fa-solid fa-circle-check"></i> ${this.escapeHtml(finishedAt)}</span>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="App.restoreFinishedBrokerage('${encodedKey}')"><i class="fa-solid fa-rotate-left"></i> Restore</button>
+                        </div>
+                    </div>
+                    <div class="brokerage-card-section single-column">
+                        <div><strong>Email Campaign Angle</strong><p>${this.escapeHtml(item.campaignAngle || 'No saved campaign angle.')}</p></div>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    renderBrokerageResearchCard(brokerage = {}) {
+        const key = this.getBrokerageKey(brokerage);
+        const encodedKey = this.escapeHtml(encodeURIComponent(key));
+        const techStack = brokerage.techStack && typeof brokerage.techStack === 'object' ? brokerage.techStack : {};
+        const positioning = this.summarizeBrokeragePositioning(brokerage);
+        const siteUrl = this.safeExternalUrl(brokerage.website || brokerage.nationalWebsite);
+        const offices = Array.isArray(brokerage.offices) ? brokerage.offices : [];
+        const sourceEvidence = Array.isArray(techStack.sourceEvidence) ? techStack.sourceEvidence : [];
+        const sourceLinks = sourceEvidence.slice(0, 3).map(source => {
+            const url = this.safeExternalUrl(source.url);
+            const label = source.title || source.sourceType || 'Source';
+            return url
+                ? `<a class="lead-detail-link" href="${this.escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i>${this.escapeHtml(label)}</a>`
+                : `<span class="brokerage-chip">${this.escapeHtml(label)}</span>`;
+        }).join('');
+        const officeChips = offices.slice(0, 5).map(office => {
+            const label = `${office.city || ''}${office.state ? `, ${office.state}` : ''}`.trim() || 'Office';
+            return `<span class="brokerage-chip">${this.escapeHtml(label)} | ${this.escapeHtml(office.status || 'Pending')} | ${Number(office.contactCount || 0)} agents</span>`;
+        }).join('');
+
+        return `
+            <article class="brokerage-card">
+                <div class="brokerage-card-header">
+                    <div class="brokerage-title-block">
+                        <h4>${this.escapeHtml(brokerage.name || 'Unknown Brokerage')}</h4>
+                        <p>${this.escapeHtml(brokerage.category || 'Brokerage profile')} | ${Number(brokerage.contactsCount || 0)} roster contact(s) | ${Number(brokerage.officesCount || 0)} office(s)</p>
+                    </div>
+                    <div class="brokerage-card-actions">
+                        <button type="button" class="btn btn-sm btn-primary" onclick="App.openBrokerageCampaignBuilder('${encodedKey}')"><i class="fa-solid fa-wand-magic-sparkles"></i> Create Email Campaign</button>
+                        ${Number(brokerage.contactsCount || 0) > 0 ? `<button type="button" class="btn btn-sm btn-outline btn-send-batch" onclick="App.openBatchCampaignModal('${this.escapeHtml(encodeURIComponent(brokerage.name || ''))}', true)" style="border-color:var(--accent); color:var(--accent);"><i class="fa-solid fa-clipboard-check"></i> Review & Launch</button>` : ''}
+                        <button type="button" class="btn btn-sm btn-outline" onclick="App.markBrokerageFinished('${encodedKey}')"><i class="fa-solid fa-circle-check"></i> Finished</button>
+                        ${siteUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(siteUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-globe"></i>Site</a>` : ''}
+                    </div>
+                </div>
+                <div class="brokerage-chip-row">
+                    <span class="brokerage-chip">${this.escapeHtml(brokerage.researchStatus || 'Pending')}</span>
+                    <span class="brokerage-chip">${Number(brokerage.harvestedOffices || 0)} harvested</span>
+                    <span class="brokerage-chip">${Number(brokerage.queuedOffices || 0)} queued</span>
+                    <span class="brokerage-chip">${Number(brokerage.blockedOffices || 0)} blocked</span>
+                </div>
+                <div class="brokerage-card-section">
+                    <div><strong>Systems They Offer</strong><p>${this.escapeHtml([brokerage.crmOffering, brokerage.esignOffering, brokerage.leadTools, brokerage.videoEmail].map(v => this.cleanIntelText(v)).filter(Boolean).join(' | ') || 'Not researched yet.')}</p></div>
+                    <div><strong>Strength Against Us</strong><p>${this.escapeHtml(positioning.strengths)}</p></div>
+                    <div><strong>Gap We Can Fill</strong><p>${this.escapeHtml(positioning.gaps)}</p></div>
+                    <div><strong>Agent Chatter</strong><p>${this.escapeHtml(techStack.agentDiscussionSummary || 'No Reddit/forum chatter researched yet.')}</p></div>
+                    <div><strong>Email Campaign Angle</strong><p>${this.escapeHtml(this.getBrokerageCampaignAngle(brokerage))}</p></div>
+                    <div><strong>Evidence</strong><p>${sourceLinks || 'No source evidence stored yet.'}</p></div>
+                </div>
+                ${officeChips ? `<div class="brokerage-office-row">${officeChips}</div>` : ''}
+            </article>
+        `;
+    }
+
     renderCrmIntelligence() {
         const intel = this.state.crmIntelligence || {};
         const status = intel.status || this.state.leadIntelligence?.status || {};
@@ -1830,95 +2077,176 @@ class AutopilotApp {
         }
 
         if (!this.dom.crmBrokerageList) return;
-        const brokerages = intel.brokerages || [];
-        if (!brokerages.length) {
-            this.dom.crmBrokerageList.innerHTML = `<div class="empty-state"><i class="fa-solid fa-database"></i><p>No brokerage profiles match this search yet.</p></div>`;
+        const finishedMap = this.getFinishedBrokerageMap();
+        const finishedCount = finishedMap.size;
+        if (this.dom.brokerageFinishedCount) this.dom.brokerageFinishedCount.innerText = String(finishedCount);
+        if (this.dom.btnBrokerageFinishedList) {
+            this.dom.btnBrokerageFinishedList.classList.toggle('active', this.state.brokerageFinishedView === true);
+            this.dom.btnBrokerageFinishedList.innerHTML = this.state.brokerageFinishedView
+                ? `<i class="fa-solid fa-arrow-left"></i> Active List <span id="brokerage-finished-count" class="mini-count-badge">${finishedCount}</span>`
+                : `<i class="fa-solid fa-circle-check"></i> Finished List <span id="brokerage-finished-count" class="mini-count-badge">${finishedCount}</span>`;
+            this.dom.brokerageFinishedCount = document.getElementById("brokerage-finished-count");
+        }
+
+        if (this.state.brokerageFinishedView) {
+            this.dom.crmBrokerageList.innerHTML = this.renderFinishedBrokerageList();
             return;
         }
 
-        this.dom.crmBrokerageList.innerHTML = brokerages.map(brokerage => {
-            const techStack = brokerage.techStack && typeof brokerage.techStack === 'object' ? brokerage.techStack : {};
-            const positioning = this.summarizeBrokeragePositioning(brokerage);
-            const siteUrl = this.safeExternalUrl(brokerage.website || brokerage.nationalWebsite);
-            const offices = Array.isArray(brokerage.offices) ? brokerage.offices : [];
-            const sourceEvidence = Array.isArray(techStack.sourceEvidence) ? techStack.sourceEvidence : [];
-            const sourceLinks = sourceEvidence.slice(0, 3).map(source => {
-                const url = this.safeExternalUrl(source.url);
-                const label = source.title || source.sourceType || 'Source';
-                return url
-                    ? `<a class="lead-detail-link" href="${this.escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i>${this.escapeHtml(label)}</a>`
-                    : `<span class="brokerage-chip">${this.escapeHtml(label)}</span>`;
-            }).join('');
-            const campaignAngles = Array.isArray(techStack.campaignAngles) ? techStack.campaignAngles.filter(Boolean).slice(0, 2).join(' ') : '';
-            const officeChips = offices.slice(0, 5).map(office => {
-                const label = `${office.city || ''}${office.state ? `, ${office.state}` : ''}`.trim() || 'Office';
-                return `<span class="brokerage-chip">${this.escapeHtml(label)} · ${this.escapeHtml(office.status || 'Pending')} · ${Number(office.contactCount || 0)} agents</span>`;
-            }).join('');
-            return `
-                <article class="brokerage-card">
-                    <div class="brokerage-card-header">
-                        <div>
-                        <div>
-                            <h4>${this.escapeHtml(brokerage.name || 'Unknown Brokerage')}</h4>
-                            <p>${this.escapeHtml(brokerage.category || 'Brokerage profile')} • ${Number(brokerage.contactsCount || 0)} roster contact(s) • ${Number(brokerage.officesCount || 0)} office(s)</p>
-                        </div>
-                        <div style="display:flex; gap:8px; align-items:center;">
-                            ${Number(brokerage.contactsCount || 0) > 0 ? `<button type="button" class="btn btn-sm btn-outline btn-send-batch" onclick="App.openBatchCampaignModal('${this.escapeHtml(brokerage.name)}')" style="border-color:var(--accent); color:var(--accent);"><i class="fa-solid fa-paper-plane"></i> Send Batch</button>` : ''}
-                            ${siteUrl ? `<a class="lead-detail-link" href="${this.escapeHtml(siteUrl)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-globe"></i>Site</a>` : ''}
-                        </div>
-                    <div class="brokerage-chip-row">
-                        <span class="brokerage-chip">${this.escapeHtml(brokerage.researchStatus || 'Pending')}</span>
-                        <span class="brokerage-chip">${Number(brokerage.harvestedOffices || 0)} harvested</span>
-                        <span class="brokerage-chip">${Number(brokerage.queuedOffices || 0)} queued</span>
-                        <span class="brokerage-chip">${Number(brokerage.blockedOffices || 0)} blocked</span>
-                    </div>
-                    <div class="brokerage-card-section">
-                        <div><strong>Systems They Offer</strong><p>${this.escapeHtml([brokerage.crmOffering, brokerage.esignOffering, brokerage.leadTools, brokerage.videoEmail].map(v => this.cleanIntelText(v)).filter(Boolean).join(' | ') || 'Not researched yet.')}</p></div>
-                        <div><strong>Strength Against Us</strong><p>${this.escapeHtml(positioning.strengths)}</p></div>
-                        <div><strong>Gap We Can Fill</strong><p>${this.escapeHtml(positioning.gaps)}</p></div>
-                        <div><strong>Agent Chatter</strong><p>${this.escapeHtml(techStack.agentDiscussionSummary || 'No Reddit/forum chatter researched yet.')}</p></div>
-                        <div><strong>Email Campaign Angle</strong><p>${this.escapeHtml(campaignAngles || brokerage.notes || 'Write around agent time saved, faster lead response, and visibility into follow-up work.')}</p></div>
-                        <div><strong>Evidence</strong><p>${sourceLinks || 'No source evidence stored yet.'}</p></div>
-                    </div>
-                    ${officeChips ? `<div class="brokerage-office-row">${officeChips}</div>` : ''}
-                </article>
-            `;
-        }).join('');
+        const activeBrokerages = (intel.brokerages || []).filter(brokerage => !finishedMap.has(this.getBrokerageKey(brokerage)));
+        if (!activeBrokerages.length) {
+            const message = finishedCount
+                ? 'All matching brokerages have been marked finished. Open Finished List to review or restore them.'
+                : 'No brokerage profiles match this search yet.';
+            this.dom.crmBrokerageList.innerHTML = `<div class="empty-state"><i class="fa-solid fa-database"></i><p>${this.escapeHtml(message)}</p></div>`;
+            return;
+        }
+
+        this.dom.crmBrokerageList.innerHTML = activeBrokerages.map(brokerage => this.renderBrokerageResearchCard(brokerage)).join('');
     }
 
-    openBatchCampaignModal(brokerageName) {
-        const modal = document.getElementById("batch-campaign-modal");
+    openBatchCampaignModal(brokerageName, encoded = false) {
+        if (encoded) brokerageName = decodeURIComponent(String(brokerageName || ''));
         const label = document.getElementById("batch-brokerage-name-label");
         const hidden = document.getElementById("batch-brokerage-name-hidden");
-        const select = document.getElementById("batch-campaign-select");
         
-        if (!modal || !label || !hidden || !select) return;
+        if (!this.dom.batchCampaignModal || !label || !hidden || !this.dom.batchCampaignSelect) return;
         
         label.textContent = brokerageName;
         hidden.value = brokerageName;
         
-        const campaigns = this.state.campaignsList || [];
-        select.innerHTML = campaigns.map(c => `<option value="${c.id}">${this.escapeHtml(c.name)}</option>`).join('') || `<option value="">No campaigns available</option>`;
+        const campaigns = this.getBrokerageLaunchCampaigns();
+        const options = campaigns.length
+            ? campaigns.map(c => `<option value="${c.id}">${this.escapeHtml(c.name)} (${this.escapeHtml(c.status || 'Active')})</option>`).join('')
+            : `<option value="">No campaigns available</option>`;
+        this.dom.batchCampaignSelect.innerHTML = options;
+        if (this.dom.batchCampaignBSelect) this.dom.batchCampaignBSelect.innerHTML = `<option value="">Choose Variant B...</option>${options}`;
+        if (this.dom.batchAbTestEnabled) this.dom.batchAbTestEnabled.checked = false;
+        if (this.dom.batchCampaignBWrap) this.dom.batchCampaignBWrap.style.display = "none";
+        if (this.dom.batchSizeSelect) this.dom.batchSizeSelect.value = "10";
+        if (this.dom.batchRecipientSummary) this.dom.batchRecipientSummary.textContent = campaigns.length ? "Loading recipient preview..." : "Create or activate a campaign before launching.";
+        if (this.dom.batchRecipientList) this.dom.batchRecipientList.innerHTML = `<div class="empty-state"><p>${campaigns.length ? 'Loading roster contacts...' : 'No campaign templates are available yet.'}</p></div>`;
+        if (this.dom.batchSelectedCount) this.dom.batchSelectedCount.textContent = "0 selected";
         
-        modal.style.display = "flex";
+        this.dom.batchCampaignModal.style.display = "flex";
+        if (campaigns.length) this.loadBrokerageLaunchPreview();
     }
 
     closeBatchCampaignModal() {
-        const modal = document.getElementById("batch-campaign-modal");
-        if (modal) modal.style.display = "none";
+        if (this.dom.batchCampaignModal) this.dom.batchCampaignModal.style.display = "none";
+    }
+
+    getBrokerageLaunchCampaigns() {
+        const byId = new Map();
+        [...(this.state.campaignsList || []), ...(this.state.verificationQueue || [])]
+            .filter(campaign => campaign && campaign.id)
+            .forEach(campaign => byId.set(String(campaign.id), campaign));
+        return [...byId.values()].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    }
+
+    getSelectedBrokerageRecipientEmails() {
+        if (!this.dom.batchRecipientList) return [];
+        return [...this.dom.batchRecipientList.querySelectorAll(".batch-recipient-checkbox:checked")]
+            .map(input => input.value)
+            .filter(Boolean);
+    }
+
+    updateBrokerageSelectedCount() {
+        const selected = this.getSelectedBrokerageRecipientEmails().length;
+        if (this.dom.batchSelectedCount) this.dom.batchSelectedCount.textContent = `${selected} selected`;
+        if (this.dom.btnLaunchBrokerageCampaign) this.dom.btnLaunchBrokerageCampaign.disabled = selected === 0;
+    }
+
+    setBrokerageRecipientSelection(checked) {
+        if (!this.dom.batchRecipientList) return;
+        this.dom.batchRecipientList.querySelectorAll(".batch-recipient-checkbox:not(:disabled)").forEach(input => {
+            input.checked = checked;
+        });
+        this.updateBrokerageSelectedCount();
+    }
+
+    async loadBrokerageLaunchPreview() {
+        const brokerageName = document.getElementById("batch-brokerage-name-hidden")?.value || '';
+        const campaignId = this.dom.batchCampaignSelect?.value || '';
+        const campaignIdB = this.dom.batchAbTestEnabled?.checked ? (this.dom.batchCampaignBSelect?.value || '') : '';
+        if (!brokerageName || !campaignId) return;
+        if (campaignIdB && String(campaignIdB) === String(campaignId)) {
+            if (this.dom.batchRecipientSummary) this.dom.batchRecipientSummary.textContent = "Variant B must be a different campaign.";
+            if (this.dom.batchRecipientList) this.dom.batchRecipientList.innerHTML = `<div class="empty-state"><p>Choose a different campaign for Variant B.</p></div>`;
+            this.updateBrokerageSelectedCount();
+            return;
+        }
+
+        if (this.dom.batchRecipientSummary) this.dom.batchRecipientSummary.textContent = "Loading recipient preview...";
+        if (this.dom.batchRecipientList) this.dom.batchRecipientList.innerHTML = `<div class="empty-state"><p>Checking roster contacts and enrollment history...</p></div>`;
+
+        try {
+            const params = new URLSearchParams({ brokerageName, campaignId });
+            if (campaignIdB) params.set("campaignIdB", campaignIdB);
+            const response = await fetch(`/api/brokerages/launch-preview?${params.toString()}`);
+            if (!response.ok) throw new Error(await this.parseApiError(response, "Recipient preview unavailable"));
+            const data = await response.json();
+            this.renderBrokerageLaunchRecipients(data.recipients || [], data);
+        } catch (error) {
+            if (this.dom.batchRecipientSummary) this.dom.batchRecipientSummary.textContent = `Preview failed: ${error.message}`;
+            if (this.dom.batchRecipientList) this.dom.batchRecipientList.innerHTML = `<div class="empty-state"><p>${this.escapeHtml(error.message)}</p></div>`;
+            this.updateBrokerageSelectedCount();
+        }
+    }
+
+    renderBrokerageLaunchRecipients(recipients = [], summary = {}) {
+        const eligible = recipients.filter(recipient => recipient.eligible);
+        const blocked = recipients.length - eligible.length;
+        if (this.dom.batchRecipientSummary) {
+            this.dom.batchRecipientSummary.textContent = `${eligible.length} eligible agent(s), ${blocked} skipped from ${recipients.length} roster contact(s).`;
+        }
+
+        if (!this.dom.batchRecipientList) return;
+        if (!recipients.length) {
+            this.dom.batchRecipientList.innerHTML = `<div class="empty-state"><p>No roster contacts found for this brokerage.</p></div>`;
+            this.updateBrokerageSelectedCount();
+            return;
+        }
+
+        this.dom.batchRecipientList.innerHTML = recipients.map(recipient => {
+            const location = [recipient.city, recipient.state].filter(Boolean).join(', ');
+            return `
+                <label class="brokerage-recipient-row ${recipient.eligible ? '' : 'is-disabled'}">
+                    <input type="checkbox" class="batch-recipient-checkbox" value="${this.escapeHtml(recipient.email)}" ${recipient.eligible ? 'checked' : 'disabled'} onchange="App.updateBrokerageSelectedCount()">
+                    <span>
+                        <strong>${this.escapeHtml(recipient.name || 'Unknown Agent')}</strong>
+                        <small>${this.escapeHtml([recipient.email, location].filter(Boolean).join(' | ') || 'No email')}</small>
+                    </span>
+                    <em>${this.escapeHtml(recipient.reason || 'Ready')}</em>
+                </label>
+            `;
+        }).join('');
+        this.updateBrokerageSelectedCount();
     }
 
     async submitBatchCampaign() {
         const brokerageName = document.getElementById("batch-brokerage-name-hidden").value;
-        const campaignId = document.getElementById("batch-campaign-select").value;
-        const batchSize = document.getElementById("batch-size-select").value;
+        const campaignId = this.dom.batchCampaignSelect?.value || '';
+        const campaignIdB = this.dom.batchAbTestEnabled?.checked ? (this.dom.batchCampaignBSelect?.value || '') : '';
+        const batchSize = this.dom.batchSizeSelect?.value || '10';
+        const selectedEmails = this.getSelectedBrokerageRecipientEmails();
         
-        if (!brokerageName || !campaignId || !batchSize) {
-            alert("Please ensure a brokerage and campaign are selected.");
+        if (!brokerageName || !campaignId || !batchSize || !selectedEmails.length) {
+            alert("Please choose a brokerage, campaign, and at least one recipient.");
+            return;
+        }
+        if (campaignIdB && String(campaignIdB) === String(campaignId)) {
+            alert("Choose a different campaign for Variant B.");
+            return;
+        }
+
+        const waveLabel = batchSize === 'all' ? `${selectedEmails.length}` : `${Math.min(parseInt(batchSize, 10) || 10, selectedEmails.length)}`;
+        const abLabel = campaignIdB ? "\n\nA/B mode is on. Selected agents will be split evenly between Variant A and Variant B." : "";
+        if (!confirm(`Send this brokerage campaign now to ${waveLabel} selected agent(s) at ${brokerageName}?${abLabel}`)) {
             return;
         }
         
-        const btn = document.querySelector("#batch-campaign-modal .btn-primary");
+        const btn = this.dom.btnLaunchBrokerageCampaign;
         const originalText = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Launching...`;
@@ -1927,14 +2255,23 @@ class AutopilotApp {
             const res = await fetch("/api/brokerages/send-batch", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ brokerageName, campaignId, batchSize })
+                body: JSON.stringify({
+                    brokerageName,
+                    campaignId,
+                    campaignIdB,
+                    batchSize,
+                    selectedEmails,
+                    abTest: Boolean(campaignIdB)
+                })
             });
             const data = await res.json();
             if (data.error) {
                 alert(data.error);
             } else {
-                alert(`Success! Enrolled and sent campaign to a batch of ${data.sentCount} agents.`);
+                const variantNote = data.abTest ? `\nVariant A: ${data.variantACount || 0}\nVariant B: ${data.variantBCount || 0}` : '';
+                alert(`Success! Sent Step 1 to ${data.sentCount} agent(s).${data.failedCount ? `\nFailed: ${data.failedCount}` : ''}${variantNote}`);
                 this.closeBatchCampaignModal();
+                await this.loadCrmStateFromServer();
                 await this.loadCrmIntelligence();
                 await this.fetchLeadsFromServer();
             }
@@ -2085,6 +2422,8 @@ class AutopilotApp {
             leads: this.state.leads,
             campaignsList: this.state.campaignsList,
             verificationQueue: this.state.verificationQueue,
+            finishedBrokerages: this.state.finishedBrokerages,
+            brokerageFinishedView: this.state.brokerageFinishedView,
             outboundDailyLimit: this.state.outboundDailyLimit,
             bypassEmailVerification: this.state.bypassEmailVerification
         }));

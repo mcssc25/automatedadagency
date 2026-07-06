@@ -9,44 +9,52 @@ Last updated: 2026-07-05
 - Docker Compose service/container is `ad-agency-autopilot`, bound on `127.0.0.1:3100->3000`, with Cloudflare Tunnel in front.
 - This VPS is shared with ClaimPilot. Only touch `/opt/ad-agency-autopilot`; do not touch ClaimPilot or `fluffysbait.com`.
 - Deploys are file-copy based, not `git pull`: back up changed files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`, copy only changed files, rebuild/restart only `ad-agency-autopilot` when needed.
-- Runtime secrets/data are ignored and must stay out of git: `.env`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
+- Runtime secrets/data are ignored and must stay out of git: `.env`, `mailgun api.txt`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
 
 ## Current Repo / Deploy State
 
 - Branch: `main`.
-- Uncommitted local changes exist in:
-  - `server.js` (templates subject personalization, [Brokerage Name]/[City] support, and `/api/brokerages/send-batch` route)
-  - `index.html` (added `batch-campaign-modal` overlay)
-  - `app.js` (added "Send Batch" buttons and modal open/close/submit methods)
-  - `MEMORY.md` & `handoff.md` (updated documentation)
-- Database seeding: Run `.\.venv\Scripts\python.exe C:\Users\daved\.gemini\antigravity\brain\c9996b1a-3198-4c21-a960-532453972852\scratch\seed_crm_db.py` to seed `crm.db` database with 739 boutique targets (23 completed), 31 roster contacts, and 9 drip campaigns. Done locally.
+- Deployed live to VPS on 2026-07-05 via file copy + Docker rebuild. Latest backup created at `/opt/ad-agency-autopilot/data/backups/deploy-20260705T152923`.
+- Uncommitted local changes from this update remain:
+  - `server.js`: added brokerage launch preview API; upgraded `/api/brokerages/send-batch` to selected recipients, first-wave limits, Awaiting Launch template activation, and optional A/B split.
+  - `app.js`: added brokerage-specific campaign prefill, finished brokerage state, recipient preview/loading, selected-agent launch, and optional A/B send controls.
+  - `index.html`: added "Finished List" and upgraded the batch modal into Brokerage Campaign Launch.
+  - `index.css`: added brokerage action layout, finished-card styling, launch modal, and recipient picker styling.
+  - `MEMORY.md` / `handoff.md`: updated project documentation.
+- Pre-existing uncommitted change: `db.js` is modified and currently fails syntax check at line 170. This was not changed in this update.
+- Not committed. `db.js` was intentionally not deployed.
 
 ## Latest Changes
 
-1. **Email Personalization & Subject Lines**:
-   - Updated `personalizeCampaignBody` in `server.js` to process and substitute `[Brokerage Name]`, `[Brokerage]`, `[Company]`, and `[City]` placeholders.
-   - Updated `sendCampaignStepToLead` to apply personalization to the subject lines (`customizedSubject`) to ensure catchy, custom headlines go out.
-2. **Outreach Campaigns Seeding**:
-   - Created and inserted 9 custom 3-step drip campaign templates in SQLite:
-     - 4 Major Brokerages: Benchmark Realty, Fathom Realty, United Real Estate, Virtual Properties Realty.
-     - 5 Boutique Brokerages: California Boutique, Colorado Boutique, Florida Boutique, Georgia Boutique, and General Boutique.
-   - Embedded correct links: Free 14-day trial (`https://realestatecrmpro.com`), Dave's demo scheduling (`https://realestatecrmpro.com/schedule/realestatecrmpro-demo/`), and YouTube channel (`https://www.youtube.com/@RealEstateCRMPro`).
-3. **Database Seeding**:
-   - Seeded 739 boutique targets, detailed research profiles (CRM, e-sign, video tour, gaps, strengths, email angles) for 23 researched boutique targets, and 31 agent roster contacts.
-4. **Campaign Batch Sending**:
-   - Added `POST /api/brokerages/send-batch` backend endpoint to enroll a batch of roster contacts for a given brokerage into a selected campaign, promoting them to the `leads` table and sending Step 1 immediately.
-   - Updated Brokerage Research UI to show a "Send Batch" button for brokerages with roster contacts.
-   - Added `batch-campaign-modal` to index.html and event handlers in app.js.
+- Each Brokerage Research card now includes:
+  - "Create Email Campaign" to jump to Outreach Campaigns and prefill the AI campaign form with that brokerage's strengths, gaps, systems, agent chatter, evidence, and suggested campaign angle.
+  - "Finished" to move the brokerage out of the active research list.
+  - "Review & Launch" opens Brokerage Campaign Launch with campaign selection, send wave size, recipient preview/checkboxes, and optional A/B split.
+- The Brokerage Research panel header now includes "Finished List" with a count badge.
+- Finished brokerages are stored in browser `localStorage` as part of app state and can be restored to the active list.
+- Brokerage launch can use Active or Awaiting Launch campaigns; Awaiting Launch templates are activated at send time without using the global approve/send-all route.
 
 ## Verification
 
-- Local `node -c server.js` passed successfully.
-- Local `node -c app.js` passed successfully.
-- Local SQLite database `crm.db` verifies 362 profiles, 630 offices, 31 roster contacts, and 9 campaigns.
+- Passed: `node --check app.js`.
+- Passed: `node --check server.js`.
+- Passed: `git diff --check -- app.js index.html index.css server.js`.
+- Passed on VPS/container: `node --check app.js`, `node --check server.js`, and `node --check db.js`.
+- Passed on VPS/container: copied `server.js`, `app.js`, `index.html`, and `index.css` hashes match local.
+- Passed on production URL with authenticated checks:
+  - `https://agents.realestatecrmpro.com/` returned 200.
+  - `/app.js` contains `loadBrokerageLaunchPreview`.
+  - `/index.html` contains `batch-recipient-list`.
+  - `/index.css` contains `brokerage-recipient-row`.
+  - `/api/brokerages/launch-preview` returned recipient preview data for Coldwell Banker without sending email.
+- Local-only blocker remains: local `node --check db.js` fails at `db.js:170` with `SyntaxError: missing ) after argument list`.
 
 ## Next Steps
 
-- Push the local changes to GitHub `origin/main`.
-- Deploy the updated app files (`server.js`, `app.js`, `index.html`) to the Hetzner production server (`/opt/ad-agency-autopilot`).
-- Back up changed production files under `/opt/ad-agency-autopilot/data/backups/deploy-20260705T...` before overriding.
-- Restart/rebuild the production Docker container `ad-agency-autopilot` and verify it boots up cleanly.
+- Fix or reconcile the pre-existing local `db.js` syntax error before running the local real app server or committing.
+- Manually verify in the browser on production:
+  - Create Email Campaign prefill opens the Outreach Campaign builder.
+  - Finished removes the brokerage from active results.
+  - Finished List shows completed brokerages and Restore returns them to active.
+  - Review & Launch shows recipient checkboxes, selected count, and optional A/B controls.
+- Commit after deciding how to handle the unrelated local `db.js` change.

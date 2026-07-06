@@ -2322,6 +2322,254 @@ function collectAgentProfileLinks(html, pageUrl, baseHost, maxLinks = 20) {
     return links.slice(0, maxLinks);
 }
 
+function decodeCloudflareEmail(hexStr) {
+    try {
+        const xorKey = parseInt(hexStr.slice(0, 2), 16);
+        let email = "";
+        for (let i = 2; i < hexStr.length; i += 2) {
+            const charCode = parseInt(hexStr.slice(i, i + 2), 16) ^ xorKey;
+            email += String.fromCharCode(charCode);
+        }
+        return email;
+    } catch (e) {
+        return "N/A";
+    }
+}
+
+function deobfuscateWordPressEmail(obfuscatedStr) {
+    if (!obfuscatedStr) return "N/A";
+    return obfuscatedStr
+        .replace(/\(at\)/g, "@")
+        .replace(/\(dotted\)/g, ".")
+        .replace(/\s+/g, "");
+}
+
+async function indexBrokerageRoster(office) {
+    const startUrl = normalizeWebsiteUrl(office.rosterUrl || office.website);
+    if (!startUrl) throw new Error("No website or roster URL available.");
+    const baseHost = normalizeDomain(startUrl);
+
+    console.log(`[Phase 1 Indexer] Starting index for ${office.brokerageName} at ${startUrl}...`);
+
+    const visited = new Set();
+    const queue = [startUrl];
+    const maxPages = 8; // Max directory index pages to scan
+    let pagesScanned = 0;
+    let indexedCount = 0;
+
+    while (queue.length > 0 && pagesScanned < maxPages) {
+        const pageUrl = queue.shift();
+        const cleanUrl = pageUrl.replace(/\/+$/, '');
+        if (visited.has(cleanUrl)) continue;
+        visited.add(cleanUrl);
+
+        console.log(`[Phase 1 Indexer] Scanning index page: ${pageUrl}...`);
+        let pageHtml;
+        try {
+            const fetched = await fetchLeadContactHtml(pageUrl);
+            pageHtml = fetched.html;
+        } catch (err) {
+            console.warn(`[Phase 1 Indexer] Failed to fetch ${pageUrl}: ${err.message}`);
+            continue;
+        }
+
+        pagesScanned++;
+        const $ = cheerio.load(pageHtml);
+
+        // Extract profile URLs
+        $('a[href]').each((i, el) => {
+            const href = $(el).attr('href');
+            if (!href) return;
+
+            try {
+                const absolute = new URL(href, pageUrl);
+                if (normalizeDomain(absolute.href) !== baseHost) return;
+                const path = absolute.pathname.toLowerCase();
+                const text = cleanLeadText($(el).text()).trim();
+
+                // Check if it looks like an agent profile page
+                let isAgentProfile = false;
+                let agentName = "";
+
+                // Pattern A: Path starts/contains /agent/name, /realtor/name, /profile/name, /bio/name
+                const profilePattern = /\b(agent|realtor|profile|bio|associate|team-member)\b/i;
+                if (profilePattern.test(path)) {
+                    // Exclude index pages
+                    if (!/\/(agents|realtors|profiles|associates)\/?$/i.test(path)) {
+                        isAgentProfile = true;
+                    }
+                }
+
+                // If text looks like a 2-3 word name
+                if (text && isLikelyIndividualAgentLeadName(text)) {
+                    agentName = text;
+                    // If path is not home and not generic
+                    if (path !== '/' && path !== '' && !/\b(listings|search|contact|about|reviews|properties|blog|news|jobs|careers|privacy|terms)\b/i.test(path)) {
+                        isAgentProfile = true;
+                    }
+                }
+
+                if (isAgentProfile) {
+                    const profileUrl = absolute.href.replace(/\/+$/, '');
+                    if (!agentName) {
+                        // Try to parse name from path or title/alt attributes
+                        const pathParts = path.split('/').filter(Boolean);
+                        const lastPart = pathParts[pathParts.length - 1] || "";
+                        agentName = lastPart.replace(/[-_]/g, ' ')
+                            .replace(/\b\w/g, c => c.toUpperCase());
+                    }
+
+                    if (isLikelyIndividualAgentLeadName(agentName)) {
+                        // Insert into database queue
+                        const inserted = db.insertScrapingQueueItem({
+                            brokerageOfficeId: office.id,
+                            brokerageName: office.brokerageName,
+                            city: office.city,
+                            state: office.state,
+                            agentName: agentName,
+                            profileUrl: profileUrl,
+                            status: 'Pending'
+                        });
+                        if (inserted > 0) {
+                            indexedCount++;
+                        }
+                    }
+                }
+
+                // Also follow pagination links (e.g. next page, page 2, etc.)
+                const isPaginationLink = /\b(page|p)=\d+/i.test(absolute.search) || /\/page\/\d+/i.test(path) || /\b(next|page\s+\d+|»|›)\b/i.test(text.toLowerCase());
+                if (isPaginationLink && !visited.has(absolute.href.replace(/\/+$/, ''))) {
+                    queue.push(absolute.href);
+                }
+
+            } catch (e) {
+                // Ignore parsing errors
+            }
+        });
+    }
+
+    console.log(`[Phase 1 Indexer] Completed. Indexed ${indexedCount} profiles for ${office.brokerageName}.`);
+    return { indexed: indexedCount, pagesScanned };
+}
+
+async function runBatchHarvesterCycle(batchSize = 5) {
+    const items = db.getPendingScrapingQueueItems(batchSize);
+    if (items.length === 0) {
+        return { processed: 0, completed: 0, failed: 0 };
+    }
+
+    console.log(`[Phase 2 Harvester] Processing batch of ${items.length} pending profiles...`);
+    let completedCount = 0;
+    let failedCount = 0;
+
+    for (const item of items) {
+        console.log(`[Phase 2 Harvester] Scraping agent profile: ${item.agentName} (${item.profileUrl})...`);
+        db.updateScrapingQueueStatus(item.id, 'Processing');
+
+        let profileHtml;
+        try {
+            const fetched = await fetchLeadContactHtml(item.profileUrl);
+            profileHtml = fetched.html;
+        } catch (err) {
+            console.warn(`[Phase 2 Harvester] Failed to fetch ${item.profileUrl}: ${err.message}`);
+            db.updateScrapingQueueStatus(item.id, 'Failed', `Network error: ${err.message}`);
+            failedCount++;
+            continue;
+        }
+
+        // Parse details from HTML
+        let email = "";
+        let phone = "";
+
+        // 1. Cloudflare decryption check
+        const cfMatch = profileHtml.match(/data-cfemail="([^"]+)"/) || profileHtml.match(/\/email-protection#([a-f0-9]{10,})/i);
+        if (cfMatch) {
+            const rawCf = cfMatch[1];
+            const decoded = decodeCloudflareEmail(rawCf);
+            if (isUsefulLeadEmail(decoded)) {
+                email = decoded;
+            }
+        }
+
+        // 2. WordPress data-value or plaintext de-obfuscation check
+        if (!email) {
+            const wpMatch = profileHtml.match(/data-value="([^"]+)"/) || profileHtml.match(/data-email="([^"]+)"/);
+            if (wpMatch) {
+                const decoded = deobfuscateWordPressEmail(wpMatch[1]);
+                if (isUsefulLeadEmail(decoded)) {
+                    email = decoded;
+                }
+            }
+        }
+
+        // 3. Regular expression email scan
+        if (!email) {
+            const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+            const matches = profileHtml.match(emailRegex);
+            if (matches && matches.length > 0) {
+                for (const match of matches) {
+                    if (isUsefulLeadEmail(match)) {
+                        email = match.toLowerCase();
+                        break;
+                    }
+                }
+            } else {
+                const obfuscatedMatches = profileHtml.match(/[A-Z0-9._%+-]+\s*\(at\)\s*[A-Z0-9.-]+\s*\(dotted\)\s*[A-Z]{2,}/gi);
+                if (obfuscatedMatches && obfuscatedMatches.length > 0) {
+                    const decoded = deobfuscateWordPressEmail(obfuscatedMatches[0]);
+                    if (isUsefulLeadEmail(decoded)) {
+                        email = decoded;
+                    }
+                }
+            }
+        }
+
+        // 4. Phone parsing
+        const phoneRegex = /(\(\d{3}\)\s*\d{3}-\d{4}|\b\d{3}-\d{3}-\d{4}\b)/;
+        const phoneMatch = profileHtml.match(phoneRegex);
+        if (phoneMatch) {
+            phone = phoneMatch[1].trim();
+        }
+
+        if (email && isUsefulLeadEmail(email)) {
+            if (db.isEmailDnc(email)) {
+                db.updateScrapingQueueStatus(item.id, 'DNC', 'Email is on DNC list');
+                failedCount++;
+                continue;
+            }
+
+            try {
+                db.upsertRosterContact({
+                    brokerageOfficeId: item.brokerageOfficeId,
+                    brokerageName: item.brokerageName,
+                    city: item.city,
+                    state: item.state,
+                    name: item.agentName,
+                    email: email,
+                    phone: phone || '',
+                    website: item.profileUrl,
+                    sourceUrl: item.profileUrl,
+                    status: 'Raw'
+                });
+                db.updateScrapingQueueStatus(item.id, 'Completed');
+                completedCount++;
+            } catch (dbErr) {
+                console.error(`[Phase 2 Harvester] DB error inserting contact: ${dbErr.message}`);
+                db.updateScrapingQueueStatus(item.id, 'Failed', `DB error: ${dbErr.message}`);
+                failedCount++;
+            }
+        } else {
+            db.updateScrapingQueueStatus(item.id, 'Failed', 'No email address found on profile page');
+            failedCount++;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    console.log(`[Phase 2 Harvester] Batch complete. Completed: ${completedCount}, Failed: ${failedCount}.`);
+    return { processed: items.length, completed: completedCount, failed: failedCount };
+}
+
 async function fetchLeadContactHtml(pageUrl) {
     const timeout = Math.min(Math.max(parseInt(process.env.LEAD_WEBSITE_TIMEOUT_MS, 10) || 10000, 3000), 30000);
     const response = await axios.get(pageUrl, {
@@ -6278,89 +6526,200 @@ app.post('/api/crm-pipeline/run', async (req, res) => {
 });
 
 // Outbound Campaign Batch Send for Roster Contacts
+function getAllBrokerageRosterContacts(brokerageName, maxContacts = 1000) {
+    const contacts = [];
+    const pageSize = 200;
+    for (let offset = 0; contacts.length < maxContacts; offset += pageSize) {
+        const page = db.getRosterContacts({
+            brokerage: brokerageName,
+            limit: pageSize,
+            offset
+        }) || [];
+        contacts.push(...page);
+        if (page.length < pageSize) break;
+    }
+    return contacts.slice(0, maxContacts);
+}
+
+function getCampaignEnrollmentSet(lead) {
+    if (!lead || !lead.id) return new Set();
+    return new Set((db.getEnrollmentsForLead(lead.id) || []).map(enrollment => String(enrollment.campaignId)));
+}
+
+function prepareBrokerageRecipient(contact, campaignIds = []) {
+    const email = String(contact.email || '').trim().toLowerCase();
+    const lead = email ? db.getLeadByEmail(email) : null;
+    const enrolledCampaignIds = getCampaignEnrollmentSet(lead);
+    const alreadyEnrolled = campaignIds.some(id => enrolledCampaignIds.has(String(id)));
+    const isDnc = email ? db.isEmailDnc(email) : false;
+    const eligible = Boolean(email) && !isDnc && !alreadyEnrolled;
+    const reason = !email
+        ? 'No email'
+        : isDnc
+            ? 'DNC'
+            : alreadyEnrolled
+                ? 'Already enrolled'
+                : 'Ready';
+
+    return {
+        email,
+        name: contact.name || '',
+        brokerageName: contact.brokerageName || '',
+        city: contact.city || '',
+        state: contact.state || '',
+        phone: contact.phone || '',
+        sourceUrl: contact.sourceUrl || contact.website || '',
+        leadId: lead ? lead.id : null,
+        eligible,
+        reason
+    };
+}
+
+function activateCampaignForBrokerageLaunch(campaign) {
+    if (!campaign) return;
+    if (campaign.status === 'Awaiting Launch') {
+        db.updateCampaignStatus(campaign.id, 'Active');
+        campaign.status = 'Active';
+    }
+}
+
+function ensureLeadForRosterContact(contact, campaign) {
+    const email = String(contact.email || '').trim().toLowerCase();
+    if (!email || db.isEmailDnc(email)) return null;
+
+    let lead = db.getLeadByEmail(email);
+    if (!lead) {
+        const leadId = db.insertLead({
+            name: contact.name,
+            company: contact.brokerageName,
+            email,
+            phone: contact.phone,
+            website: contact.website,
+            address: [contact.city, contact.state].filter(Boolean).join(', '),
+            sourceUrl: contact.sourceUrl,
+            discoveryQuery: `Brokerage launch: ${campaign.name}`,
+            stage: 'Scraped'
+        });
+        if (leadId) lead = db.getLeadById(leadId);
+    }
+    return lead;
+}
+
+function parseBatchLimit(batchSize, max) {
+    if (String(batchSize || '').toLowerCase() === 'all') return max;
+    const parsed = parseInt(batchSize, 10);
+    return Math.min(Math.max(Number.isFinite(parsed) ? parsed : 10, 1), max);
+}
+
+app.get('/api/brokerages/launch-preview', (req, res) => {
+    try {
+        const brokerageName = String(req.query.brokerageName || '').trim();
+        const campaignIds = [req.query.campaignId, req.query.campaignIdB].filter(Boolean);
+        if (!brokerageName) {
+            return res.status(400).json({ error: 'brokerageName is required.' });
+        }
+
+        const contacts = getAllBrokerageRosterContacts(brokerageName, 1000);
+        const recipients = contacts.map(contact => prepareBrokerageRecipient(contact, campaignIds));
+        const eligibleCount = recipients.filter(recipient => recipient.eligible).length;
+        res.json({
+            brokerageName,
+            totalContacts: contacts.length,
+            eligibleCount,
+            blockedCount: recipients.length - eligibleCount,
+            recipients
+        });
+    } catch (err) {
+        console.error('[Brokerage Launch Preview Error]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/brokerages/send-batch', async (req, res) => {
     try {
-        const { brokerageName, campaignId, batchSize } = req.body;
+        const { brokerageName, campaignId, campaignIdB, batchSize, selectedEmails = [], abTest = false } = req.body;
         if (!brokerageName || !campaignId || !batchSize) {
             return res.status(400).json({ error: 'brokerageName, campaignId, and batchSize are required.' });
         }
 
         const campaign = db.getCampaignById(campaignId);
         if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+        const campaignB = abTest && campaignIdB ? db.getCampaignById(campaignIdB) : null;
+        if (abTest && !campaignB) return res.status(404).json({ error: 'A/B test is enabled but Variant B campaign was not found.' });
+        activateCampaignForBrokerageLaunch(campaign);
+        if (campaignB) activateCampaignForBrokerageLaunch(campaignB);
 
-        // Query roster contacts for this brokerage
-        const contacts = db.getRosterContacts({ brokerage: brokerageName, limit: 1000 }) || [];
-        const batch = [];
+        const selectedEmailSet = new Set((Array.isArray(selectedEmails) ? selectedEmails : [])
+            .map(email => String(email || '').trim().toLowerCase())
+            .filter(Boolean));
+        const campaignIds = [campaign.id, campaignB?.id].filter(Boolean);
+        const contacts = getAllBrokerageRosterContacts(brokerageName, 1000);
+        const eligibleContacts = contacts.filter(contact => {
+            const recipient = prepareBrokerageRecipient(contact, campaignIds);
+            if (!recipient.eligible) return false;
+            return selectedEmailSet.size === 0 || selectedEmailSet.has(recipient.email);
+        });
+        const limit = parseBatchLimit(batchSize, eligibleContacts.length);
+        const batchContacts = eligibleContacts.slice(0, limit);
 
-        for (const contact of contacts) {
-            if (batch.length >= parseInt(batchSize, 10)) break;
-            
-            // Check if contact email is DNC
-            if (db.isEmailDnc(contact.email)) continue;
-
-            let lead = db.getLeadByEmail(contact.email);
-            if (!lead) {
-                // Insert lead as Scraped
-                const leadId = db.insertLead({
-                    name: contact.name,
-                    company: contact.brokerageName,
-                    email: contact.email,
-                    phone: contact.phone,
-                    website: contact.website,
-                    address: [contact.city, contact.state].filter(Boolean).join(', '),
-                    sourceUrl: contact.sourceUrl,
-                    discoveryQuery: `Batch send: ${campaign.name}`,
-                    stage: 'Scraped'
-                });
-                if (leadId) {
-                    lead = db.getLeadById(leadId);
-                }
-            }
-
-            if (lead) {
-                // Check if this lead is already enrolled in this campaign
-                const enrollments = db.getEnrollmentsForLead(lead.id) || [];
-                const alreadyEnrolled = enrollments.some(e => e.campaignId === campaign.id);
-                if (!alreadyEnrolled) {
-                    batch.push(lead);
-                }
-            }
-        }
-
-        if (batch.length === 0) {
+        if (batchContacts.length === 0) {
             return res.status(400).json({ error: 'No new roster contacts are available to enroll in this campaign for ' + brokerageName });
         }
 
         const settings = readCrmSettings();
-        const campaignOrder = getCampaignOrder(campaign.id, settings);
         const bizName = settings.bizName || req.body.bizName || 'our team';
         const bizWebsite = settings.bizWebsite || req.body.bizWebsite || '';
 
         let sentCount = 0;
         let failedCount = 0;
+        let variantACount = 0;
+        let variantBCount = 0;
 
-        for (const lead of batch) {
+        for (let index = 0; index < batchContacts.length; index++) {
+            const contact = batchContacts[index];
+            const selectedCampaign = campaignB && index % 2 === 1 ? campaignB : campaign;
+            const campaignOrder = getCampaignOrder(selectedCampaign.id, settings);
             try {
-                const enrollment = enrollLeadInCampaign(lead, campaign.id, campaignOrder, new Date().toISOString());
-                await sendCampaignStepToLead({ lead, campaign, enrollment, bizName, bizWebsite, settings });
+                const lead = ensureLeadForRosterContact(contact, selectedCampaign);
+                if (!lead) {
+                    failedCount++;
+                    continue;
+                }
+                const enrollment = enrollLeadInCampaign(lead, selectedCampaign.id, campaignOrder, new Date().toISOString());
+                await sendCampaignStepToLead({ lead, campaign: selectedCampaign, enrollment, bizName, bizWebsite, settings });
+                if (selectedCampaign.id === campaign.id) variantACount++;
+                if (campaignB && selectedCampaign.id === campaignB.id) variantBCount++;
                 sentCount++;
             } catch (err) {
                 failedCount++;
-                console.error(`[Batch Send] Failed for ${lead.email}:`, err.message);
+                console.error(`[Brokerage Launch] Failed for ${contact.email}:`, err.message);
             }
         }
 
-        appendActivityLog('agent-sales', `Enrolled and sent campaign "${campaign.name}" to a batch of ${sentCount} agent(s) from "${brokerageName}".`, {
+        const campaignLabel = campaignB ? `${campaign.name} vs ${campaignB.name}` : campaign.name;
+        appendActivityLog('agent-sales', `Launched brokerage campaign "${campaignLabel}" to ${sentCount} agent(s) from "${brokerageName}".`, {
             workflow: 'batch-enroll',
             brokerageName,
             campaignId: campaign.id,
             campaignName: campaign.name,
-            batchSize: batch.length,
+            campaignIdB: campaignB ? campaignB.id : null,
+            campaignNameB: campaignB ? campaignB.name : null,
+            batchSize: batchContacts.length,
             sentCount,
-            failedCount
+            failedCount,
+            variantACount,
+            variantBCount
         });
 
-        res.json({ success: true, batchSize: batch.length, sentCount, failedCount });
+        res.json({
+            success: true,
+            batchSize: batchContacts.length,
+            sentCount,
+            failedCount,
+            variantACount,
+            variantBCount,
+            abTest: Boolean(campaignB)
+        });
     } catch (err) {
         console.error('[Brokerage Send Batch Error]', err.message);
         res.status(500).json({ error: err.message });
