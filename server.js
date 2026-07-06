@@ -3837,43 +3837,29 @@ async function harvestBrokerageOfficeRoster(office) {
         ...discoveredOffice
     };
 
+    let indexResult = { indexed: 0, pagesScanned: 0 };
+    let warning = '';
     try {
-        const staticCandidates = await scrapeBrokerageRosterCandidatesFromWebsite(
-            harvestOffice.website,
-            harvestOffice.brokerageName,
-            `${harvestOffice.brokerageName} ${harvestOffice.city} ${harvestOffice.state}`,
-            [harvestOffice.rosterUrl, harvestOffice.sourceUrl].filter(Boolean)
-        );
-        if (staticCandidates.length > 0) {
-            return {
-                contacts: staticCandidates,
-                pagesScanned: 0,
-                warning: '',
-                blocked: false,
-                method: 'static-html'
-            };
-        }
-    } catch (staticError) {
-        console.warn(`[Lead Intelligence] Static roster harvest failed for ${office.brokerageName}: ${staticError.message}. Continuing to browser parser.`);
+        indexResult = await indexBrokerageRoster(harvestOffice);
+    } catch (indexError) {
+        warning = formatErrorMessage(indexError, 'Phase 1 Indexing failed.');
+        console.warn(`[Lead Intelligence] Phase 1 Indexing failed for ${office.brokerageName}: ${warning}`);
     }
 
+    let harvestedContacts = [];
     try {
-        return await harvestRosterWithBrowser(harvestOffice);
-    } catch (browserError) {
-        console.warn(`[Lead Intelligence] Browser roster harvest failed for ${office.brokerageName}: ${browserError.message}. Falling back to HTTP parser.`);
-        const fallbackCandidates = await scrapeBrokerageRosterCandidatesFromWebsite(
-            harvestOffice.website,
-            harvestOffice.brokerageName,
-            `${harvestOffice.brokerageName} ${harvestOffice.city} ${harvestOffice.state}`,
-            [harvestOffice.rosterUrl, harvestOffice.sourceUrl].filter(Boolean)
-        );
-        return {
-            contacts: fallbackCandidates,
-            pagesScanned: 0,
-            warning: browserError.message,
-            blocked: isBlockedRosterError(browserError.message)
-        };
+        harvestedContacts = await runBatchHarvesterCycle(12);
+    } catch (harvestError) {
+        warning = warning ? `${warning} | Harvester failed: ${harvestError.message}` : `Harvester failed: ${harvestError.message}`;
+        console.error(`[Lead Intelligence] Phase 2 Harvesting failed: ${harvestError.message}`);
     }
+
+    return {
+        contacts: harvestedContacts,
+        pagesScanned: indexResult.pagesScanned,
+        warning: warning,
+        blocked: false
+    };
 }
 
 async function runLeadIntelligenceCycle(trigger = 'manual') {
@@ -6475,6 +6461,22 @@ app.post('/api/lead-intelligence/run-once', async (req, res) => {
     res.json({ success: !result.error, result, status: db.getLeadIntelligenceStatus() });
 });
 
+app.post('/api/lead-intelligence/run-batch-harvest', async (req, res) => {
+    try {
+        const batchSize = Math.min(Math.max(parseInt(req.body.batchSize, 10) || 5, 1), 30);
+        const contacts = await runBatchHarvesterCycle(batchSize);
+        res.json({
+            success: true,
+            processedCount: contacts.length,
+            contacts,
+            status: db.getLeadIntelligenceStatus()
+        });
+    } catch (error) {
+        console.error('[API Batch Harvest Error]', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Approve and Launch Campaign Endpoint
 app.post('/api/campaigns/:id/approve', async (req, res) => {
     try {
@@ -7365,3 +7367,252 @@ app.listen(PORT, () => {
     console.log(`🔗 Local dashboard hosted at: http://localhost:${PORT}`);
     console.log(`==================================================`);
 });
+
+// ==========================================
+// TWO-PHASE AGENT ROSTER SCRAPER MODULE
+// ==========================================
+
+function decodeCloudflareEmail(hexStr) {
+    try {
+        const xorKey = parseInt(hexStr.slice(0, 2), 16);
+        let email = "";
+        for (let i = 2; i < hexStr.length; i += 2) {
+            const charCode = parseInt(hexStr.slice(i, i + 2), 16) ^ xorKey;
+            email += String.fromCharCode(charCode);
+        }
+        return email;
+    } catch (e) {
+        return "N/A";
+    }
+}
+
+function deobfuscateWordPressEmail(obfuscatedStr) {
+    if (!obfuscatedStr) return "N/A";
+    return obfuscatedStr
+        .replace(/\(at\)/g, "@")
+        .replace(/\(dotted\)/g, ".")
+        .replace(/\s+/g, "");
+}
+
+async function indexBrokerageRoster(office) {
+    const startUrl = normalizeWebsiteUrl(office.rosterUrl || office.website);
+    if (!startUrl) throw new Error("No website or roster URL available.");
+    const baseHost = normalizeDomain(startUrl);
+
+    console.log(`[Phase 1 Indexer] Starting index for ${office.brokerageName} at ${startUrl}...`);
+
+    const visited = new Set();
+    const queue = [startUrl];
+    const maxPages = 8; // Max directory index pages to scan
+    let pagesScanned = 0;
+    let indexedCount = 0;
+
+    while (queue.length > 0 && pagesScanned < maxPages) {
+        const pageUrl = queue.shift();
+        const cleanUrl = pageUrl.replace(/\/+$/, '');
+        if (visited.has(cleanUrl)) continue;
+        visited.add(cleanUrl);
+
+        console.log(`[Phase 1 Indexer] Scanning index page: ${pageUrl}...`);
+        let pageHtml;
+        try {
+            const fetched = await fetchLeadContactHtml(pageUrl);
+            pageHtml = fetched.html;
+        } catch (err) {
+            console.warn(`[Phase 1 Indexer] Failed to fetch ${pageUrl}: ${err.message}`);
+            continue;
+        }
+
+        pagesScanned++;
+        const $ = cheerio.load(pageHtml);
+
+        // Extract profile URLs
+        $('a[href]').each((i, el) => {
+            const href = $(el).attr('href');
+            if (!href) return;
+
+            try {
+                const absolute = new URL(href, pageUrl);
+                if (normalizeDomain(absolute.href) !== baseHost) return;
+                const path = absolute.pathname.toLowerCase();
+                const text = cleanLeadText($(el).text()).trim();
+
+                // Check if it looks like an agent profile page
+                let isAgentProfile = false;
+                let agentName = "";
+
+                // Pattern A: Path starts/contains /agent/name, /realtor/name, /profile/name, /bio/name
+                const profilePattern = /\b(agent|realtor|profile|bio|associate|team-member)\b/i;
+                if (profilePattern.test(path)) {
+                    if (!/\/(agents|realtors|profiles|associates)\/?$/i.test(path)) {
+                        isAgentProfile = true;
+                    }
+                }
+
+                // If text looks like a 2-3 word name
+                if (text && isLikelyIndividualAgentLeadName(text)) {
+                    agentName = text;
+                    if (path !== '/' && path !== '' && !/\b(listings|search|contact|about|reviews|properties|blog|news|jobs|careers|privacy|terms)\b/i.test(path)) {
+                        isAgentProfile = true;
+                    }
+                }
+
+                if (isAgentProfile) {
+                    const profileUrl = absolute.href.replace(/\/+$/, '');
+                    if (!agentName) {
+                        const pathParts = path.split('/').filter(Boolean);
+                        const lastPart = pathParts[pathParts.length - 1] || "";
+                        agentName = lastPart.replace(/[-_]/g, ' ')
+                            .replace(/\b\w/g, c => c.toUpperCase());
+                    }
+
+                    if (isLikelyIndividualAgentLeadName(agentName)) {
+                        const inserted = db.insertScrapingQueueItem({
+                            brokerageOfficeId: office.id,
+                            brokerageName: office.brokerageName,
+                            city: office.city,
+                            state: office.state,
+                            agentName: agentName,
+                            profileUrl: profileUrl,
+                            status: 'Pending'
+                        });
+                        if (inserted > 0) {
+                            indexedCount++;
+                        }
+                    }
+                }
+
+                // Follow pagination links
+                const isPaginationLink = /\b(page|p)=\d+/i.test(absolute.search) || /\/page\/\d+/i.test(path) || /\b(next|page\s+\d+|»|›)\b/i.test(text.toLowerCase());
+                if (isPaginationLink && !visited.has(absolute.href.replace(/\/+$/, ''))) {
+                    queue.push(absolute.href);
+                }
+
+            } catch (e) {
+                // Ignore
+            }
+        });
+    }
+
+    console.log(`[Phase 1 Indexer] Completed. Indexed ${indexedCount} profiles for ${office.brokerageName}.`);
+    return { indexed: indexedCount, pagesScanned };
+}
+
+async function runBatchHarvesterCycle(batchSize = 5) {
+    const items = db.getPendingScrapingQueueItems(batchSize);
+    const contacts = [];
+    if (items.length === 0) {
+        return contacts;
+    }
+
+    console.log(`[Phase 2 Harvester] Processing batch of ${items.length} pending profiles...`);
+
+    for (const item of items) {
+        console.log(`[Phase 2 Harvester] Scraping agent profile: ${item.agentName} (${item.profileUrl})...`);
+        db.updateScrapingQueueStatus(item.id, 'Processing');
+
+        let profileHtml;
+        try {
+            const fetched = await fetchLeadContactHtml(item.profileUrl);
+            profileHtml = fetched.html;
+        } catch (err) {
+            console.warn(`[Phase 2 Harvester] Failed to fetch ${item.profileUrl}: ${err.message}`);
+            db.updateScrapingQueueStatus(item.id, 'Failed', `Network error: ${err.message}`);
+            continue;
+        }
+
+        // Parse details from HTML
+        let email = "";
+        let phone = "";
+
+        // 1. Cloudflare decryption check
+        const cfMatch = profileHtml.match(/data-cfemail="([^"]+)"/) || profileHtml.match(/\/email-protection#([a-f0-9]{10,})/i);
+        if (cfMatch) {
+            const rawCf = cfMatch[1];
+            const decoded = decodeCloudflareEmail(rawCf);
+            if (isUsefulLeadEmail(decoded)) {
+                email = decoded;
+            }
+        }
+
+        // 2. WordPress data-value or plaintext de-obfuscation check
+        if (!email) {
+            const wpMatch = profileHtml.match(/data-value="([^"]+)"/) || profileHtml.match(/data-email="([^"]+)"/);
+            if (wpMatch) {
+                const decoded = deobfuscateWordPressEmail(wpMatch[1]);
+                if (isUsefulLeadEmail(decoded)) {
+                    email = decoded;
+                }
+            }
+        }
+
+        // 3. Regular expression email scan
+        if (!email) {
+            const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+            const matches = profileHtml.match(emailRegex);
+            if (matches && matches.length > 0) {
+                for (const match of matches) {
+                    if (isUsefulLeadEmail(match)) {
+                        email = match.toLowerCase();
+                        break;
+                    }
+                }
+            } else {
+                const obfuscatedMatches = profileHtml.match(/[A-Z0-9._%+-]+\s*\(at\)\s*[A-Z0-9.-]+\s*\(dotted\)\s*[A-Z]{2,}/gi);
+                if (obfuscatedMatches && obfuscatedMatches.length > 0) {
+                    const decoded = deobfuscateWordPressEmail(obfuscatedMatches[0]);
+                    if (isUsefulLeadEmail(decoded)) {
+                        email = decoded;
+                    }
+                }
+            }
+        }
+
+        // 4. Phone parsing
+        const phoneRegex = /(\(\d{3}\)\s*\d{3}-\d{4}|\b\d{3}-\d{3}-\d{4}\b)/;
+        const phoneMatch = profileHtml.match(phoneRegex);
+        if (phoneMatch) {
+            phone = phoneMatch[1].trim();
+        }
+
+        if (email && isUsefulLeadEmail(email)) {
+            if (db.isEmailDnc(email)) {
+                db.updateScrapingQueueStatus(item.id, 'DNC', 'Email is on DNC list');
+                continue;
+            }
+
+            try {
+                const contactObj = {
+                    name: item.agentName,
+                    email: email,
+                    phone: phone || '',
+                    website: item.profileUrl,
+                    sourceUrl: item.profileUrl
+                };
+                db.upsertRosterContact({
+                    brokerageOfficeId: item.brokerageOfficeId,
+                    brokerageName: item.brokerageName,
+                    city: item.city,
+                    state: item.state,
+                    name: item.agentName,
+                    email: email,
+                    phone: phone || '',
+                    website: item.profileUrl,
+                    sourceUrl: item.profileUrl,
+                    status: 'Raw'
+                });
+                db.updateScrapingQueueStatus(item.id, 'Completed');
+                contacts.push(contactObj);
+            } catch (dbErr) {
+                console.error(`[Phase 2 Harvester] DB error inserting contact: ${dbErr.message}`);
+                db.updateScrapingQueueStatus(item.id, 'Failed', `DB error: ${dbErr.message}`);
+            }
+        } else {
+            db.updateScrapingQueueStatus(item.id, 'Failed', 'No email address found on profile page');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    return contacts;
+}

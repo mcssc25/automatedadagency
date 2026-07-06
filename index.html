@@ -1218,6 +1218,11 @@
                         <strong id="crm-intel-latest-status">Idle</strong>
                         <small id="crm-intel-latest-message">No recent worker run loaded</small>
                     </div>
+                    <div class="crm-intel-card">
+                        <span class="crm-intel-label">Harvesting Queue</span>
+                        <strong id="crm-intel-queue-count">0 Pending</strong>
+                        <small id="crm-intel-queue-detail">0 Completed · 0 Failed</small>
+                    </div>
                 </div>
 
                 <!-- 1. BROKERAGE RESEARCH VIEW -->
@@ -1294,9 +1299,15 @@
                     </div>
 
                     <div class="dashboard-panel">
-                        <div class="panel-header">
+                        <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                             <h3>Agent Roster Database</h3>
-                            <span class="badge" id="crm-roster-count">0 Agents</span>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span class="badge" id="crm-roster-count">0 Agents</span>
+                                <span id="crm-queue-badge" class="badge" style="background:var(--accent); color:#fff; display:none;">0 Queue</span>
+                                <button class="btn btn-purple" id="btn-crm-run-harvest" style="padding:4px 8px; font-size:0.78rem; height:28px; background:var(--purple); color:#fff; border:none; border-radius:4px; cursor:pointer;" type="button">
+                                    <i class="fa-solid fa-bolt"></i> Harvest Batch
+                                </button>
+                            </div>
                         </div>
                         <div class="crm-search-row">
                             <input type="text" id="crm-roster-search" placeholder="Search agent, email, phone, brokerage, city...">
@@ -1475,7 +1486,7 @@
                                         </div>
                                         <div class="form-group">
                                             <label for="campaign-instructions">Target Audience & Core Message / Video Angle</label>
-                                            <textarea id="campaign-instructions" placeholder="e.g. Focus on showing realtors how they waste 10 hours a week on manual transaction coordination. Pitch our automated CRM as the solution." style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; min-height:100px; box-sizing:border-box; font-family:inherit;"></textarea>
+                                            <textarea id="campaign-instructions" placeholder="e.g. Focus on showing realtors how they waste 10 hours a week on manual transaction coordination. Pitch our automated CRM as the solution." style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:var(--text-primary); width:100%; min-height:240px; box-sizing:border-box; font-family:inherit;"></textarea>
                                         </div>
                                         <button class="btn btn-primary" id="btn-create-campaign" type="submit" style="width:100%; padding:12px;">
                                             <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Campaign Drip

@@ -750,6 +750,45 @@ class AutopilotApp {
         if (this.dom.btnRefreshCrmIntel) {
             this.dom.btnRefreshCrmIntel.addEventListener("click", () => this.loadCrmIntelligence());
         }
+        const btnRunHarvest = document.getElementById("btn-crm-run-harvest");
+        if (btnRunHarvest) {
+            btnRunHarvest.addEventListener("click", async () => {
+                try {
+                    btnRunHarvest.disabled = true;
+                    const originalHtml = btnRunHarvest.innerHTML;
+                    btnRunHarvest.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Harvesting...`;
+                    
+                    this.appendConsoleLine('agent-sales', 'Manual batch harvesting cycle triggered...');
+                    const response = await fetch('/api/lead-intelligence/run-batch-harvest', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ batchSize: 12 })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server returned error ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        this.appendConsoleLine('agent-sales', `Batch harvest completed. Processed ${data.processedCount} new contact(s).`);
+                        this.loadCrmIntelligence();
+                    } else {
+                        this.appendConsoleLine('agent-sales', `Batch harvest warning: ${data.error || 'unknown issue'}`);
+                    }
+                    
+                    btnRunHarvest.innerHTML = originalHtml;
+                    btnRunHarvest.disabled = false;
+                } catch (err) {
+                    this.appendConsoleLine('system', `Batch harvest error: ${err.message}`);
+                    btnRunHarvest.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Error`;
+                    setTimeout(() => {
+                        btnRunHarvest.innerHTML = `<i class="fa-solid fa-bolt"></i> Harvest Batch`;
+                        btnRunHarvest.disabled = false;
+                    }, 3000);
+                }
+            });
+        }
         if (this.dom.btnBrokerageFinishedList) {
             this.dom.btnBrokerageFinishedList.addEventListener("click", () => this.toggleBrokerageFinishedView());
         }
@@ -2036,6 +2075,31 @@ class AutopilotApp {
         if (this.dom.crmIntelRunningBadge) {
             this.dom.crmIntelRunningBadge.innerText = workerRunning ? 'Worker Running' : 'Worker Idle';
             this.dom.crmIntelRunningBadge.className = workerRunning ? 'badge warning-badge' : 'badge';
+        }
+
+        // Update Harvesting Queue stats
+        const queueRows = status.queue || [];
+        const queuePending = queueRows.find(r => r.status === 'Pending')?.count || 0;
+        const queueCompleted = queueRows.find(r => r.status === 'Completed')?.count || 0;
+        const queueFailed = queueRows.find(r => r.status === 'Failed')?.count || 0;
+
+        const crmIntelQueueCount = document.getElementById("crm-intel-queue-count");
+        const crmIntelQueueDetail = document.getElementById("crm-intel-queue-detail");
+        const crmQueueBadge = document.getElementById("crm-queue-badge");
+
+        if (crmIntelQueueCount) {
+            crmIntelQueueCount.innerText = `${queuePending.toLocaleString()} Pending`;
+        }
+        if (crmIntelQueueDetail) {
+            crmIntelQueueDetail.innerText = `${queueCompleted.toLocaleString()} Completed · ${queueFailed.toLocaleString()} Failed`;
+        }
+        if (crmQueueBadge) {
+            if (queuePending > 0) {
+                crmQueueBadge.innerText = `${queuePending} Queue`;
+                crmQueueBadge.style.display = 'inline-block';
+            } else {
+                crmQueueBadge.style.display = 'none';
+            }
         }
 
         if (this.dom.crmWorkflowRail) {
