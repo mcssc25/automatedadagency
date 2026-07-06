@@ -3033,3 +3033,8 @@ body {
     color: #f43f5e;
     font-weight: bold;
 }
+
+#campaign-instructions {
+    min-height: 240px !important;
+    height: 240px !important;
+}

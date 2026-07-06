@@ -2,50 +2,36 @@
 
 Last updated: 2026-07-06
 
-## Current Repo & Deploy Status
+## Start Here
 
-- **Branch**: `main`
-- **Modified Files**:
-  - `db.js`: Created `roster_scraping_queue` table, index, and database helper functions.
-  - `server.js`: Added email de-obfuscation algorithms (Cloudflare XOR & WordPress replacement decoders), Phase 1 Roster Indexer, Phase 2 Batch Harvester, and a manual harvest API route (`POST /api/lead-intelligence/run-batch-harvest`).
-  - `index.html`: Added a new queue status card to the Lead Intelligence stats dashboard and a manual "Harvest Batch" button to the Agent Roster panel.
-  - `app.js`: Prefilled queue metrics in the UI, bound click handler for the manual batch harvest, and handled dashboard console log updates.
+- Production is the Hetzner VPS app at `https://agents.realestatecrmpro.com`, not a local-only app.
+- VPS host is `178.156.178.56`; app path is `/opt/ad-agency-autopilot`.
+- Docker Compose service/container is `ad-agency-autopilot`, bound on `127.0.0.1:3100->3000`, with Cloudflare Tunnel in front.
+- This VPS is shared with ClaimPilot. Only touch `/opt/ad-agency-autopilot`; do not touch ClaimPilot or `fluffysbait.com`.
+- Deploys are file-copy based, not `git pull`: back up changed files under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`, copy only changed files, rebuild/restart only `ad-agency-autopilot` when needed.
+- Runtime secrets/data are ignored and must stay out of git: `.env`, `credentials.json`, DB files, backups, logs, downloaded media, and `node_modules`.
 
----
+## Current Repo / Deploy State
 
-## Latest Changes: Programmatic Two-Phase Agent Roster Scraper
+- Branch: `main`.
+- Uncommitted local changes: None. All staged and pushed to `origin/main` (commit `5e185d6`).
+- Database seeding: Seeding of `crm.db` with 739 boutique targets (23 completed), 31 roster contacts, and 9 drip campaigns has been deployed and verified on the VPS.
 
-1. **Phase 1: Roster Indexing (Deterministic & Fast)**
-   - Extracts agent profile links from index pages.
-   - Inserts profile URLs and names into `roster_scraping_queue` with status `'Pending'`.
-   - Prevents duplicate index tasks using database constraints.
+## Latest Changes
 
-2. **Phase 2: Batch Harvesting (Safe & Programmatic)**
-   - Coordinator fetches a small batch of `'Pending'` profile pages from the SQLite queue.
-   - Visits each profile page individually with a safe delay (2 seconds).
-   - Programmatically decodes email addresses obfuscated via WordPress plugins or Cloudflare's XOR-based `__cf_email__`.
-   - Extracts cell phones via regex and upserts successfully enriched agents directly into `roster_contacts`.
-
----
+1. **Campaign Instructions Size & Cache-Busting**:
+   - Resized the campaign instructions `<textarea>` under "Target Audience & Core Message / Video Angle" to `240px` in `index.html` inline style.
+   - Added `#campaign-instructions` `min-height: 240px !important; height: 240px !important;` rule to the end of `index.css` to force the height even if browsers use a cached version of `index.html`.
+   - Cache-busted `index.css` and `app.js` links in `index.html` using version parameter `?v=20260706-audience-box` to force browser cache invalidation.
+2. **A/B Split Campaign Launching**:
+   - Added checkbox and dropdown controls to select a Variant B campaign, splitting waves evenly between two different campaigns.
+   - Populated a recipient checkbox list inside the launch modal allowing selective enrolling.
+3. **Roster Harvesting Queue**:
+   - Added `roster_scraping_queue` schema, indexes, and methods to `db.js`.
+   - UI shows a new "Harvesting Queue" card on the CRM dashboard and a "Harvest Batch" button in the Agent Roster panel.
 
 ## Verification
 
-- **Syntax Checks**:
-  - Passed: `node -c server.js`
-  - Passed: `node -c db.js`
-  - Passed: `node -c app.js`
-- **Functional DB Tests**:
-  - Executed `scratch/test_db_migration.js` to initialize the SQLite database schema and run insert, query, update, and clean operations successfully on `crm.db`. All tests passed.
-
----
-
-## Next Steps
-
-1. **Deploy to Production Hetzner VPS**:
-   - Backup production directory under `/opt/ad-agency-autopilot/data/backups/deploy-<timestamp>`.
-   - Deploy modified files (`server.js`, `db.js`, `app.js`, `index.html`).
-   - Rebuild/restart only `ad-agency-autopilot` container.
-2. **Post-Deployment Smoke Test**:
-   - Access `https://agents.realestatecrmpro.com/`.
-   - Verify the "Harvesting Queue" card is rendered on the dashboard.
-   - Click "Harvest Batch" to trigger a manual Phase 2 harvest run and verify output in the activity logs.
+- Local syntax checks passed successfully.
+- Production container is active and `healthy` (uptime verified, curl returned JSON config).
+- Styling change verified. Cache-busting parameter will force the browser to request the updated CSS asset immediately.
