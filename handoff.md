@@ -14,7 +14,7 @@ Last updated: 2026-07-06
 ## Current Repo / Deploy State
 
 - Branch: `main`.
-- Uncommitted local changes: None. All staged and pushed to `origin/main` (commit `d1cf5ba`).
+- Uncommitted local changes: None. All staged and pushed to `origin/main` (commit `af6f96e`).
 - Database seeding: Seeding of `crm.db` with 739 boutique targets (23 completed), 21,702 roster contacts (including boutique and large brand agents synced from CSV lists in production), and 9 drip campaigns has been deployed.
 
 ## Latest Changes
