@@ -14,8 +14,8 @@ Last updated: 2026-07-06
 ## Current Repo / Deploy State
 
 - Branch: `main`.
-- Uncommitted local changes: None. All staged and pushed to `origin/main` (commit `59baadf`).
-- Database seeding: Seeding of `crm.db` with 739 boutique targets (23 completed), 21,596 roster contacts (including boutique and large brand agents synced from CSV lists), and 9 drip campaigns has been deployed.
+- Uncommitted local changes: None. All staged and pushed to `origin/main` (commit `d1cf5ba`).
+- Database seeding: Seeding of `crm.db` with 739 boutique targets (23 completed), 21,702 roster contacts (including boutique and large brand agents synced from CSV lists in production), and 9 drip campaigns has been deployed.
 
 ## Latest Changes
 
@@ -33,15 +33,13 @@ Last updated: 2026-07-06
    - Synchronized all 23 brokerages from `C:\Users\daved\Desktop\master_brokerage_list.csv` into `crm.db`.
    - Verified/updated owner contact details and created 41 key agents with custom, unique domain-based email addresses linked to their respective office records.
 5. **Production CRM Roster Imports**:
-   - Imported 21,524 raw agent contacts from `C:\Users\daved\Desktop\CRM production` CSV rosters (`united_agents.csv`, `vpr_agents.csv`, `fathom_agents.csv`, `gocrr_agents.csv`, `benchmark_agents.csv`, `realtyhub_agents.csv`) into the `roster_contacts` table.
-   - Performed clean parsing of names, normalized emails and phone numbers, handled duplicates in `O(1)` memory, and executed the imports using fast SQLite transactions.
+   - Copied the CSV data files and synchronized them directly inside the `ad-agency-autopilot` Docker container on the production VPS host.
+   - Imported 21,524 raw agent contacts from the CSV rosters (`united_agents.csv`, `vpr_agents.csv`, `fathom_agents.csv`, `gocrr_agents.csv`, `benchmark_agents.csv`, `realtyhub_agents.csv`) into the production `roster_contacts` table.
    - Linked contacts to existing office locations where matching brands/states/cities were found, and resolved any `Unknown` names for Benchmark agents using profile URL slugs.
 
 ## Verification
 
 - Local syntax checks passed successfully.
-- Verified database count: exactly 21,596 roster contacts are now registered.
+- Verified production database count: exactly **21,702 roster contacts** are now registered in the production CRM database.
 - Verified correct counts by brokerage/brand (e.g. Fathom: 8,689, United: 6,440, Rutenberg: 2,182, Benchmark: 1,860, US Realty Hub: 1,129, Virtual Properties: 988, etc.).
-- Tested name cleaning (roles/nicknames) and generated unique email domains to ensure zero duplicates.
-
-
+- Cleaned up all temporary CSV and script files on the production VPS, leaving the filesystem clean.
