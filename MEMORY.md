@@ -23,7 +23,7 @@ Last updated: 2026-07-06
 
 ## Lead Intelligence & CRM Seeding
 
-- SQLite DB (`crm.db`) is seeded with 362 brokerage profiles, 630 offices, 31 agent roster contacts, and 9 outreach campaigns.
+- SQLite DB (`crm.db`) is seeded with 362 brokerage profiles, 630 offices, 21,596 agent roster contacts (including boutique and large brand agents imported from CSV lists), and 9 outreach campaigns.
 - 23 boutique brokerages have detailed profile research status set to 'Complete' (notes, offered tech systems, and campaign angles configured).
 - 9 Outreach Campaigns are fully set up in the DB: Benchmark Realty, Fathom Realty, United Real Estate, Virtual Properties Realty (VPR), and 5 region-specific Boutique campaigns (California, Colorado, Florida, Georgia, and General Boutique).
 - Outreach templates utilize target links:
